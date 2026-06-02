@@ -5,6 +5,7 @@ import { eventBus } from './event-bus.js';
 
 // Drag-and-drop state
 let draggedTabIndex = null;
+let draggedTabPane = null;
 
 /**
  * Updates split view button visibility based on split view state
@@ -536,7 +537,9 @@ export function updatePaneActiveState() {
  */
 export function handleTabDragStart(e) {
   draggedTabIndex = parseInt(e.currentTarget.getAttribute('data-tab-index'));
+  draggedTabPane = e.currentTarget.getAttribute('data-pane');
   e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', String(draggedTabIndex));
   e.currentTarget.classList.add('dragging');
 }
 
@@ -553,8 +556,13 @@ export function handleTabDragOver(e) {
   const dropTabIndex = parseInt(dropTarget.getAttribute('data-tab-index'));
 
   if (dropTabIndex !== draggedTabIndex) {
-    // Visual indicator
+    document.querySelectorAll('.tab.drop-target, .tab.drop-before, .tab.drop-after').forEach(el => {
+      el.classList.remove('drop-target', 'drop-before', 'drop-after');
+    });
+
+    const insertAfter = getTabDropPlacement(e, dropTarget) === 'after';
     dropTarget.classList.add('drop-target');
+    dropTarget.classList.add(insertAfter ? 'drop-after' : 'drop-before');
   }
 }
 
@@ -569,13 +577,26 @@ export function handleTabDrop(e) {
 
   const dropTabIndex = parseInt(dropTarget.getAttribute('data-tab-index'));
   const dropPane = dropTarget.getAttribute('data-pane');
+  const draggedTab = draggedTabIndex !== null ? state.openTabs[draggedTabIndex] : null;
 
   if (draggedTabIndex !== null && dropTabIndex !== draggedTabIndex) {
-    // Move tab to same pane as drop target
-    if (dropPane === 'primary') {
+    if (!state.splitView.enabled) {
+      const insertAfter = getTabDropPlacement(e, dropTarget) === 'after';
+      reorderOpenTab(draggedTabIndex, dropTabIndex, insertAfter);
+    } else if (dropPane === draggedTabPane && dropPane) {
+      const insertAfter = getTabDropPlacement(e, dropTarget) === 'after';
+      reorderOpenTab(draggedTabIndex, dropTabIndex, insertAfter);
+    } else if (dropPane === 'primary') {
       moveToPrimaryPane(draggedTabIndex);
     } else if (dropPane === 'secondary') {
       moveToSecondaryPane(draggedTabIndex);
+    }
+
+    if (draggedTab) {
+      if (state.splitView.enabled && dropPane) {
+        eventBus.emit('ui:set-active-pane', { pane: dropPane });
+      }
+      eventBus.emit('tab:activate', { tab: draggedTab, skipSave: true });
     }
   }
 
@@ -593,9 +614,69 @@ export function handleTabDragEnd(e) {
  * Cleans up drag state
  */
 function cleanupDragState() {
-  document.querySelectorAll('.tab.dragging').forEach(el => el.classList.remove('dragging'));
-  document.querySelectorAll('.tab.drop-target').forEach(el => el.classList.remove('drop-target'));
+  document.querySelectorAll('.tab.dragging, .tab.drop-target, .tab.drop-before, .tab.drop-after').forEach(el => {
+    el.classList.remove('dragging', 'drop-target', 'drop-before', 'drop-after');
+  });
   draggedTabIndex = null;
+  draggedTabPane = null;
+}
+
+function getTabDropPlacement(e, tabEl) {
+  const rect = tabEl.getBoundingClientRect();
+  const isLeftTabRail = document.body.dataset.tabPosition === 'left';
+  if (isLeftTabRail) {
+    return e.clientY > rect.top + rect.height / 2 ? 'after' : 'before';
+  }
+  return e.clientX > rect.left + rect.width / 2 ? 'after' : 'before';
+}
+
+function remapSplitTabIndices(previousTabs) {
+  if (!state.splitView) return;
+
+  const toNewIndex = (oldIndex) => {
+    const tab = previousTabs[oldIndex];
+    return tab ? state.openTabs.indexOf(tab) : -1;
+  };
+
+  state.splitView.primaryTabs = (state.splitView.primaryTabs || [])
+    .map(toNewIndex)
+    .filter(index => index !== -1)
+    .sort((a, b) => a - b);
+  state.splitView.secondaryTabs = (state.splitView.secondaryTabs || [])
+    .map(toNewIndex)
+    .filter(index => index !== -1)
+    .sort((a, b) => a - b);
+}
+
+function reorderOpenTab(fromIndex, targetIndex, insertAfter) {
+  if (
+    fromIndex < 0 ||
+    targetIndex < 0 ||
+    fromIndex >= state.openTabs.length ||
+    targetIndex >= state.openTabs.length ||
+    fromIndex === targetIndex
+  ) {
+    return;
+  }
+
+  const previousTabs = state.openTabs.slice();
+  const [movedTab] = state.openTabs.splice(fromIndex, 1);
+  let insertIndex = targetIndex;
+
+  if (fromIndex < targetIndex) {
+    insertIndex -= 1;
+  }
+  if (insertAfter) {
+    insertIndex += 1;
+  }
+
+  insertIndex = Math.max(0, Math.min(insertIndex, state.openTabs.length));
+  state.openTabs.splice(insertIndex, 0, movedTab);
+  remapSplitTabIndices(previousTabs);
+
+  eventBus.emit('ui:refresh-tabs');
+  eventBus.emit('ui:refresh-tree');
+  eventBus.emit('settings:save');
 }
 
 // Event Listeners
@@ -606,4 +687,3 @@ eventBus.on("ui:toggle-split-view", () => {
         enableSplitView('vertical');
     }
 });
-

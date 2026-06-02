@@ -258,7 +258,45 @@
     }
 
     .tab.drop-target {
-      border-left: 2px solid var(--accent-color);
+      position: relative;
+    }
+
+    .tab.drop-before::before,
+    .tab.drop-after::after {
+      content: "";
+      position: absolute;
+      top: 6px;
+      bottom: 6px;
+      width: 2px;
+      background: var(--accent-color);
+      border-radius: 1px;
+      pointer-events: none;
+    }
+
+    .tab.drop-before::before {
+      left: 0;
+    }
+
+    .tab.drop-after::after {
+      right: 0;
+    }
+
+    body[data-tab-position="left"] .tab.drop-before::before,
+    body[data-tab-position="left"] .tab.drop-after::after {
+      left: 6px;
+      right: 6px;
+      width: auto;
+      height: 2px;
+      top: auto;
+      bottom: auto;
+    }
+
+    body[data-tab-position="left"] .tab.drop-before::before {
+      top: 0;
+    }
+
+    body[data-tab-position="left"] .tab.drop-after::after {
+      bottom: 0;
     }
 
     /* Settings Tabs */

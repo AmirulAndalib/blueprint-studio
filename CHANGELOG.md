@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.5.3] - 2026-06-02
+
+- **Inactive editor tabs can be dragged directly** — Inactive editor tabs can now be reordered without selecting them first; the dragged tab activates after the drop completes so the browser drag session is not interrupted.
+
+- **Editor tabs can be reordered** — Open editor tabs can now be rearranged by dragging them, with saved workspace order preserved across reloads.
+
+- **Python script entity payloads no longer flagged as deprecated** — `entity_id` inside `data:` is no longer warned as deprecated for payload-style services such as `python_script.*`, while normal targetable services such as `light.turn_on` still warn when `entity_id` should move to `target:`.
+
 - **Removed legacy template sensor autocomplete** — The sensor platform autocomplete no longer suggests `platform: template`, matching Home Assistant 2026.6 removal of legacy template entities. The modern `template:` snippet remains available.
 
 - **Template sensor Jinja highlighting fixed** — Indented Jinja templates inside YAML folded/literal block scalars now keep Jinja syntax coloring even when a whitespace-only line appears after `state: >`.
@@ -1011,6 +1019,7 @@ Bring AI intelligence directly into your Home Assistant workflow with flexible p
 
 
 ## Version History
+- **2.5.3** - HA 2026.6 Compatibility, Tab Reordering, Sidebar Startup Option & ZIP Transfer Improvements
 - **2.5.2** - Security Hardening, Donation Support & File Explorer Improvements
 - **2.5.1** - Mobile File Tree Indentation, Allow all file types & Organisation Transfer
 - **2.5.0** - HA Agent AI Mode, Diff Viewer Rewrite & File Navigation Overhaul
@@ -1045,7 +1054,8 @@ Bring AI intelligence directly into your Home Assistant workflow with flexible p
 - **1.2.0** - GitHub Integration, Pin Favorites & Auto-Refresh
 - **1.0.0** - First stable release
 
-[Unreleased]: https://github.com/ha-china/blueprint-studio/compare/v2.5.2...HEAD
+[Unreleased]: https://github.com/ha-china/blueprint-studio/compare/v2.5.3...HEAD
+[2.5.3]: https://github.com/ha-china/blueprint-studio/compare/v2.5.2...v2.5.3
 [2.5.2]: https://github.com/ha-china/blueprint-studio/releases/tag/v2.5.2
 [2.5.1]: https://github.com/ha-china/blueprint-studio/releases/tag/v2.5.1
 [2.5.0]: https://github.com/ha-china/blueprint-studio/releases/tag/v2.5.0

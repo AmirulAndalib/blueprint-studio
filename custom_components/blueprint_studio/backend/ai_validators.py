@@ -295,6 +295,61 @@ def _find_parent_section(lines: list[str], current_line_num: int) -> str:
     return ""
 
 
+_TARGET_ENTITY_SERVICE_DOMAINS = {
+    "alarm_control_panel",
+    "button",
+    "camera",
+    "climate",
+    "cover",
+    "fan",
+    "group",
+    "humidifier",
+    "input_boolean",
+    "input_button",
+    "input_datetime",
+    "input_number",
+    "input_select",
+    "input_text",
+    "light",
+    "lock",
+    "media_player",
+    "number",
+    "remote",
+    "scene",
+    "script",
+    "select",
+    "siren",
+    "switch",
+    "vacuum",
+    "water_heater",
+}
+
+
+def _find_parent_action_domain(lines: list[str], current_line_num: int) -> str:
+    """Find the nearest surrounding service/action domain for the current line."""
+    current_line = lines[current_line_num - 1]
+    current_indent = len(current_line) - len(current_line.lstrip())
+
+    for i in range(current_line_num - 2, -1, -1):
+        line = lines[i]
+        stripped = line.strip()
+        if not stripped or stripped.startswith('#'):
+            continue
+
+        indent = len(line) - len(line.lstrip())
+        if indent >= current_indent:
+            continue
+
+        match = re.match(r"^-?\s*(?:action|service)\s*:\s*([a-zA-Z0-9_]+)\.[a-zA-Z0-9_]+", stripped)
+        if match:
+            return match.group(1)
+
+        if indent == 0:
+            break
+
+    return ""
+
+
 def _check_entity_id_in_data(lines: list[str], warnings: list[dict]) -> None:
     """Detect entity_id: inside a data: block (should be in target:)."""
     in_data_block = False
@@ -326,6 +381,10 @@ def _check_entity_id_in_data(lines: list[str], warnings: list[dict]) -> None:
 
         # Check for entity_id inside data block
         if in_data_block and re.match(r'^-?\s*entity_id\s*:', stripped):
+            action_domain = _find_parent_action_domain(lines, line_num)
+            if action_domain not in _TARGET_ENTITY_SERVICE_DOMAINS:
+                continue
+
             warnings.append({
                 "line": line_num,
                 "type": "deprecated_syntax",
