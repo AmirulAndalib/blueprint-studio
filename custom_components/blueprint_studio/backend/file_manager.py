@@ -10,6 +10,7 @@ import logging
 import os
 import queue
 import re
+import secrets
 import shutil
 import threading
 import zipfile
@@ -25,6 +26,7 @@ from ..const import (
     BINARY_EXTENSIONS, EXCLUDED_PATTERNS, PROTECTED_PATHS
 )
 from .util import json_response, json_message, get_safe_path
+from .zip_utils import is_macos_zip_metadata, safe_zip_member_path
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -64,6 +66,11 @@ class FileManager:
         self._file_cache: dict[bool, list[dict]] = {}
         self._last_cache_update: float = 0
         self._cache_lock = threading.Lock()  # 🔒 Thread safety for concurrent requests
+        self._zip_progress: dict[str, dict[str, Any]] = {}
+        self._zip_progress_lock = threading.Lock()
+        self._download_tokens: dict[str, dict[str, Any]] = {}
+        self._download_tokens_lock = threading.Lock()
+        self._download_token_ttl = 300
 
     def _get_root_dir(self) -> Path:
         """Get the root directory (always config_dir).
@@ -124,21 +131,29 @@ class FileManager:
     def _fire_update(self, action: str, path: str | None = None):
         """Fire a websocket update event (thread-safe)."""
         # 🔒 THREAD SAFETY: Protect cache invalidation from race conditions
-        with self._cache_lock:
-            # Invalidate both caches on any change
-            self._file_cache = {}
+        try:
+            with self._cache_lock:
+                # Invalidate both caches on any change
+                self._file_cache = {}
 
-        if self.hass:
-            # Use add_job to ensure async_fire is called on the event loop
-            # even if this method is called from a ThreadPoolExecutor
-            self.hass.add_job(
-                self.hass.bus.async_fire,
-                "blueprint_studio_update",
-                {
-                    "action": action,
-                    "path": path,
-                    "timestamp": time.time()
-                }
+            if self.hass:
+                # Use add_job to ensure async_fire is called on the event loop
+                # even if this method is called from a ThreadPoolExecutor
+                self.hass.add_job(
+                    self.hass.bus.async_fire,
+                    "blueprint_studio_update",
+                    {
+                        "action": action,
+                        "path": path,
+                        "timestamp": time.time()
+                    }
+                )
+        except Exception:
+            _LOGGER.warning(
+                "Failed to publish Blueprint Studio update event for %s:%s",
+                action,
+                path,
+                exc_info=True,
             )
 
     def clear_cache(self):
@@ -955,26 +970,61 @@ class FileManager:
         safe_path = get_safe_path(self._get_root_dir(), path)
         if not safe_path or not safe_path.is_dir():
             return json_message("Not found", status_code=404)
+        progress_id = request.query.get("progress_id") if request else None
         return await self._stream_zip_response(
             request,
             f'{safe_path.name}.zip',
-            lambda write_chunk: self._write_folder_zip(safe_path, write_chunk),
+            lambda write_chunk: self._write_folder_zip(safe_path, write_chunk, progress_id),
+            progress_id,
         )
 
-    async def download_multi(self, paths: list[str], request: web.Request) -> web.StreamResponse:
+    async def download_multi(self, paths: list[str], request: web.Request, progress_id: str | None = None) -> web.StreamResponse:
         """Download multiple items as ZIP via streaming response."""
         return await self._stream_zip_response(
             request,
             "download.zip",
-            lambda write_chunk: self._write_multi_zip(paths, write_chunk),
+            lambda write_chunk: self._write_multi_zip(paths, write_chunk, progress_id),
+            progress_id,
         )
 
-    async def _stream_zip_response(self, request: web.Request, filename: str, zip_writer) -> web.StreamResponse:
+    def create_multi_download_token(self, paths: list[str], progress_id: str | None = None) -> dict:
+        """Create a short-lived token for GET-based selected-item downloads."""
+        self._cleanup_download_tokens()
+        token = secrets.token_urlsafe(32)
+        with self._download_tokens_lock:
+            self._download_tokens[token] = {
+                "paths": list(paths),
+                "progress_id": progress_id,
+                "expires_at": time.monotonic() + self._download_token_ttl,
+            }
+        return {"success": True, "stream_id": token, "expires_in": self._download_token_ttl}
+
+    def consume_multi_download_token(self, token: str) -> dict[str, Any] | None:
+        """Return and remove selected-item download token data."""
+        if not token:
+            return None
+        self._cleanup_download_tokens()
+        with self._download_tokens_lock:
+            return self._download_tokens.pop(token, None)
+
+    def _cleanup_download_tokens(self) -> None:
+        now = time.monotonic()
+        with self._download_tokens_lock:
+            stale = [
+                token
+                for token, data in self._download_tokens.items()
+                if data.get("expires_at", 0) < now
+            ]
+            for token in stale:
+                self._download_tokens.pop(token, None)
+
+    async def _stream_zip_response(self, request: web.Request, filename: str, zip_writer, progress_id: str | None = None) -> web.StreamResponse:
         """Stream a ZIP response generated by *zip_writer* without buffering it."""
         loop = asyncio.get_running_loop()
         chunks: queue.Queue[bytes | None] = queue.Queue(maxsize=8)
         result_holder: dict[str, Any] = {}
         stopped = threading.Event()
+        self._start_zip_progress(progress_id, filename)
 
         def write_chunk(chunk: bytes) -> None:
             while not stopped.is_set():
@@ -989,9 +1039,11 @@ class FileManager:
             try:
                 zip_writer(write_chunk)
                 result_holder["success"] = True
+                self._finish_zip_progress(progress_id)
             except Exception as exc:
                 result_holder["success"] = False
                 result_holder["error"] = exc
+                self._fail_zip_progress(progress_id, str(exc))
                 _LOGGER.error("ZIP stream generation failed: %s", exc, exc_info=True)
             finally:
                 while not stopped.is_set():
@@ -1035,7 +1087,7 @@ class FileManager:
         finally:
             stopped.set()
 
-    def _write_folder_zip(self, folder_path: Path, write_chunk) -> None:
+    def _write_folder_zip(self, folder_path: Path, write_chunk, progress_id: str | None = None) -> None:
         """Write a folder ZIP incrementally to *write_chunk*."""
         with zipfile.ZipFile(_ZipChunkWriter(write_chunk), "w", zipfile.ZIP_DEFLATED) as zf:
             for root, dirs, files in os.walk(folder_path):
@@ -1044,9 +1096,9 @@ class FileManager:
                     if f.startswith("."):
                         continue
                     file_path = Path(root) / f
-                    zf.write(file_path, file_path.relative_to(folder_path))
+                    self._write_file_to_zip(zf, file_path, file_path.relative_to(folder_path), progress_id)
 
-    def _write_multi_zip(self, paths: list[str], write_chunk) -> None:
+    def _write_multi_zip(self, paths: list[str], write_chunk, progress_id: str | None = None) -> None:
         """Write a multi-item ZIP incrementally to *write_chunk*."""
         with zipfile.ZipFile(_ZipChunkWriter(write_chunk), "w", zipfile.ZIP_DEFLATED) as zf:
             for p in paths:
@@ -1054,7 +1106,7 @@ class FileManager:
                 if not safe or not safe.exists():
                     continue
                 if safe.is_file():
-                    zf.write(safe, safe.name)
+                    self._write_file_to_zip(zf, safe, safe.name, progress_id)
                 elif safe.is_dir():
                     for root, dirs, files in os.walk(safe):
                         dirs[:] = [d for d in dirs if d not in EXCLUDED_PATTERNS and not d.startswith(".")]
@@ -1062,7 +1114,102 @@ class FileManager:
                             if f.startswith("."):
                                 continue
                             file_path = Path(root) / f
-                            zf.write(file_path, file_path.relative_to(safe.parent))
+                            self._write_file_to_zip(zf, file_path, file_path.relative_to(safe.parent), progress_id)
+
+    def _write_file_to_zip(self, zf, file_path: Path, arcname, progress_id: str | None = None) -> None:
+        """Write one file to a ZIP in chunks and update progress."""
+        arcname_str = str(arcname).replace("\\", "/")
+        try:
+            stat_result = file_path.stat()
+            info = zipfile.ZipInfo(arcname_str, time.localtime(stat_result.st_mtime)[:6])
+            info.compress_type = zipfile.ZIP_DEFLATED
+            info.external_attr = (stat_result.st_mode & 0xFFFF) << 16
+        except OSError:
+            info = zipfile.ZipInfo(arcname_str)
+            info.compress_type = zipfile.ZIP_DEFLATED
+
+        self._update_zip_progress(progress_id, current_file=arcname_str)
+        with file_path.open("rb") as src, zf.open(info, "w") as dest:
+            while True:
+                chunk = src.read(1024 * 1024)
+                if not chunk:
+                    break
+                dest.write(chunk)
+                self._update_zip_progress(progress_id, bytes_delta=len(chunk))
+        self._update_zip_progress(progress_id, files_delta=1)
+
+    def _cleanup_zip_progress(self) -> None:
+        cutoff = time.monotonic() - 900
+        with self._zip_progress_lock:
+            stale = [
+                progress_id
+                for progress_id, progress in self._zip_progress.items()
+                if progress.get("updated_at", 0) < cutoff
+            ]
+            for progress_id in stale:
+                self._zip_progress.pop(progress_id, None)
+
+    def _start_zip_progress(self, progress_id: str | None, filename: str) -> None:
+        if not progress_id:
+            return
+        self._cleanup_zip_progress()
+        now = time.monotonic()
+        with self._zip_progress_lock:
+            self._zip_progress[progress_id] = {
+                "success": True,
+                "status": "running",
+                "filename": filename,
+                "files_done": 0,
+                "bytes_done": 0,
+                "current_file": "",
+                "started_at": now,
+                "updated_at": now,
+            }
+
+    def _update_zip_progress(self, progress_id: str | None, *, current_file: str | None = None, bytes_delta: int = 0, files_delta: int = 0) -> None:
+        if not progress_id:
+            return
+        with self._zip_progress_lock:
+            progress = self._zip_progress.get(progress_id)
+            if not progress:
+                return
+            if current_file is not None:
+                progress["current_file"] = current_file
+            if bytes_delta:
+                progress["bytes_done"] = int(progress.get("bytes_done", 0)) + bytes_delta
+            if files_delta:
+                progress["files_done"] = int(progress.get("files_done", 0)) + files_delta
+            progress["updated_at"] = time.monotonic()
+
+    def _finish_zip_progress(self, progress_id: str | None) -> None:
+        if not progress_id:
+            return
+        with self._zip_progress_lock:
+            progress = self._zip_progress.get(progress_id)
+            if progress:
+                progress["status"] = "done"
+                progress["current_file"] = ""
+                progress["updated_at"] = time.monotonic()
+
+    def _fail_zip_progress(self, progress_id: str | None, message: str) -> None:
+        if not progress_id:
+            return
+        with self._zip_progress_lock:
+            progress = self._zip_progress.get(progress_id)
+            if progress:
+                progress["status"] = "error"
+                progress["message"] = message
+                progress["updated_at"] = time.monotonic()
+
+    def get_zip_progress(self, progress_id: str | None) -> dict:
+        if not progress_id:
+            return {"success": False, "message": "Missing progress_id", "status_code": 400}
+        self._cleanup_zip_progress()
+        with self._zip_progress_lock:
+            progress = self._zip_progress.get(progress_id)
+            if not progress:
+                return {"success": True, "status": "pending", "files_done": 0, "bytes_done": 0, "current_file": ""}
+            return dict(progress)
 
     def _create_zip(self, folder_path: Path) -> io.BytesIO:
         """Create ZIP from folder, returns BytesIO buffer."""
@@ -1107,7 +1254,17 @@ class FileManager:
         except Exception as e: return json_message(str(e), status_code=500)
 
     async def upload_folder(self, path: str, zip_data: str, mode: str = "merge", overwrite: bool = False) -> web.Response:
-        """Upload ZIP and extract to folder. 
+        """Upload base64 ZIP and extract to folder.
+        Modes: 'merge' (default), 'replace' (deletes existing first)
+        """
+        try:
+            zip_bytes = base64.b64decode(zip_data)
+        except Exception as e:
+            return json_message(f"Invalid ZIP data: {str(e)}", status_code=400)
+        return await self.upload_folder_bytes(path, zip_bytes, mode, overwrite)
+
+    async def upload_folder_bytes(self, path: str, zip_bytes: bytes, mode: str = "merge", overwrite: bool = False) -> web.Response:
+        """Upload ZIP bytes and extract to folder.
         Modes: 'merge' (default), 'replace' (deletes existing first)
         """
         safe_path = get_safe_path(self._get_root_dir(), path)
@@ -1124,7 +1281,6 @@ class FileManager:
         # Handle Replace mode: delete existing first
         if safe_path.exists() and mode == "replace":
             try:
-                import shutil
                 await self.hass.async_add_executor_job(shutil.rmtree, safe_path)
             except Exception as e:
                 return json_message(f"Failed to clear existing folder: {str(e)}", status_code=500)
@@ -1137,23 +1293,57 @@ class FileManager:
                 return json_message(f"Failed to create folder: {str(e)}", status_code=500)
 
         try:
-            import io
-            import zipfile
-            zip_bytes = base64.b64decode(zip_data)
             buf = io.BytesIO(zip_bytes)
             files_extracted = 0
+            skipped_members: list[str] = []
             with zipfile.ZipFile(buf) as zf:
-                for member in zf.namelist():
-                    # Skip macOS metadata files and folders
-                    if "__MACOSX" in member or ".DS_Store" in member:
-                        continue
-                        
-                    if not member.endswith("/"):
-                        # Ensure parent directory exists for the member
-                        target_path = safe_path / member
-                        await self.hass.async_add_executor_job(lambda p=target_path: p.parent.mkdir(parents=True, exist_ok=True))
-                        await self.hass.async_add_executor_job(zf.extract, member, safe_path)
+                for info in zf.infolist():
+                    try:
+                        if is_macos_zip_metadata(info.filename):
+                            continue
+
+                        member_path = safe_zip_member_path(info.filename)
+                        if not member_path:
+                            _LOGGER.warning("Skipping unsafe ZIP member: %s", info.filename)
+                            skipped_members.append(info.filename)
+                            continue
+
+                        target_path = (safe_path / member_path).resolve()
+                        if not target_path.is_relative_to(safe_path):
+                            _LOGGER.warning("Skipping ZIP member outside target: %s", info.filename)
+                            skipped_members.append(info.filename)
+                            continue
+
+                        if info.is_dir():
+                            await self.hass.async_add_executor_job(target_path.mkdir, 0o755, True, True)
+                            continue
+
+                        await self.hass.async_add_executor_job(target_path.parent.mkdir, 0o755, True, True)
+
+                        def _write_member(member=info, destination=target_path) -> None:
+                            with zf.open(member, "r") as src, destination.open("wb") as dest:
+                                shutil.copyfileobj(src, dest, length=1024 * 1024)
+
+                        await self.hass.async_add_executor_job(_write_member)
                         files_extracted += 1
+                    except Exception as member_err:
+                        skipped_members.append(info.filename)
+                        _LOGGER.warning(
+                            "Skipping ZIP member during extraction: %s (%s)",
+                            info.filename,
+                            member_err,
+                            exc_info=True,
+                        )
             self._fire_update("upload_folder", path)
-            return json_response({"success": True, "files_extracted": files_extracted})
-        except Exception as e: return json_message(str(e), status_code=500)
+            response = {"success": True, "files_extracted": files_extracted}
+            if skipped_members:
+                response["skipped_files"] = len(skipped_members)
+                response["skipped_examples"] = skipped_members[:10]
+                response["message"] = f"Extracted with {len(skipped_members)} skipped item(s)"
+            return json_response(response)
+        except zipfile.BadZipFile as e:
+            _LOGGER.error("Invalid ZIP upload for %s: %s", path, e, exc_info=True)
+            return json_message(f"Invalid ZIP file: {str(e)}", status_code=400)
+        except Exception as e:
+            _LOGGER.error("ZIP folder upload failed for %s: %s", path, e, exc_info=True)
+            return json_message(str(e), status_code=500)

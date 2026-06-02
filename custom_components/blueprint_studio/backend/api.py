@@ -99,6 +99,17 @@ class BlueprintStudioApiView(HomeAssistantView):
         else:
             self.terminal.hass = hass
 
+    def _zip_progress_response(self, params) -> web.Response:
+        """Return ZIP streaming progress for local or SFTP downloads."""
+        progress_id = params.get("progress_id")
+        local_progress = self.file.get_zip_progress(progress_id)
+        if local_progress.get("status") != "pending":
+            status_code = local_progress.pop("status_code", 200) if "status_code" in local_progress else 200
+            return json_response(local_progress, status_code=status_code)
+        sftp_progress = self.sftp.get_zip_progress(progress_id)
+        status_code = sftp_progress.pop("status_code", 200) if "status_code" in sftp_progress else 200
+        return json_response(sftp_progress, status_code=status_code)
+
     # ========== GET ==========
 
     async def get(self, request: web.Request) -> web.Response:
@@ -136,6 +147,7 @@ class BlueprintStudioApiView(HomeAssistantView):
             "get_themes":   lambda r, u, p, h: api_misc.get_themes(h),
             "get_addons":   lambda r, u, p, h: api_misc.get_addons(h),
             "get_services": lambda r, u, p, h: api_misc.get_services(h),
+            "zip_progress": lambda r, u, p, h: self._zip_progress_response(p),
             "run_config_check": lambda r, u, p, h: api_misc.run_config_check(h),
             "list_hass_agents": lambda r, u, p, h: api_misc.list_hass_agents(h),
         }
@@ -195,6 +207,7 @@ class BlueprintStudioApiView(HomeAssistantView):
             "rename": lambda d, h, u: api_files.rename(self.file, d),
             "upload_file": lambda d, h, u: api_files.upload_file(self.file, d),
             "upload_folder": lambda d, h, u: api_files.upload_folder(self.file, d),
+            "prepare_download_multi": lambda d, h, u: api_files.prepare_download_multi(self.file, d),
             "download_multi": lambda d, h, u: api_files.download_multi(self.file, d, request),
             "delete_multi": lambda d, h, u: api_files.delete_multi(self.file, d),
             "move_multi": lambda d, h, u: api_files.move_multi(self.file, d),
@@ -350,6 +363,16 @@ class BlueprintStudioStreamView(HomeAssistantView):
             return await api_files.serve_file(self.file, params)
         elif action == "download_folder":
             return await api_files.download_folder(self.file, params, request)
+        elif action == "download_multi":
+            stream_id = request.query.get("stream_id", "")
+            stream_data = self.file.consume_multi_download_token(stream_id)
+            if not stream_data:
+                return web.Response(status=404, text="Download not found or expired")
+            return await self.file.download_multi(
+                stream_data.get("paths", []),
+                request,
+                stream_data.get("progress_id"),
+            )
         elif action == "search_stream":
             return await api_files.search_stream(self.file, params, request)
         elif action == "sftp_serve_file":
@@ -358,6 +381,7 @@ class BlueprintStudioStreamView(HomeAssistantView):
             if not stream_data:
                 return web.Response(status=404, text="Stream not found or expired")
             if stream_data.get("type") == "folder_zip":
+                request._blueprint_zip_progress_id = stream_data.get("progress_id")
                 return await api_sftp.sftp_stream_folder_zip(
                     self.sftp,
                     hass,
@@ -380,7 +404,6 @@ class BlueprintStudioStreamView(HomeAssistantView):
             )
         else:
             return web.Response(status=400, text="Unknown streaming action")
-
 
 class BlueprintStudioUploadView(HomeAssistantView):
     """Multipart file upload view — streams directly to disk.
@@ -425,6 +448,8 @@ class BlueprintStudioUploadView(HomeAssistantView):
         overwrite = False
         file_data = None
         connection = None  # SFTP connection details (JSON string)
+        extract_zip = False
+        mode = "merge"
 
         while True:
             part = await reader.next()
@@ -435,6 +460,10 @@ class BlueprintStudioUploadView(HomeAssistantView):
                 file_path = (await part.text()).strip()
             elif part.name == "overwrite":
                 overwrite = (await part.text()).strip().lower() in ("true", "1")
+            elif part.name == "extract_zip":
+                extract_zip = (await part.text()).strip().lower() in ("true", "1")
+            elif part.name == "mode":
+                mode = (await part.text()).strip() or "merge"
             elif part.name == "connection":
                 try:
                     connection = json.loads(await part.text())
@@ -454,9 +483,13 @@ class BlueprintStudioUploadView(HomeAssistantView):
 
         # SFTP upload
         if connection:
+            if extract_zip:
+                return await self._upload_sftp_folder(hass, connection, file_path, file_data, mode, overwrite)
             return await self._upload_sftp(hass, connection, file_path, file_data, overwrite)
 
         # Local upload
+        if extract_zip:
+            return await self._upload_local_folder(file_path, file_data, mode, overwrite)
         return await self._upload_local(hass, file_path, file_data, overwrite)
 
     async def _upload_local(self, hass, file_path, file_data, overwrite):
@@ -499,4 +532,29 @@ class BlueprintStudioUploadView(HomeAssistantView):
             return json_response(result, status_code=status_code)
         except Exception as e:
             _LOGGER.error("SFTP upload failed: %s", e)
+            return json_response({"success": False, "message": str(e)})
+
+    async def _upload_local_folder(self, file_path, file_data, mode, overwrite):
+        """Extract uploaded ZIP bytes to a local folder."""
+        return await self.file.upload_folder_bytes(file_path, file_data, mode, overwrite)
+
+    async def _upload_sftp_folder(self, hass, connection, file_path, file_data, mode, overwrite):
+        """Extract uploaded ZIP bytes to a remote SFTP folder."""
+        host = connection.get("host", "")
+        port = int(connection.get("port", 22))
+        username = connection.get("username", "")
+        auth = connection.get("auth", {})
+
+        if not host or not username:
+            return json_message("Missing SFTP connection parameters", status_code=400)
+
+        def _extract():
+            return self.sftp.upload_folder_bytes(host, port, username, auth, file_path, file_data, mode, overwrite)
+
+        try:
+            result = await hass.async_add_executor_job(_extract)
+            status_code = result.pop("status_code", 200) if isinstance(result, dict) else 200
+            return json_response(result, status_code=status_code)
+        except Exception as e:
+            _LOGGER.error("SFTP folder upload failed: %s", e)
             return json_response({"success": False, "message": str(e)})

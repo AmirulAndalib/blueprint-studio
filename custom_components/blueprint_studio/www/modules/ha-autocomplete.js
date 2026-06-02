@@ -443,6 +443,11 @@ export function defineHAYamlMode() {
         },
         token: function(stream, state) {
           if (!state.inJinja) {
+            if (stream.match(/^\s+(?=(\{\{|\{%|\{#))/, false)) {
+              stream.match(/^\s+/);
+              return null;
+            }
+
             if (stream.match("{{")) {
               state.inJinja = true;
               state.jinjaType = "{{";

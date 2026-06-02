@@ -194,6 +194,7 @@ export async function loadSettings() {
     state.giteaPanelCollapsed = settings.giteaPanelCollapsed || false;
     state.fileTreeCollapsed = settings.fileTreeCollapsed || false;
     state.rememberWorkspace = settings.rememberWorkspace !== false; // default true
+    state.autoHideSidebar = settings.autoHideSidebar !== false; // default true
 
     // Performance settings
     state.pollingInterval = parseInt(settings.pollingInterval) || 10000;
@@ -396,6 +397,7 @@ export async function saveSettings() {
       blueprintFormActive: state.blueprintFormActive,
       blueprintFormTabPath: state.blueprintFormTabPath,
       rememberWorkspace: state.rememberWorkspace,
+      autoHideSidebar: state.autoHideSidebar,
       // Performance settings
       pollingInterval: state.pollingInterval,
       remoteFetchInterval: state.remoteFetchInterval,

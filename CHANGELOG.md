@@ -8,7 +8,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- **Removed legacy template sensor autocomplete** — The sensor platform autocomplete no longer suggests `platform: template`, matching Home Assistant 2026.6 removal of legacy template entities. The modern `template:` snippet remains available.
+
+- **Template sensor Jinja highlighting fixed** — Indented Jinja templates inside YAML folded/literal block scalars now keep Jinja syntax coloring even when a whitespace-only line appears after `state: >`.
+
+- **Sidebar startup visibility setting** — Added an Auto-Hide Sidebar on Startup option in Settings → General. Users can keep the current auto-hide behavior or turn it off so Blueprint Studio reopens the restored sidebar panel on startup.
+
 - **Folder ZIP downloads stream in chunks** — Local and SFTP folder ZIP downloads, including selected-item ZIP downloads, now stream archive data directly instead of building full ZIP buffers or base64 JSON responses first. Large folder downloads start sooner, use less memory, and are less likely to hang. Selection mode also now shows checked state for visible files and subfolders under a checked folder.
+
+- **Folder ZIP download progress** — Large local and SFTP folder ZIP downloads now show a progress overlay with live processed file counts, transferred bytes, and the current file being archived, making it clear when a big download is still working.
+
+- **Safer ZIP folder uploads** — Local and SFTP ZIP extraction now rejects unsafe archive members such as absolute paths, Windows drive paths, NUL-containing names, and `..` traversal entries before writing files. macOS ZIP metadata continues to be skipped automatically.
+
+- **Folder ZIP uploads use multipart transfers** — Local and SFTP "Upload Folder (ZIP)" and drag-and-drop unzip flows now send raw ZIP files through the multipart upload endpoint instead of base64 JSON. This avoids Home Assistant JSON body limits and keeps the existing merge/replace conflict flow.
+
+- **Non-blocking upload progress** — Local and SFTP file uploads, ZIP folder uploads, and drag-and-drop unzip flows now show a bottom-right upload progress panel instead of blocking the editor with a full-screen loading overlay. Multipart uploads use browser upload progress events, so users can keep working while large transfers continue.
+
+- **ZIP extraction no longer fails after partial success** — Local and SFTP ZIP extraction now skips and logs individual archive members that cannot be extracted instead of returning a failed upload after earlier files were already written. Successful extracts with skipped entries show a warning with example filenames.
+
+- **Uploaded ZIP folders refresh immediately** — Local ZIP extraction now refreshes the target directory after a successful upload so the extracted folder appears in the explorer without requiring a browser refresh.
+
+- **Error notifications are dismissible** — Persistent error toasts now include a close button, and confirmation/error modal flows can be dismissed reliably with the close button, Cancel, overlay click, or Escape.
+
+- **Selected-item ZIP downloads use direct stream URLs** — Bulk selected downloads now prepare a short-lived authenticated stream token and download via `/api/blueprint_studio/stream`, avoiding the browser-side `response.blob()` buffer for large ZIP archives.
 
 - **SFTP video and audio streaming improved** — SFTP media previews now use direct authenticated stream URLs with HTTP Range support instead of preloading the whole file into a browser blob. Seeking starts faster, large videos use far less browser memory, and SFTP file downloads stream directly instead of buffering the full file first.
 
@@ -25,8 +47,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **File explorer search UI polish** — Explorer search now fits in a compact single-row toolbar with filename/content icon mode buttons, an inline clear button, visible result counts, highlighted filename matches, and a no-results state.
 
 - **Git status badges in the file explorer** — Files now show compact Git status badges for modified, untracked, added, conflict, and staged states when GitHub integration is enabled.
-
-- **SFTP video and audio streaming improved** — SFTP media previews now use direct authenticated stream URLs with HTTP Range support instead of preloading the whole file into a browser blob. Seeking starts faster, large videos use far less browser memory, and SFTP file downloads stream directly instead of buffering the full file first.
 
 ## [2.5.1] - 2026-05-22
 

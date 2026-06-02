@@ -133,6 +133,10 @@ import {
 import {
   updateSplitViewButtons
 } from './split-view.js';
+import {
+  hideSidebar,
+  showSidebar
+} from './sidebar.js';
 import { initAiDiffListener, enqueueAiDiff } from './git-diff.js';
 import { initializeEventHandlers } from './coordinators/index.js';
 import { 
@@ -254,10 +258,11 @@ export async function init() {
     // Initialize AI diff listener (claw_assistant hook)
     initAiDiffListener();
 
-    elements.sidebar.classList.remove("visible");
-    elements.sidebar.classList.add("hidden");
-    if (elements.sidebarOverlay) elements.sidebarOverlay.classList.remove("visible");
-    state.sidebarVisible = false;
+    if (state.autoHideSidebar) {
+      hideSidebar();
+    } else {
+      showSidebar();
+    }
 
     // ⚡ PARALLEL INITIALIZATION - Run independent operations concurrently
     const [versionData] = await Promise.all([
@@ -311,6 +316,12 @@ export async function init() {
       if (elements.viewExplorer) { elements.viewExplorer.style.display = v === "explorer" ? "flex" : "none"; elements.viewExplorer.classList.toggle("hidden", v !== "explorer"); }
       if (elements.viewSearch) { elements.viewSearch.style.display = v === "search" ? "flex" : "none"; elements.viewSearch.classList.toggle("hidden", v !== "search"); }
       if (elements.viewSftp) { elements.viewSftp.style.display = v === "sftp" ? "flex" : "none"; elements.viewSftp.classList.toggle("hidden", v !== "sftp"); }
+    }
+
+    if (state.autoHideSidebar) {
+      hideSidebar();
+    } else {
+      showSidebar();
     }
 
     // ⚡ CRITICAL: Restore open tabs AFTER files are loaded

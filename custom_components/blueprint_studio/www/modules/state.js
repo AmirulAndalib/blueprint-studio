@@ -116,6 +116,7 @@ export const state = {
   giteaPanelCollapsed: false,
   fileTreeCollapsed: false,
   rememberWorkspace: true,
+  autoHideSidebar: true,
   showToasts: true,
   gitIntegrationEnabled: false,
   // Performance settings

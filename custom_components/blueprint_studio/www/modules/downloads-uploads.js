@@ -1,26 +1,42 @@
 import { t } from './translations.js';
 /** DOWNLOADS-UPLOADS.JS | Purpose: File transfers - download files/folders, upload files via drag-drop */
 import { state, elements } from './state.js';
-import { fetchWithAuth, downloadFileUrl, downloadFolderUrl, getAuthToken } from './api.js';
+import { fetchWithAuth, downloadFileUrl, downloadFolderUrl, getAuthToken, urlWithToken } from './api.js';
 import { eventBus } from './event-bus.js';
-import { API_BASE, UPLOAD_BASE } from './constants.js';
+import { API_BASE, STREAM_BASE, UPLOAD_BASE } from './constants.js';
 import { 
   showToast, 
-  showGlobalLoading, 
-  hideGlobalLoading, 
   showConfirmDialog,
   showModal
 } from './ui.js';
-import { isTextFile, formatBytes } from './utils.js';
+import { isTextFile } from './utils.js';
+import { createZipProgressId, startUploadProgress, startZipProgress } from './zip-progress.js';
 import {
   isSftpPath,
   parseSftpPath,
   uploadSftpFile,
-  uploadSftpFolder,
   refreshSftp,
   sftpStreamUrl,
   getSftpConnectionDetails
 } from './sftp.js';
+
+function parentPath(path) {
+  const clean = String(path || "").replace(/\/+$/g, "");
+  const index = clean.lastIndexOf("/");
+  return index > 0 ? clean.slice(0, index) : "";
+}
+
+async function refreshLocalUploadTarget(path) {
+  try {
+    const { loadDirectory } = await import('./file-tree.js');
+    const targetPath = parentPath(path);
+    state.loadedDirectories.delete(targetPath);
+    await loadDirectory(targetPath);
+  } catch (error) {
+    console.warn("Failed to refresh uploaded folder target:", error);
+    eventBus.emit("ui:reload-files", { force: true });
+  }
+}
 
 /**
  * Downloads the currently active file via streaming URL
@@ -103,15 +119,19 @@ export function downloadContent(filename, content, is_base64 = false, mimeType =
  * Downloads a folder as a ZIP file via streaming URL
  */
 export async function downloadFolder(path) {
+  const folderName = path.split('/').filter(Boolean).pop() || "download";
+  const progressId = createZipProgressId();
+  const stopProgress = startZipProgress(progressId, `Preparing ${folderName}.zip...`);
   try {
-    const url = await downloadFolderUrl(path);
+    const url = await downloadFolderUrl(path, progressId);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${path.split('/').filter(Boolean).pop() || "download"}.zip`;
+    a.download = `${folderName}.zip`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
   } catch (error) {
+    stopProgress();
     showToast(t("toast.download_items_fail", { error: error.message }), "error");
   }
 }
@@ -122,53 +142,32 @@ export async function downloadFolder(path) {
 export async function downloadSelectedItems() {
   if (state.selectedItems.size === 0) return;
   const paths = Array.from(state.selectedItems);
+  const progressId = createZipProgressId();
+  const stopProgress = startZipProgress(progressId, "Preparing selected items ZIP...");
 
   try {
-    showGlobalLoading("Preparing bulk download...");
-
-    // We need a raw fetch (not fetchWithAuth) because the response is binary, not JSON
-    let token = null;
-    try {
-      if (window.parent && window.parent.hassConnection) {
-        const conn = await window.parent.hassConnection;
-        if (conn && conn.auth) {
-          if (conn.auth.expired) await conn.auth.refreshAccessToken();
-          token = conn.auth.accessToken;
-        }
-      }
-    } catch (e) {}
-    if (!token && window.pwaAuth && window.pwaAuth.isAuthenticated()) {
-      token = await window.pwaAuth.getToken();
-    }
-
-    const headers = { "Content-Type": "application/json" };
-    if (token) headers["Authorization"] = `Bearer ${token}`;
-
-    const response = await fetch(API_BASE, {
+    const result = await fetchWithAuth(API_BASE, {
       method: "POST",
-      headers,
-      credentials: "same-origin",
-      body: JSON.stringify({ action: "download_multi", paths }),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "prepare_download_multi", paths, progress_id: progressId }),
     });
 
-    hideGlobalLoading();
-
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
+    if (!result?.success || !result.stream_id) {
+      throw new Error(result?.message || "Failed to prepare selected items download");
     }
 
-    const blob = await response.blob();
-    const url = URL.createObjectURL(blob);
+    const url = await urlWithToken(
+      `${STREAM_BASE}?action=download_multi&stream_id=${encodeURIComponent(result.stream_id)}&_t=${Date.now()}`
+    );
     const a = document.createElement("a");
     a.href = url;
     a.download = "download.zip";
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
     eventBus.emit("ui:toggle-selection");
   } catch (error) {
-    hideGlobalLoading();
+    stopProgress();
     showToast(t("toast.delete_items_failed", { error: error.message }), "error");
   }
 }
@@ -252,6 +251,47 @@ function buildUploadedFolderPath(basePath, folderName) {
   return `${cleanBasePath}/${cleanFolderName}`;
 }
 
+function formatUploadLabel(totalFiles) {
+  return totalFiles === 1 ? "Uploading 1 file..." : `Uploading ${totalFiles} files...`;
+}
+
+function uploadProgressFor(progress, file, fileIndex, phase = "Uploading") {
+  if (!progress) return null;
+  return ({ loaded = 0, total = file.size || 0 } = {}) => {
+    progress.update({
+      fileName: file.name,
+      fileIndex,
+      loaded,
+      total,
+      message: "",
+    });
+  };
+}
+
+async function runUploadWithProgress(progress, file, fileIndex, phase, uploadFn) {
+  const onProgress = uploadProgressFor(progress, file, fileIndex, phase);
+  if (onProgress) onProgress({ loaded: 0, total: file.size || 0 });
+  const result = await uploadFn(onProgress);
+  if (progress) {
+    progress.update({
+      fileName: file.name,
+      fileIndex,
+      loaded: file.size || 0,
+      total: file.size || 0,
+      message: `${phase} ${file.name} - processing on server...`,
+    });
+  }
+  return result;
+}
+
+function showUploadWarnings(result) {
+  if (!result?.skipped_files) return;
+  const examples = Array.isArray(result.skipped_examples) && result.skipped_examples.length
+    ? `: ${result.skipped_examples.slice(0, 3).join(", ")}`
+    : "";
+  showToast(`Upload completed with ${result.skipped_files} skipped item(s)${examples}`, "warning", 8000);
+}
+
 /**
  * Processes file uploads
  */
@@ -276,8 +316,7 @@ export async function processUploads(files, targetFolder = null) {
   let processedCount = 0;
   let successCount = 0;
   const totalFiles = files.length;
-
-  showGlobalLoading(`Uploading ${totalFiles} file(s)...`);
+  const progress = startUploadProgress({ label: formatUploadLabel(totalFiles), totalFiles });
 
   for (const file of files) {
     processedCount++;
@@ -296,19 +335,35 @@ export async function processUploads(files, targetFolder = null) {
         });
 
         if (unzip) {
-          const base64Data = await readFileAsBase64(file);
           const targetDir = isSftp ? remoteBaseDir : basePath;
           const folderName = file.name.replace(/\.zip$/i, '');
           const targetPath = buildUploadedFolderPath(targetDir, folderName);
 
           if (isSftp) {
+            const connDetails = getSftpConnectionDetails(connId);
+            if (!connDetails) {
+              showToast(`Failed to unzip ${file.name}: SFTP connection not found`, "error");
+              continue;
+            }
             // Try without overwrite first
-            let result = await uploadSftpFolder(connId, targetPath, base64Data, "merge", false);
+            let result = await runUploadWithProgress(
+              progress,
+              file,
+              processedCount,
+              "Uploading ZIP",
+              (onProgress) => uploadFolderMultipartSftp(connDetails, targetPath, file, "merge", false, onProgress)
+            );
             
             if (result && result.status === 409) {
                 const mode = await promptFolderConflict(result.folder_name || folderName);
                 if (mode) {
-                    result = await uploadSftpFolder(connId, targetPath, base64Data, mode, true);
+                    result = await runUploadWithProgress(
+                      progress,
+                      file,
+                      processedCount,
+                      "Uploading ZIP",
+                      (onProgress) => uploadFolderMultipartSftp(connDetails, targetPath, file, mode, true, onProgress)
+                    );
                 } else {
                     continue;
                 }
@@ -316,6 +371,7 @@ export async function processUploads(files, targetFolder = null) {
 
             if (result && result.success) {
               successCount++;
+              showUploadWarnings(result);
               await refreshSftp();
               continue;
             } else {
@@ -323,32 +379,24 @@ export async function processUploads(files, targetFolder = null) {
             }
           } else {
             // Local folder upload
-            let data = await fetchWithAuth(API_BASE, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                action: "upload_folder",
-                path: targetPath,
-                zip_data: base64Data,
-                mode: "merge",
-                overwrite: false
-              }),
-            });
+            let data = await runUploadWithProgress(
+              progress,
+              file,
+              processedCount,
+              "Uploading ZIP",
+              (onProgress) => uploadFolderMultipart(targetPath, file, "merge", false, onProgress)
+            );
 
             if (data && data.status === 409) {
                 const mode = await promptFolderConflict(data.folder_name || folderName);
                 if (mode) {
-                    data = await fetchWithAuth(API_BASE, {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                          action: "upload_folder",
-                          path: targetPath,
-                          zip_data: base64Data,
-                          mode: mode,
-                          overwrite: true
-                        }),
-                    });
+                    data = await runUploadWithProgress(
+                      progress,
+                      file,
+                      processedCount,
+                      "Uploading ZIP",
+                      (onProgress) => uploadFolderMultipart(targetPath, file, mode, true, onProgress)
+                    );
                 } else {
                     continue;
                 }
@@ -356,7 +404,8 @@ export async function processUploads(files, targetFolder = null) {
 
             if (data && data.success) {
               successCount++;
-              eventBus.emit("ui:reload-files", { force: true });
+              showUploadWarnings(data);
+              await refreshLocalUploadTarget(targetPath);
               continue;
             }
           }
@@ -373,7 +422,13 @@ export async function processUploads(files, targetFolder = null) {
             showToast(`Failed to upload ${file.name}: SFTP connection not found`, "error");
             continue;
           }
-          let res = await uploadFileMultipartSftp(connDetails, remotePath, file, false);
+          let res = await runUploadWithProgress(
+            progress,
+            file,
+            processedCount,
+            "Uploading",
+            (onProgress) => uploadFileMultipartSftp(connDetails, remotePath, file, false, onProgress)
+          );
 
           if (res && res.status === 409) {
             const confirm = await showConfirmDialog({
@@ -384,7 +439,13 @@ export async function processUploads(files, targetFolder = null) {
               isDanger: true
             });
             if (confirm) {
-              res = await uploadFileMultipartSftp(connDetails, remotePath, file, true);
+              res = await runUploadWithProgress(
+                progress,
+                file,
+                processedCount,
+                "Uploading",
+                (onProgress) => uploadFileMultipartSftp(connDetails, remotePath, file, true, onProgress)
+              );
             } else {
               continue;
             }
@@ -397,7 +458,13 @@ export async function processUploads(files, targetFolder = null) {
           }
         } else {
           const filePath = basePath ? `${basePath}/${file.name}` : file.name;
-          let res = await uploadFileMultipart(filePath, file, false);
+          let res = await runUploadWithProgress(
+            progress,
+            file,
+            processedCount,
+            "Uploading",
+            (onProgress) => uploadFileMultipart(filePath, file, false, onProgress)
+          );
 
           if (res && res.status === 409) {
             const confirm = await showConfirmDialog({
@@ -408,7 +475,13 @@ export async function processUploads(files, targetFolder = null) {
               isDanger: true
             });
             if (confirm) {
-              res = await uploadFileMultipart(filePath, file, true);
+              res = await runUploadWithProgress(
+                progress,
+                file,
+                processedCount,
+                "Uploading",
+                (onProgress) => uploadFileMultipart(filePath, file, true, onProgress)
+              );
             } else {
               continue;
             }
@@ -424,7 +497,21 @@ export async function processUploads(files, targetFolder = null) {
       }
 
       // Text files: use JSON upload (small, no need for multipart)
+      progress.update({
+        fileName: file.name,
+        fileIndex: processedCount,
+        loaded: 0,
+        total: file.size || 0,
+        message: `Reading ${file.name}`,
+      });
       content = await readFileAsText(file);
+      progress.update({
+        fileName: file.name,
+        fileIndex: processedCount,
+        loaded: file.size || 0,
+        total: file.size || 0,
+        message: `Saving ${file.name}`,
+      });
 
       if (isSftp) {
         const remotePath = remoteBaseDir === '/' ? `/${file.name}` : `${remoteBaseDir}/${file.name}`;
@@ -486,11 +573,13 @@ export async function processUploads(files, targetFolder = null) {
     }
   }
 
-  hideGlobalLoading();
   if (successCount > 0) {
+    progress.finish(successCount === totalFiles ? "Upload complete" : `Uploaded ${successCount} of ${totalFiles} files`);
     showToast(t("toast.upload_success"), "success");
     if (isSftp) await refreshSftp();
     else eventBus.emit("ui:reload-files", { force: true });
+  } else {
+    progress.fail("No files uploaded");
   }
 }
 
@@ -516,10 +605,9 @@ export async function handleFolderUpload(event) {
     return;
   }
 
-  try {
-    showGlobalLoading(t("modal.confirm") + "...");
-    const base64Data = await readFileAsBase64(file);
+  const progress = startUploadProgress({ label: `Uploading ${file.name}...`, totalFiles: 1 });
 
+  try {
     let targetPath = state._nextFolderUploadTarget;
     state._nextFolderUploadTarget = null;
     if (targetPath === null) {
@@ -531,74 +619,89 @@ export async function handleFolderUpload(event) {
       const { connId, remotePath } = parseSftpPath(targetPath);
       const folderName = file.name.replace(/\.zip$/i, '');
       const remoteFolderPath = buildUploadedFolderPath(remotePath, folderName);
+      const connDetails = getSftpConnectionDetails(connId);
+      if (!connDetails) {
+        progress.fail("SFTP connection not found");
+        showToast(t("toast.upload_folder_fail", { error: "SFTP connection not found" }), "error");
+        event.target.value = "";
+        return;
+      }
 
-      let result = await uploadSftpFolder(connId, remoteFolderPath, base64Data, "merge", false);
+      let result = await runUploadWithProgress(
+        progress,
+        file,
+        1,
+        "Uploading ZIP",
+        (onProgress) => uploadFolderMultipartSftp(connDetails, remoteFolderPath, file, "merge", false, onProgress)
+      );
 
       if (result && result.status === 409) {
         const mode = await promptFolderConflict(result.folder_name || folderName);
         if (mode) {
-          result = await uploadSftpFolder(connId, remoteFolderPath, base64Data, mode, true);
+          result = await runUploadWithProgress(
+            progress,
+            file,
+            1,
+            "Uploading ZIP",
+            (onProgress) => uploadFolderMultipartSftp(connDetails, remoteFolderPath, file, mode, true, onProgress)
+          );
         } else {
-          hideGlobalLoading();
+          progress.remove();
           event.target.value = "";
           return;
         }
       }
 
-      hideGlobalLoading();
       if (result && result.success) {
+        progress.finish("Upload complete");
         showToast(t("toast.upload_success"), "success");
+        showUploadWarnings(result);
         await refreshSftp();
       } else {
+        progress.fail("Upload failed");
         showToast(t("toast.upload_folder_fail", { error: result?.message || "Unknown error" }), "error");
       }
     } else {
       // Local folder upload
       const folderName = file.name.replace(/\.zip$/i, '');
       const localFolderPath = buildUploadedFolderPath(targetPath, folderName);
-      let data = await fetchWithAuth(API_BASE, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "upload_folder",
-          path: localFolderPath,
-          zip_data: base64Data,
-          mode: "merge",
-          overwrite: false
-        }),
-      });
+      let data = await runUploadWithProgress(
+        progress,
+        file,
+        1,
+        "Uploading ZIP",
+        (onProgress) => uploadFolderMultipart(localFolderPath, file, "merge", false, onProgress)
+      );
 
       if (data && data.status === 409) {
         const mode = await promptFolderConflict(data.folder_name || folderName);
         if (mode) {
-          data = await fetchWithAuth(API_BASE, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              action: "upload_folder",
-              path: localFolderPath,
-              zip_data: base64Data,
-              mode,
-              overwrite: true
-            }),
-          });
+          data = await runUploadWithProgress(
+            progress,
+            file,
+            1,
+            "Uploading ZIP",
+            (onProgress) => uploadFolderMultipart(localFolderPath, file, mode, true, onProgress)
+          );
         } else {
-          hideGlobalLoading();
+          progress.remove();
           event.target.value = "";
           return;
         }
       }
 
-      hideGlobalLoading();
       if (data.success) {
+        progress.finish("Upload complete");
         showToast(t("toast.upload_success"), "success");
-        eventBus.emit("ui:reload-files", { force: true });
+        showUploadWarnings(data);
+        await refreshLocalUploadTarget(localFolderPath);
       } else {
+        progress.fail("Upload failed");
         showToast(t("toast.upload_folder_fail", { error: data.message || "Unknown error" }), "error");
       }
     }
   } catch (error) {
-    hideGlobalLoading();
+    progress.fail("Upload failed");
     showToast(t("toast.upload_folder_fail", { error: error.message }), "error");
   } finally {
     event.target.value = "";
@@ -634,35 +737,80 @@ export async function uploadFile(path, content, overwrite = false, is_base64 = f
   });
 }
 
+async function sendMultipartUpload(formData, onProgress = null) {
+  const token = await getAuthToken();
+
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", UPLOAD_BASE, true);
+    xhr.withCredentials = true;
+    if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+
+    xhr.upload.onprogress = (event) => {
+      if (!onProgress) return;
+      onProgress({
+        loaded: event.loaded,
+        total: event.lengthComputable ? event.total : 0,
+      });
+    };
+
+    xhr.onload = () => {
+      let data = {};
+      try {
+        data = xhr.responseText ? JSON.parse(xhr.responseText) : {};
+      } catch (_) {
+        data = { success: false, message: xhr.responseText || `HTTP ${xhr.status}` };
+      }
+      if (typeof data === "object" && data !== null && !("status" in data)) {
+        data.status = xhr.status;
+      }
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(data);
+      } else if (xhr.status === 409) {
+        resolve({ ...data, status: 409 });
+      } else {
+        reject(new Error(data?.message || `HTTP ${xhr.status}`));
+      }
+    };
+
+    xhr.onerror = () => reject(new Error("Network error during upload"));
+    xhr.onabort = () => reject(new Error("Upload cancelled"));
+    xhr.send(formData);
+  });
+}
+
 /**
  * Multipart file upload — streams raw binary to /api/blueprint_studio/upload.
  * Bypasses HA's 16MB JSON body limit. Used for binary files (images, video, etc.).
  */
-export async function uploadFileMultipart(path, file, overwrite = false) {
+export async function uploadFileMultipart(path, file, overwrite = false, onProgress = null) {
   const formData = new FormData();
   formData.append("path", path);
   formData.append("overwrite", overwrite ? "true" : "false");
   formData.append("file", file);
 
-  const token = await getAuthToken();
-  const headers = {};
-  if (token) headers["Authorization"] = `Bearer ${token}`;
+  return await sendMultipartUpload(formData, onProgress);
+}
 
-  const response = await fetch(UPLOAD_BASE, {
-    method: "POST",
-    headers,
-    credentials: "same-origin",
-    body: formData,
-  });
+/**
+ * Multipart ZIP folder upload — sends raw ZIP bytes and asks backend to extract.
+ */
+export async function uploadFolderMultipart(path, file, mode = "merge", overwrite = false, onProgress = null) {
+  const formData = new FormData();
+  formData.append("path", path);
+  formData.append("overwrite", overwrite ? "true" : "false");
+  formData.append("extract_zip", "true");
+  formData.append("mode", mode);
+  formData.append("file", file);
 
-  return await response.json();
+  return await sendMultipartUpload(formData, onProgress);
 }
 
 /**
  * Multipart SFTP upload — sends raw binary + connection details to /api/blueprint_studio/upload.
  * Bypasses HA's 16MB JSON body limit for SFTP binary uploads.
  */
-export async function uploadFileMultipartSftp(conn, remotePath, file, overwrite = false) {
+export async function uploadFileMultipartSftp(conn, remotePath, file, overwrite = false, onProgress = null) {
   const formData = new FormData();
   formData.append("path", remotePath);
   formData.append("overwrite", overwrite ? "true" : "false");
@@ -674,18 +822,27 @@ export async function uploadFileMultipartSftp(conn, remotePath, file, overwrite 
   }));
   formData.append("file", file);
 
-  const token = await getAuthToken();
-  const headers = {};
-  if (token) headers["Authorization"] = `Bearer ${token}`;
+  return await sendMultipartUpload(formData, onProgress);
+}
 
-  const response = await fetch(UPLOAD_BASE, {
-    method: "POST",
-    headers,
-    credentials: "same-origin",
-    body: formData,
-  });
+/**
+ * Multipart SFTP ZIP folder upload — sends raw ZIP bytes and asks backend to extract.
+ */
+export async function uploadFolderMultipartSftp(conn, remotePath, file, mode = "merge", overwrite = false, onProgress = null) {
+  const formData = new FormData();
+  formData.append("path", remotePath);
+  formData.append("overwrite", overwrite ? "true" : "false");
+  formData.append("extract_zip", "true");
+  formData.append("mode", mode);
+  formData.append("connection", JSON.stringify({
+    host: conn.host,
+    port: conn.port || 22,
+    username: conn.username,
+    auth: conn.auth,
+  }));
+  formData.append("file", file);
 
-  return await response.json();
+  return await sendMultipartUpload(formData, onProgress);
 }
 
 /** Handles file input change */

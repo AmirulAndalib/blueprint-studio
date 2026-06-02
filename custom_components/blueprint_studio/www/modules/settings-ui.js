@@ -622,6 +622,17 @@ export async function showAppSettings() {
 
             <div style="display: flex; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--divider-color);">
               <div style="flex: 1;">
+                <div style="font-weight: 500; margin-bottom: 4px;">${t("settings.general.auto_hide_sidebar")}</div>
+                <div style="font-size: 12px; color: var(--text-secondary);">${t("settings.general.auto_hide_sidebar_hint")}</div>
+              </div>
+              <label class="toggle-switch" style="margin-left: 16px;">
+                <input type="checkbox" id="auto-hide-sidebar-toggle" ${state.autoHideSidebar !== false ? 'checked' : ''}>
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+
+            <div style="display: flex; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--divider-color);">
+              <div style="flex: 1;">
                 <div style="font-weight: 500; margin-bottom: 4px;">${t("settings.general.show_recent")}</div>
                 <div style="font-size: 12px; color: var(--text-secondary);">${t("settings.general.show_recent_hint")}</div>
               </div>
@@ -1476,6 +1487,15 @@ export async function showAppSettings() {
         state.rememberWorkspace = e.target.checked;
         await saveSettingsImpl();
         showToast(t(state.rememberWorkspace ? "toast.workspace_remembered" : "toast.workspace_not_remembered"), "success");
+      });
+    }
+
+    const autoHideSidebarToggle = document.getElementById("auto-hide-sidebar-toggle");
+    if (autoHideSidebarToggle) {
+      autoHideSidebarToggle.addEventListener("change", async (e) => {
+        state.autoHideSidebar = e.target.checked;
+        await saveSettingsImpl();
+        showToast(t(state.autoHideSidebar ? "toast.sidebar_auto_hide_enabled" : "toast.sidebar_auto_hide_disabled"), "success");
       });
     }
 

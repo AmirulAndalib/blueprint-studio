@@ -180,7 +180,15 @@ async def upload_folder(file_manager, data):
 
 async def download_multi(file_manager, data, request):
     """Download multiple files as zip."""
-    return await file_manager.download_multi(data.get("paths", []), request)
+    return await file_manager.download_multi(data.get("paths", []), request, data.get("progress_id"))
+
+
+async def prepare_download_multi(file_manager, data):
+    """Prepare a direct stream URL token for multiple-item ZIP download."""
+    paths = data.get("paths", [])
+    if not isinstance(paths, list) or not paths:
+        return json_message("Missing paths", status_code=400)
+    return json_response(file_manager.create_multi_download_token(paths, data.get("progress_id")))
 
 
 async def delete_multi(file_manager, data):

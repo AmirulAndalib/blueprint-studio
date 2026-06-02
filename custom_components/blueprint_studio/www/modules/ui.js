@@ -274,11 +274,15 @@ export function showToast(message, type = "success", duration = 3000, action = n
   if (action && action.text && action.callback) {
     actionButtonHtml = `<button class="toast-action-btn">${action.text}</button>`;
   }
+  const closeButtonHtml = duration === 0
+    ? '<button class="toast-close-btn" aria-label="Dismiss"><span class="material-icons">close</span></button>'
+    : '';
 
   toast.innerHTML = `
     <span class="material-icons">${iconMap[type] || 'info'}</span>
     <span class="toast-message">${compactMessage}</span>
     ${actionButtonHtml}
+    ${closeButtonHtml}
   `;
 
   elements.toastContainer.appendChild(toast);
@@ -296,6 +300,11 @@ export function showToast(message, type = "success", duration = 3000, action = n
         removeToast();
       });
     }
+  }
+
+  const closeBtn = toast.querySelector('.toast-close-btn');
+  if (closeBtn) {
+    closeBtn.addEventListener('click', removeToast);
   }
 
   if (duration > 0) {
@@ -460,25 +469,49 @@ export function showConfirmDialog(options) {
     elements.modalOverlay.classList.add("visible");
 
     return new Promise((resolve) => {
-      const confirmHandler = () => {
+      let settled = false;
+
+      const settle = (value) => {
+        if (settled) return;
+        settled = true;
         elements.modalOverlay.classList.remove("visible");
-        resolve(true);
+        resolve(value);
         cleanup();
       };
 
+      const confirmHandler = () => {
+        settle(true);
+      };
+
       const cancelHandler = () => {
-        elements.modalOverlay.classList.remove("visible");
-        resolve(false);
-        cleanup();
+        settle(false);
+      };
+
+      const overlayHandler = (event) => {
+        if (event.target === elements.modalOverlay) {
+          settle(false);
+        }
+      };
+
+      const keyHandler = (event) => {
+        if (event.key === "Escape") {
+          settle(false);
+        }
       };
 
       const cleanup = () => {
         elements.modalConfirm.removeEventListener("click", confirmHandler);
         elements.modalCancel.removeEventListener("click", cancelHandler);
+        elements.modalClose.removeEventListener("click", cancelHandler);
+        elements.modalOverlay.removeEventListener("click", overlayHandler);
+        document.removeEventListener("keydown", keyHandler);
       };
 
       elements.modalConfirm.addEventListener("click", confirmHandler, { once: true });
       elements.modalCancel.addEventListener("click", cancelHandler, { once: true });
+      elements.modalClose.addEventListener("click", cancelHandler, { once: true });
+      elements.modalOverlay.addEventListener("click", overlayHandler);
+      document.addEventListener("keydown", keyHandler);
     });
 }
 

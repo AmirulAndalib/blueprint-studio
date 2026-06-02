@@ -13,6 +13,7 @@ import {
   showModal as showInputModal
 } from './ui.js';
 import { updateSshDropdown } from './terminal.js';
+import { createZipProgressId, startZipProgress } from './zip-progress.js';
 
 // ─── Visibility ───────────────────────────────────────────────────────────────
 
@@ -176,13 +177,14 @@ export async function sftpStreamUrl(connId, remotePath) {
   );
 }
 
-async function sftpFolderZipUrl(connId, remotePath) {
+async function sftpFolderZipUrl(connId, remotePath, progressId = "") {
   const conn = findConnection(connId);
   if (!conn) throw new Error("SFTP connection not found");
 
   const result = await callSftpApi("sftp_prepare_stream", conn, {
     path: remotePath,
     stream_type: "folder_zip",
+    progress_id: progressId,
   });
   if (!result?.success || !result.stream_id) {
     throw new Error(result?.message || "Failed to prepare SFTP folder download");
@@ -1185,20 +1187,13 @@ async function _downloadFile(connId, remotePath) {
   const fileName = remotePath.split('/').pop();
   showToast(t("toast.sftp_downloading", { name: fileName }), 'info');
   try {
-    const result = await callSftpApi('sftp_read', conn, { path: remotePath });
-    if (!result.success) {
-      showToast(t("toast.sftp_download_fail", { error: result.message }), 'error');
-      return;
-    }
-    const blob = new Blob([result.content], { type: 'text/plain;charset=utf-8' });
-    const url  = URL.createObjectURL(blob);
+    const url = await sftpStreamUrl(connId, remotePath);
     const a    = document.createElement('a');
     a.href     = url;
     a.download = fileName;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    URL.revokeObjectURL(url);
     showToast(t("toast.sftp_download_success", { name: fileName }), 'success');
   } catch (err) {
     showToast(t("toast.sftp_download_fail", { error: err.message }), 'error');
@@ -1209,9 +1204,10 @@ async function _downloadFolder(connId, remotePath) {
   const conn = findConnection(connId);
   if (!conn) return;
   const folderName = remotePath.split('/').filter(Boolean).pop() || "download";
-  showToast("Preparing remote folder download...", 'info');
+  const progressId = createZipProgressId();
+  const stopProgress = startZipProgress(progressId, `Preparing ${folderName}.zip...`);
   try {
-    const url = await sftpFolderZipUrl(connId, remotePath);
+    const url = await sftpFolderZipUrl(connId, remotePath, progressId);
     const a = document.createElement('a');
     a.href = url;
     a.download = `${folderName}.zip`;
@@ -1220,6 +1216,7 @@ async function _downloadFolder(connId, remotePath) {
     document.body.removeChild(a);
     showToast(t("toast.download_success"), "success");
   } catch (err) {
+    stopProgress();
     showToast(t("toast.download_items_fail", { error: err.message }), 'error');
   }
 }

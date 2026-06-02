@@ -720,7 +720,6 @@ export const HA_SCHEMA = {
 
   // Sensor platforms
   sensorPlatforms: [
-    { text: "platform: template", type: "platform", description: "Template sensor" },
     { text: "platform: mqtt", type: "platform", description: "MQTT sensor" },
     { text: "platform: statistics", type: "platform", description: "Statistics sensor" },
     { text: "platform: time_date", type: "platform", description: "Time and date sensor" },

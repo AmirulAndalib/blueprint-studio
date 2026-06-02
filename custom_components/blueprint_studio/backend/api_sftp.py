@@ -37,7 +37,15 @@ async def sftp_action(sftp_manager, action: str, data: dict, hass, request=None)
         path = data.get("path")
         if not path:
             return json_message("Missing path", status_code=400)
-        result = sftp_manager.create_stream_token(host, port, username, auth, path, data.get("stream_type", "file"))
+        result = sftp_manager.create_stream_token(
+            host,
+            port,
+            username,
+            auth,
+            path,
+            data.get("stream_type", "file"),
+            data.get("progress_id"),
+        )
         return json_response(result)
 
     # --- sftp_serve_file: stream raw bytes with Range support ---
@@ -207,7 +215,7 @@ async def sftp_stream_folder_zip(sftp_manager, hass, request, host, port, userna
 
     def worker() -> None:
         result_holder["result"] = sftp_manager.stream_folder_zip(
-            host, port, username, auth, path, write_chunk
+            host, port, username, auth, path, write_chunk, getattr(request, "_blueprint_zip_progress_id", None)
         )
         while not stopped.is_set():
             try:

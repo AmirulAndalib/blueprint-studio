@@ -370,8 +370,9 @@ export async function downloadFileUrl(path) {
  * @param {string} path - Relative folder path
  * @returns {Promise<string>} Authenticated URL for folder ZIP download
  */
-export async function downloadFolderUrl(path) {
-  return await urlWithToken(`${STREAM_BASE}?action=download_folder&path=${encodeURIComponent(path)}&_t=${Date.now()}`);
+export async function downloadFolderUrl(path, progressId = "") {
+  const progressParam = progressId ? `&progress_id=${encodeURIComponent(progressId)}` : "";
+  return await urlWithToken(`${STREAM_BASE}?action=download_folder&path=${encodeURIComponent(path)}${progressParam}&_t=${Date.now()}`);
 }
 
 /**

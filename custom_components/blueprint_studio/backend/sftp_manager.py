@@ -4,6 +4,7 @@ from __future__ import annotations
 import io
 import logging
 import os
+import posixpath
 import stat
 import base64
 import mimetypes
@@ -16,6 +17,7 @@ from typing import Any, Callable
 _LOGGER = logging.getLogger(__name__)
 
 from ..const import BINARY_EXTENSIONS, TEXT_EXTENSIONS
+from .zip_utils import is_macos_zip_metadata, safe_zip_member_path
 
 
 def _is_text_file(filename: str) -> bool:
@@ -56,6 +58,8 @@ class SftpManager:
         self._stream_tokens: dict[str, dict] = {}
         self._stream_tokens_lock = threading.Lock()
         self._stream_token_ttl = 3600  # seconds
+        self._zip_progress: dict[str, dict] = {}
+        self._zip_progress_lock = threading.Lock()
 
     # -- pool internals ------------------------------------------------------
 
@@ -162,7 +166,7 @@ class SftpManager:
 
     # -- streaming tokens ----------------------------------------------------
 
-    def create_stream_token(self, host: str, port: int, username: str, auth: dict, path: str, stream_type: str = "file") -> dict:
+    def create_stream_token(self, host: str, port: int, username: str, auth: dict, path: str, stream_type: str = "file", progress_id: str | None = None) -> dict:
         """Create a short-lived opaque token for GET-based media streaming."""
         token = secrets.token_urlsafe(32)
         expires_at = time.monotonic() + self._stream_token_ttl
@@ -174,6 +178,7 @@ class SftpManager:
                 "auth": auth,
                 "path": path,
                 "type": stream_type,
+                "progress_id": progress_id,
                 "expires_at": expires_at,
             }
         return {
@@ -440,12 +445,20 @@ class SftpManager:
         return _sftp_safe_exec("create_file_raw", op)
 
     def upload_folder(self, host: str, port: int, username: str, auth: dict, path: str, zip_data: str, mode: str = "merge", overwrite: bool = False) -> dict:
-        """Upload ZIP and extract to remote folder. Returns {success, files_extracted}."""
+        """Upload base64 ZIP and extract to remote folder. Returns {success, files_extracted}."""
+        try:
+            zip_bytes = base64.b64decode(zip_data)
+        except Exception as exc:
+            return {"success": False, "message": f"Invalid ZIP data: {exc}", "status_code": 400}
+        return self.upload_folder_bytes(host, port, username, auth, path, zip_bytes, mode, overwrite)
+
+    def upload_folder_bytes(self, host: str, port: int, username: str, auth: dict, path: str, zip_bytes: bytes, mode: str = "merge", overwrite: bool = False) -> dict:
+        """Upload ZIP bytes and extract to remote folder. Returns {success, files_extracted}."""
         def op():
             import zipfile
-            zip_bytes = base64.b64decode(zip_data)
             buf = io.BytesIO(zip_bytes)
             files_extracted = 0
+            skipped_members: list[str] = []
             
             with self._get_connection(host, port, username, auth) as (_, sftp):
                 # If it exists and we haven't confirmed a mode yet, return 409
@@ -473,29 +486,55 @@ class SftpManager:
                 # Ensure base directory exists
                 self._mkdir_recursive(sftp, path)
                 
+                base_path = path.rstrip("/") or "/"
                 with zipfile.ZipFile(buf) as zf:
-                    for member in zf.namelist():
-                        # Skip macOS metadata
-                        if "__MACOSX" in member or ".DS_Store" in member:
-                            continue
-                            
-                        # If it is a directory entry, ensure it exists
-                        if member.endswith("/"):
-                            self._mkdir_recursive(sftp, os.path.join(path, member).replace("\\", "/"))
-                            continue
-                            
-                        # It is a file - ensure parent exists
-                        remote_file_path = os.path.join(path, member).replace("\\", "/")
-                        remote_parent = os.path.dirname(remote_file_path)
-                        self._mkdir_recursive(sftp, remote_parent)
+                    for info in zf.infolist():
+                        try:
+                            if is_macos_zip_metadata(info.filename):
+                                continue
+
+                            member_path = safe_zip_member_path(info.filename)
+                            if not member_path:
+                                _LOGGER.warning("Skipping unsafe SFTP ZIP member: %s", info.filename)
+                                skipped_members.append(info.filename)
+                                continue
+
+                            remote_file_path = posixpath.normpath(posixpath.join(base_path, member_path))
+                            if not remote_file_path.startswith(base_path.rstrip("/") + "/") and remote_file_path != base_path:
+                                _LOGGER.warning("Skipping SFTP ZIP member outside target: %s", info.filename)
+                                skipped_members.append(info.filename)
+                                continue
+
+                            if info.is_dir():
+                                self._mkdir_recursive(sftp, remote_file_path)
+                                continue
+
+                            remote_parent = posixpath.dirname(remote_file_path)
+                            self._mkdir_recursive(sftp, remote_parent)
+
+                            with zf.open(info) as zf_file:
+                                with sftp.open(remote_file_path, "wb") as remote_fh:
+                                    while True:
+                                        chunk = zf_file.read(1024 * 1024)
+                                        if not chunk:
+                                            break
+                                        remote_fh.write(chunk)
+                            files_extracted += 1
+                        except Exception as member_err:
+                            skipped_members.append(info.filename)
+                            _LOGGER.warning(
+                                "Skipping SFTP ZIP member during extraction: %s (%s)",
+                                info.filename,
+                                member_err,
+                                exc_info=True,
+                            )
                         
-                        # Extract/Write file
-                        with zf.open(member) as zf_file:
-                            with sftp.open(remote_file_path, "wb") as remote_fh:
-                                remote_fh.write(zf_file.read())
-                        files_extracted += 1
-                        
-                return {"success": True, "files_extracted": files_extracted}
+                response = {"success": True, "files_extracted": files_extracted}
+                if skipped_members:
+                    response["skipped_files"] = len(skipped_members)
+                    response["skipped_examples"] = skipped_members[:10]
+                    response["message"] = f"Extracted with {len(skipped_members)} skipped item(s)"
+                return response
         return _sftp_safe_exec("upload_folder", op)
 
     def download_folder(self, host: str, port: int, username: str, auth: dict, path: str) -> dict:
@@ -532,7 +571,7 @@ class SftpManager:
                 except Exception as e:
                     _LOGGER.warning("Skipping file %s in download_folder: %s", full_path, e)
 
-    def stream_folder_zip(self, host: str, port: int, username: str, auth: dict, path: str, write_chunk: Callable[[bytes], None]) -> dict:
+    def stream_folder_zip(self, host: str, port: int, username: str, auth: dict, path: str, write_chunk: Callable[[bytes], None], progress_id: str | None = None) -> dict:
         """Write a remote folder ZIP incrementally to *write_chunk*."""
         def op():
             import zipfile
@@ -559,13 +598,18 @@ class SftpManager:
                 if not stat.S_ISDIR(attr.st_mode):
                     return {"success": False, "message": "Path is not a directory", "status_code": 400}
 
+                self._start_zip_progress(progress_id, f"{os.path.basename(path.rstrip('/')) or 'download'}.zip")
                 with zipfile.ZipFile(_ChunkWriter(write_chunk), "w", zipfile.ZIP_DEFLATED) as zf:
-                    self._zip_remote_dir_stream(sftp, path, path, zf)
+                    self._zip_remote_dir_stream(sftp, path, path, zf, progress_id)
+                self._finish_zip_progress(progress_id)
 
             return {"success": True}
-        return _sftp_safe_exec("stream_folder_zip", op)
+        result = _sftp_safe_exec("stream_folder_zip", op)
+        if not result.get("success"):
+            self._fail_zip_progress(progress_id, result.get("message", "SFTP folder ZIP stream failed"))
+        return result
 
-    def _zip_remote_dir_stream(self, sftp, base_path: str, current_path: str, zf):
+    def _zip_remote_dir_stream(self, sftp, base_path: str, current_path: str, zf, progress_id: str | None = None):
         """Recursively add remote directory contents to a streaming ZipFile."""
         try:
             entries = sftp.listdir_attr(current_path)
@@ -583,10 +627,11 @@ class SftpManager:
             full_path = current_path.rstrip("/") + "/" + entry.filename
             rel_path = os.path.relpath(full_path, os.path.dirname(base_path)).replace("\\", "/")
             if stat.S_ISDIR(entry.st_mode):
-                self._zip_remote_dir_stream(sftp, base_path, full_path, zf)
+                self._zip_remote_dir_stream(sftp, base_path, full_path, zf, progress_id)
                 continue
 
             try:
+                self._update_zip_progress(progress_id, current_file=rel_path)
                 with sftp.open(full_path, "rb") as remote_fh:
                     with zf.open(rel_path, "w") as zip_fh:
                         while True:
@@ -594,8 +639,83 @@ class SftpManager:
                             if not chunk:
                                 break
                             zip_fh.write(chunk)
+                            self._update_zip_progress(progress_id, bytes_delta=len(chunk))
+                self._update_zip_progress(progress_id, files_delta=1)
             except Exception as e:
                 _LOGGER.warning("Skipping file %s in stream_folder_zip: %s", full_path, e)
+
+    def _cleanup_zip_progress(self) -> None:
+        cutoff = time.monotonic() - 900
+        with self._zip_progress_lock:
+            stale = [
+                progress_id
+                for progress_id, progress in self._zip_progress.items()
+                if progress.get("updated_at", 0) < cutoff
+            ]
+            for progress_id in stale:
+                self._zip_progress.pop(progress_id, None)
+
+    def _start_zip_progress(self, progress_id: str | None, filename: str) -> None:
+        if not progress_id:
+            return
+        self._cleanup_zip_progress()
+        now = time.monotonic()
+        with self._zip_progress_lock:
+            self._zip_progress[progress_id] = {
+                "success": True,
+                "status": "running",
+                "filename": filename,
+                "files_done": 0,
+                "bytes_done": 0,
+                "current_file": "",
+                "started_at": now,
+                "updated_at": now,
+            }
+
+    def _update_zip_progress(self, progress_id: str | None, *, current_file: str | None = None, bytes_delta: int = 0, files_delta: int = 0) -> None:
+        if not progress_id:
+            return
+        with self._zip_progress_lock:
+            progress = self._zip_progress.get(progress_id)
+            if not progress:
+                return
+            if current_file is not None:
+                progress["current_file"] = current_file
+            if bytes_delta:
+                progress["bytes_done"] = int(progress.get("bytes_done", 0)) + bytes_delta
+            if files_delta:
+                progress["files_done"] = int(progress.get("files_done", 0)) + files_delta
+            progress["updated_at"] = time.monotonic()
+
+    def _finish_zip_progress(self, progress_id: str | None) -> None:
+        if not progress_id:
+            return
+        with self._zip_progress_lock:
+            progress = self._zip_progress.get(progress_id)
+            if progress:
+                progress["status"] = "done"
+                progress["current_file"] = ""
+                progress["updated_at"] = time.monotonic()
+
+    def _fail_zip_progress(self, progress_id: str | None, message: str) -> None:
+        if not progress_id:
+            return
+        with self._zip_progress_lock:
+            progress = self._zip_progress.get(progress_id)
+            if progress:
+                progress["status"] = "error"
+                progress["message"] = message
+                progress["updated_at"] = time.monotonic()
+
+    def get_zip_progress(self, progress_id: str | None) -> dict:
+        if not progress_id:
+            return {"success": False, "message": "Missing progress_id", "status_code": 400}
+        self._cleanup_zip_progress()
+        with self._zip_progress_lock:
+            progress = self._zip_progress.get(progress_id)
+            if not progress:
+                return {"success": True, "status": "pending", "files_done": 0, "bytes_done": 0, "current_file": ""}
+            return dict(progress)
 
     def _mkdir_recursive(self, sftp, path):
         """Helper to create remote directory recursively."""
