@@ -10,8 +10,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [2.5.3] - 2026-06-02
 
-- **Inactive editor tabs can be dragged directly** — Inactive editor tabs can now be reordered without selecting them first; the dragged tab activates after the drop completes so the browser drag session is not interrupted.
-
 - **Editor tabs can be reordered** — Open editor tabs can now be rearranged by dragging them, with saved workspace order preserved across reloads.
 
 - **Python script entity payloads no longer flagged as deprecated** — `entity_id` inside `data:` is no longer warned as deprecated for payload-style services such as `python_script.*`, while normal targetable services such as `light.turn_on` still warn when `entity_id` should move to `target:`.
