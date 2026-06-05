@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- **Developer Tools panel reliability** — Closing and reopening the panel now cleans up keyboard and state observers, the States tab loads correctly when opened directly, state row expansion uses the visible entity list, YAML action calls handle simple nested maps/lists, and duplicate obsolete Developer Tools CSS was removed.
+
 ## [2.5.3] - 2026-06-02
 
 - **Editor tabs can be reordered** — Open editor tabs can now be rearranged by dragging them, with saved workspace order preserved across reloads.
