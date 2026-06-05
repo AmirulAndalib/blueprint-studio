@@ -12,10 +12,10 @@ export function openDevTools(initialTab = 'actions') {
   if (existing) {
     const active = existing.querySelector('.bdt-tab-btn.active');
     if (active && active.dataset.tab === initialTab) {
-      existing.remove();
+      _destroyPanel(existing);
       return; // toggle off
     }
-    existing.remove();
+    _destroyPanel(existing);
   }
   _buildPanel(initialTab);
 }
@@ -24,7 +24,11 @@ export function openDevTools(initialTab = 'actions') {
 
 function _buildPanel(activeTab) {
   const panel = document.createElement('div');
+  const cleanupFns = [];
   panel.id = PANEL_ID;
+  panel._bdtCleanup = () => {
+    while (cleanupFns.length) cleanupFns.pop()();
+  };
   panel.innerHTML = `
     <div class="bdt-header">
       <span class="material-icons bdt-header-icon">construction</span>
@@ -51,21 +55,29 @@ function _buildPanel(activeTab) {
   panel.querySelectorAll('.bdt-tab-btn').forEach(btn => {
     btn.addEventListener('click', () => _switchTab(panel, btn.dataset.tab));
   });
-  panel.querySelector('.bdt-close').addEventListener('click', () => panel.remove());
+  panel.querySelector('.bdt-close').addEventListener('click', () => _destroyPanel(panel));
 
-  const onKey = e => { if (e.key === 'Escape') { panel.remove(); document.removeEventListener('keydown', onKey); } };
+  const onKey = e => { if (e.key === 'Escape') _destroyPanel(panel); };
   document.addEventListener('keydown', onKey);
+  cleanupFns.push(() => document.removeEventListener('keydown', onKey));
 
   _switchTab(panel, activeTab);
   _initActions(panel);
   _initTemplate(panel);
-  _initStates(panel);
+  const cleanupStates = _initStates(panel);
+  if (cleanupStates) cleanupFns.push(cleanupStates);
   _initConfig(panel);
 }
 
 function _switchTab(panel, tab) {
   panel.querySelectorAll('.bdt-tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
   panel.querySelectorAll('.bdt-pane').forEach(p => p.classList.toggle('active', p.dataset.pane === tab));
+}
+
+function _destroyPanel(panel) {
+  if (!panel) return;
+  if (typeof panel._bdtCleanup === 'function') panel._bdtCleanup();
+  panel.remove();
 }
 
 // ── Actions pane ──────────────────────────────────────────────────────────────
@@ -361,7 +373,7 @@ function _initActions(panel) {
       if (entityId) yaml += `target:\n  entity_id: ${entityId}\n`;
       const dataFields = Object.entries(formData).filter(([k]) => k !== 'entity_id');
       if (dataFields.length) {
-        yaml += `data:\n` + dataFields.map(([k, v]) => `  ${k}: ${v}`).join('\n') + '\n';
+        yaml += `data:\n` + dataFields.map(([k, v]) => `  ${k}: ${_formatYamlScalar(v)}`).join('\n') + '\n';
       }
       yamlInput.value = yaml;
     }
@@ -400,6 +412,7 @@ function _initActions(panel) {
     const { action, data = {}, target = {} } = parsed;
     if (!action) { _showResult(yamlResult, false, 'Missing "action:" field'); return; }
     const [domain, service] = action.split('.');
+    if (!domain || !service) { _showResult(yamlResult, false, 'Action must be in domain.service format'); return; }
     await _callAction(domain, service, data, target, yamlPerformBtn, yamlResult, 'Perform action');
   });
 
@@ -545,7 +558,8 @@ function _initStates(panel) {
       e.entity_id.toLowerCase().includes(q) || (e.friendly_name || '').toLowerCase().includes(q));
     if (!filtered.length) { tbody.innerHTML = '<tr><td colspan="3" class="bdt-states-loading">No entities match.</td></tr>'; return; }
 
-    tbody.innerHTML = filtered.slice(0, 200).map(e => {
+    const visible = filtered.slice(0, 200);
+    tbody.innerHTML = visible.map(e => {
       const cls = e.state === 'on' ? 'bdt-state-on' : e.state === 'off' ? 'bdt-state-off' : 'bdt-state-other';
       const attrs = e.attributes || {};
       // Show a short summary: up to 2 key attributes excluding friendly_name/icon
@@ -580,7 +594,7 @@ function _initStates(panel) {
       row.addEventListener('click', () => {
         const next = row.nextElementSibling;
         if (next && next.classList.contains('bdt-attr-detail-row')) { next.remove(); return; }
-        const entity = filtered[i];
+        const entity = visible[i];
         const attrs = entity.attributes || {};
         const skip = new Set(['entity_picture']);
         const rows = Object.entries(attrs)
@@ -605,6 +619,8 @@ function _initStates(panel) {
     if (pane.classList.contains('active') && allEntities.length === 0) load();
   });
   observer.observe(pane, { attributes: true, attributeFilter: ['class'] });
+  if (pane.classList.contains('active') && allEntities.length === 0) load();
+  return () => observer.disconnect();
 }
 
 // ── Config pane ───────────────────────────────────────────────────────────────
@@ -785,33 +801,114 @@ function _coerce(v) {
 }
 
 /**
- * Parse a simple HA action YAML block into { action, data, target }.
- * Handles flat key:value and one level of nesting (data:, target:).
+ * Parse the HA action YAML shape accepted by this panel into
+ * { action, data, target }. It supports nested maps and simple lists under
+ * data:/target: without trying to become a full YAML parser.
  */
 function _parseActionYaml(text) {
   const result = { action: null, data: {}, target: {} };
-  let currentSection = null;
-  for (const raw of text.split('\n')) {
-    const line = raw.trimEnd();
-    if (!line.trim() || line.trim().startsWith('#')) continue;
+  const stack = [{ indent: -1, value: result }];
+
+  const lines = text.split('\n');
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
+    const raw = lines[lineIndex];
+    const withoutComment = _stripYamlComment(raw);
+    const line = withoutComment.trimEnd();
+    if (!line.trim()) continue;
+
     const indent = line.match(/^(\s*)/)[1].length;
     const trimmed = line.trim();
-    if (indent === 0) {
-      currentSection = null;
-      const colonIdx = trimmed.indexOf(':');
-      if (colonIdx === -1) continue;
-      const key = trimmed.slice(0, colonIdx).trim();
-      const val = trimmed.slice(colonIdx + 1).trim();
-      if (key === 'action' || key === 'service') { result.action = val; }
-      else if (key === 'data' || key === 'target') { currentSection = key; }
+    while (stack.length > 1 && indent <= stack[stack.length - 1].indent) stack.pop();
+    const parent = stack[stack.length - 1].value;
+
+    if (trimmed.startsWith('- ')) {
+      if (!Array.isArray(parent)) {
+        throw new Error('List items must belong to a key such as entity_id:');
+      }
+      parent.push(_parseYamlValue(trimmed.slice(2).trim()));
+      continue;
+    }
+
+    const colonIdx = trimmed.indexOf(':');
+    if (colonIdx === -1) throw new Error(`Invalid line: ${trimmed}`);
+
+    const key = trimmed.slice(0, colonIdx).trim();
+    const val = trimmed.slice(colonIdx + 1).trim();
+    if (!key) throw new Error(`Invalid line: ${trimmed}`);
+
+    if (indent === 0 && (key === 'action' || key === 'service')) {
+      result.action = String(_parseYamlValue(val));
+      continue;
+    }
+    if (indent === 0 && (key === 'data' || key === 'target')) {
+      stack.push({ indent, value: result[key] });
+      continue;
+    }
+    if (indent === 0) continue;
+
+    if (!parent || typeof parent !== 'object' || Array.isArray(parent)) {
+      throw new Error(`Cannot assign "${key}" here`);
+    }
+
+    if (val) {
+      parent[key] = _parseYamlValue(val);
     } else {
-      if (!currentSection) continue;
-      const colonIdx = trimmed.indexOf(':');
-      if (colonIdx === -1) continue;
-      const key = trimmed.slice(0, colonIdx).trim();
-      const val = trimmed.slice(colonIdx + 1).trim();
-      if (val) result[currentSection][key] = _coerce(val);
+      const nextLine = _nextContentLine(lines, lineIndex);
+      parent[key] = nextLine && nextLine.trim().startsWith('- ') ? [] : {};
+      stack.push({ indent, value: parent[key] });
     }
   }
   return result;
+}
+
+function _nextContentLine(lines, currentIndex) {
+  for (let i = currentIndex + 1; i < lines.length; i += 1) {
+    const line = _stripYamlComment(lines[i]).trim();
+    if (line) return line;
+  }
+  return '';
+}
+
+function _stripYamlComment(line) {
+  let inSingle = false;
+  let inDouble = false;
+  for (let i = 0; i < line.length; i += 1) {
+    const char = line[i];
+    const prev = line[i - 1];
+    if (char === "'" && !inDouble) inSingle = !inSingle;
+    else if (char === '"' && !inSingle && prev !== '\\') inDouble = !inDouble;
+    else if (char === '#' && !inSingle && !inDouble && (i === 0 || /\s/.test(prev))) {
+      return line.slice(0, i);
+    }
+  }
+  return line;
+}
+
+function _parseYamlValue(value) {
+  if (value === '') return '';
+  if (value.startsWith('[') && value.endsWith(']')) {
+    const inner = value.slice(1, -1).trim();
+    if (!inner) return [];
+    return inner.split(',').map(item => _parseYamlValue(item.trim()));
+  }
+  if (value.startsWith('{') && value.endsWith('}')) {
+    const inner = value.slice(1, -1).trim();
+    if (!inner) return {};
+    return inner.split(',').reduce((obj, pair) => {
+      const colonIdx = pair.indexOf(':');
+      if (colonIdx === -1) throw new Error(`Invalid inline map item: ${pair.trim()}`);
+      const key = pair.slice(0, colonIdx).trim();
+      obj[key] = _parseYamlValue(pair.slice(colonIdx + 1).trim());
+      return obj;
+    }, {});
+  }
+  return _coerce(value);
+}
+
+function _formatYamlScalar(value) {
+  if (Array.isArray(value)) return `[${value.map(_formatYamlScalar).join(', ')}]`;
+  if (value && typeof value === 'object') {
+    return `{${Object.entries(value).map(([k, v]) => `${k}: ${_formatYamlScalar(v)}`).join(', ')}}`;
+  }
+  return String(value);
 }
