@@ -11,7 +11,7 @@ const guideContent = [
         icon: 'rocket_launch',
         content: `
             <h1>Welcome to Blueprint Studio! 🚀</h1>
-            <p>Blueprint Studio is a modern, professional-grade IDE for Home Assistant. Edit your configuration files with the same power as VS Code — directly in your browser, with deep HA integration.</p>
+            <p>Blueprint Studio is a modern, professional-grade IDE for Home Assistant. Edit local configuration files, remote SFTP files, blueprints, scripts, and assets directly in your browser, with deep HA integration.</p>
 
             <div class="user-guide-tip">
                 <div class="user-guide-tip-title"><span class="material-icons">security</span> Admin Only</div>
@@ -20,9 +20,9 @@ const guideContent = [
 
             <h2>Interface Layout</h2>
             <ul>
-                <li><strong>Activity Bar (Left Edge):</strong> Switch between Explorer, Search, and SFTP panels. Click any icon to toggle the corresponding sidebar view.</li>
-                <li><strong>Sidebar (Left):</strong> The active panel — file tree, global search results, or SFTP connections.</li>
-                <li><strong>Toolbar (Top):</strong> Context-sensitive buttons for Save, Format, Git, Split View, and more.</li>
+                <li><strong>Activity Bar (Left Edge):</strong> Switch between Explorer, Search, Git, Gitea, SFTP, and other panels. Click any icon to toggle the corresponding sidebar view.</li>
+                <li><strong>Sidebar (Left):</strong> The active panel — local file tree, global search results, version control changes, or remote SFTP connections.</li>
+                <li><strong>Toolbar (Top):</strong> Context-sensitive buttons for Save, Format, Git/Gitea, Terminal, Developer Tools, Split View, and more.</li>
                 <li><strong>Tab Bar:</strong> Open files as tabs. Right-click any tab for more options. Drag tabs between panes in split view.</li>
                 <li><strong>Breadcrumb Bar:</strong> Shows the current file's path. Click the copy icon to copy the full path to clipboard.</li>
                 <li><strong>Editor (Center):</strong> Your primary workspace. Supports split view — two files side-by-side or stacked.</li>
@@ -34,7 +34,7 @@ const guideContent = [
                 <li>Click any file in the file tree to open it in the editor.</li>
                 <li>Make your edits — changes are tracked and the tab shows a dot (•) when unsaved.</li>
                 <li>Press <code>Ctrl+S</code> to save. A toast notification confirms success.</li>
-                <li>If Git is configured, commit and push your changes from the Git panel.</li>
+                <li>If GitHub or Gitea is configured, commit and push your changes from the matching version control panel.</li>
             </ol>
 
             <div class="feature-grid">
@@ -57,6 +57,16 @@ const guideContent = [
                     <div class="feature-card-icon"><span class="material-icons">account_tree</span></div>
                     <div class="feature-card-title">Git Integration</div>
                     <div class="feature-card-desc">Version control your config with GitHub or Gitea. Visual diffs, staging, commits, and push/pull.</div>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-card-icon"><span class="material-icons">cloud_sync</span></div>
+                    <div class="feature-card-title">SFTP Remote Files</div>
+                    <div class="feature-card-desc">Browse remote servers, edit files, preview media, and transfer folders through shared SSH/SFTP hosts.</div>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-card-icon"><span class="material-icons">terminal</span></div>
+                    <div class="feature-card-title">Embedded Terminal</div>
+                    <div class="feature-card-desc">Run local commands or connect to saved SSH hosts from a resizable terminal panel or editor tab.</div>
                 </div>
             </div>
         `
@@ -105,7 +115,7 @@ const guideContent = [
             <p>Edit two files simultaneously. Press <code>Ctrl+\\</code> (or click the Split icon) to toggle split view. Orientation switches between <strong>vertical</strong> (side-by-side) and <strong>horizontal</strong> (stacked). Right-click any tab to move it between panes.</p>
 
             <h2>Asset Preview</h2>
-            <p>Open image files (PNG, JPG, SVG, GIF) and PDFs directly in the editor — they render as a visual preview instead of raw binary.</p>
+            <p>Open images, PDFs, audio files, and videos directly in the editor — they render as previews instead of raw binary. Local files are served through authenticated stream links, and SFTP media uses short-lived stream IDs so remote credentials never appear in the browser URL.</p>
 
             <h2>Markdown Preview</h2>
             <p>When a <code>.md</code> file is active, a preview toggle appears in the toolbar. Click it to render the Markdown as formatted HTML alongside the source.</p>
@@ -279,7 +289,10 @@ const guideContent = [
             <p>Click the "Show Hidden Files" button in the toolbar to toggle visibility of dot-files (e.g., <code>.storage</code>, <code>.gitignore</code>). Hidden by default to reduce clutter.</p>
 
             <h2>Recent Files</h2>
-            <p>The Command Palette (<code>Ctrl+K</code>) shows your recently opened files at the top, so you can quickly reopen files you've been editing without hunting through the tree.</p>
+            <p>The sidebar and Command Palette (<code>Ctrl+K</code>) show recently opened files, so you can quickly reopen files you've been editing without hunting through the tree. You can configure the recent-file limit in Settings.</p>
+
+            <h2>Large Transfers &amp; ZIP Progress</h2>
+            <p>Large folder downloads and multi-file downloads are streamed as ZIP files with progress feedback. The progress indicator is shared by local and SFTP downloads, so long transfers do not block the editor.</p>
 
             <div class="user-guide-tip">
                 <div class="user-guide-tip-title"><span class="material-icons">folder_zip</span> Bulk Import</div>
@@ -318,6 +331,19 @@ const guideContent = [
                 <li>Remote file tabs are visually distinguished from local ones.</li>
             </ul>
 
+            <h2>Remote File Operations</h2>
+            <p>Right-click remote files and folders for the same common operations you use locally:</p>
+            <ul>
+                <li><strong>Create:</strong> Add files and folders on the remote server.</li>
+                <li><strong>Rename, copy, move, delete:</strong> Manage remote paths without leaving the browser.</li>
+                <li><strong>Upload:</strong> Upload files or ZIP folders into the active remote directory.</li>
+                <li><strong>Download:</strong> Download remote files directly, or stream remote folders as ZIP archives with progress feedback.</li>
+                <li><strong>Multi-select:</strong> Select multiple remote items for bulk delete or download where available.</li>
+            </ul>
+
+            <h2>Remote Media Preview</h2>
+            <p>Images, PDFs, audio files, and videos on SFTP servers can be previewed in editor tabs. Blueprint Studio creates a short-lived stream token server-side, so passwords and private keys are never exposed in preview URLs.</p>
+
             <h2>Multiple Connections</h2>
             <p>You can have multiple SFTP connections configured at once and switch between them in the SFTP panel. Useful for managing multiple Home Assistant instances or remote servers.</p>
 
@@ -326,6 +352,9 @@ const guideContent = [
 
             <h2>Setting a Default SSH Host for Terminal</h2>
             <p>In <strong>Settings → Integrations</strong>, you can set a default SSH host for the integrated terminal. When you open the terminal, it will automatically connect to that host instead of the local shell.</p>
+
+            <h2>Opening a Remote Shell</h2>
+            <p>Saved hosts are shared with the terminal. Open the terminal panel, pick the same host from the SSH dropdown, and Blueprint Studio starts the SSH session using the saved password or private key profile.</p>
 
             <h2>File Tree Indentation</h2>
             <p>When browsing deeply nested directories (common with SFTP), each folder level is indented by 24 px, making it easy to see which level a file belongs to at a glance. Empty folders show an italic <em>(empty)</em> label when expanded.</p>
@@ -446,34 +475,43 @@ const guideContent = [
     {
         id: 'git-integration',
         group: 'Advanced',
-        title: 'Git &amp; GitHub',
+        title: 'GitHub &amp; Gitea',
         icon: 'account_tree',
         content: `
             <h1>Version Control Made Easy 🔗</h1>
-            <p>Version control your entire Home Assistant configuration. Roll back mistakes, track your history, and back up to GitHub — all from within Blueprint Studio.</p>
+            <p>Version control your entire Home Assistant configuration. Roll back mistakes, track your history, and back up to GitHub or a self-hosted Gitea server — all from within Blueprint Studio.</p>
 
-            <h2>Setup</h2>
-            <p>Click <strong>Git Settings</strong> in the toolbar to configure. You'll need:</p>
+            <h2>GitHub Setup</h2>
+            <p>Click <strong>Git Settings</strong> in the toolbar to configure GitHub. You can authenticate in either of two ways:</p>
             <ul>
-                <li>A GitHub account and a repository (can be private) where your config will be stored.</li>
-                <li>A Personal Access Token (PAT) with <code>repo</code> scope. Create one at GitHub → Settings → Developer Settings → Tokens.</li>
+                <li><strong>OAuth Device Flow:</strong> Click Login with GitHub OAuth, enter the shown code on GitHub, and authorize Blueprint Studio.</li>
+                <li><strong>Personal Access Token:</strong> Create a PAT with <code>repo</code> scope at GitHub → Settings → Developer Settings → Tokens, then save it in Git Settings.</li>
                 <li>Your name and email for commit authorship.</li>
             </ul>
+            <p>You can create a new GitHub repository directly from Blueprint Studio. The integration initializes Git, adds the remote, and prepares the first push.</p>
 
             <h2>The Standard Workflow</h2>
             <ol>
-                <li><strong>Pull</strong> (<span class="material-icons" style="font-size:14px;vertical-align:middle;">download</span>): Fetch the latest changes from GitHub to make sure you're up to date.</li>
-                <li><strong>Edit:</strong> Make your changes in the editor. Modified files appear highlighted in the Git panel.</li>
+                <li><strong>Pull</strong> (<span class="material-icons" style="font-size:14px;vertical-align:middle;">download</span>): Fetch the latest changes from GitHub or Gitea to make sure you're up to date.</li>
+                <li><strong>Edit:</strong> Make your changes in the editor. Modified files appear highlighted in the Git or Gitea panel.</li>
                 <li><strong>Stage (+):</strong> Click the <code>+</code> icon next to changed files to stage them for the next commit.</li>
                 <li><strong>Commit:</strong> Write a short commit message (e.g., "Add motion light automation") and click Commit to save a snapshot.</li>
-                <li><strong>Push</strong> (<span class="material-icons" style="font-size:14px;vertical-align:middle;">upload</span>): Upload your local commits to GitHub.</li>
+                <li><strong>Push</strong> (<span class="material-icons" style="font-size:14px;vertical-align:middle;">upload</span>): Upload your local commits to the remote.</li>
             </ol>
 
             <h2>Visual Diff</h2>
             <p>Click any modified file in the Git panel to open a <strong>side-by-side diff view</strong>. Red lines are removed, green lines are added. The diff view is read-only for review — switch back to the editor tab to make further edits.</p>
 
             <h2>Gitea Support</h2>
-            <p>Prefer self-hosted? Blueprint Studio also supports <strong>Gitea</strong> instances. In Settings → Integrations, enable Gitea and enter your Gitea server URL and access token. The Gitea toolbar group replaces the GitHub toolbar.</p>
+            <p>Prefer self-hosted? Enable <strong>Gitea Integration</strong> in Settings → Integrations, then enter your Gitea server URL, username, and access token. The Gitea panel supports repository creation, remote setup, status, stage, commit, pull, push, abort, force push, and recovery tools.</p>
+
+            <h2>Conflict &amp; Recovery Tools</h2>
+            <ul>
+                <li><strong>Abort:</strong> Cancel a stuck merge, rebase, or sync operation.</li>
+                <li><strong>Repair Index:</strong> Clean common <code>index.lock</code> or corrupt index problems.</li>
+                <li><strong>Branch Repair:</strong> Fix local <code>master</code> vs. remote <code>main</code> mismatches.</li>
+                <li><strong>Hard Reset / Force Push:</strong> Admin-gated recovery actions for advanced users.</li>
+            </ul>
 
             <h2>Git Exclusions (.gitignore)</h2>
             <p>Git Exclusions let you control which files are <strong>never committed</strong> to version control. This is critical for keeping passwords and tokens out of GitHub.</p>
@@ -558,9 +596,10 @@ const guideContent = [
             <ul>
                 <li>Enable Terminal integration in <strong>Settings → Integrations</strong>.</li>
                 <li>Press <code>Ctrl+\`</code> or click the terminal icon to open/close the terminal panel.</li>
-                <li><strong>Supports multiple <strong>SSH host profiles</strong></strong> — add and manage hosts in <strong>Settings → Integrations → Hosts</strong>, then select one from the terminal dropdown to connect instantly.</li>
+                <li><strong>SSH host profiles:</strong> Add and manage hosts in <strong>Settings → Integrations → Hosts</strong>, then select one from the terminal dropdown to connect instantly.</li>
                 <li>Right-click any file in the tree and select <strong>"Run in Terminal"</strong> to open a terminal navigated to that file's directory.</li>
                 <li>Set a <strong>default SSH host</strong> in Settings so the terminal connects automatically to your preferred server on open.</li>
+                <li>Move the terminal into an editor tab when you want more space, or keep it docked as a resizable bottom panel.</li>
             </ul>
 
             <h2>YAML Validation</h2>
@@ -602,6 +641,7 @@ const guideContent = [
                 <li>YAML parsing and validation (runs in your browser)</li>
                 <li>All editor libraries, fonts, and UI components</li>
                 <li>Developer Tools (talks directly to your HA API)</li>
+                <li>SFTP and terminal SSH credentials are used by your Home Assistant instance to connect to saved hosts</li>
                 <li>Local AI (Ollama / LM Studio) — stays entirely within your network</li>
             </ul>
 
@@ -610,12 +650,56 @@ const guideContent = [
             <ul>
                 <li><strong>Remote Git:</strong> Pushing to / pulling from GitHub or a remote Gitea instance.</li>
                 <li><strong>Cloud AI:</strong> Sending prompts to Google Gemini, OpenAI, or Anthropic Claude APIs.</li>
+                <li><strong>Remote SSH/SFTP:</strong> Connecting to servers outside your Home Assistant network.</li>
             </ul>
 
             <p>If you use <strong>Local AI (Ollama)</strong> and a <strong>local Gitea</strong> instance, Blueprint Studio becomes a completely self-contained, air-gapped HA development environment.</p>
 
             <h2>API Key Storage</h2>
             <p>AI API keys are stored in your HA configuration storage on your server. They are never sent to Blueprint Studio's servers (which don't exist — this is a local custom component). Keys are transmitted only directly to the chosen AI provider's API.</p>
+        `
+    },
+    {
+        id: 'architecture',
+        group: 'Advanced',
+        title: 'Integration Modules',
+        icon: 'hub',
+        content: `
+            <h1>How Blueprint Studio Is Organized</h1>
+            <p>The integration is split into focused frontend and backend modules so editor, Git, SFTP, AI, terminal, and Home Assistant tools can evolve independently.</p>
+
+            <h2>Backend Modules</h2>
+            <ul>
+                <li><strong>api.py:</strong> Main HTTP API orchestrator plus upload and stream views.</li>
+                <li><strong>api_files.py / file_manager.py:</strong> Local file CRUD, safe paths, search, downloads, and streaming.</li>
+                <li><strong>api_git.py / git_manager.py:</strong> Git, GitHub, Gitea, remotes, branches, credentials, diffs, and recovery actions.</li>
+                <li><strong>api_sftp.py / sftp_manager.py:</strong> Remote SFTP browsing, editing, folder ZIP streaming, and media preview streams.</li>
+                <li><strong>api_terminal.py / terminal_manager.py:</strong> Embedded terminal execution and SSH session support.</li>
+                <li><strong>api_misc.py:</strong> Settings, entity metadata, service calls, template rendering, YAML reload, config checks, and AI actions.</li>
+                <li><strong>ai_*.py:</strong> AI constants, NLP parsing, generators, validators, and provider management.</li>
+                <li><strong>websocket.py:</strong> File update and settings-change subscriptions for live UI sync.</li>
+            </ul>
+
+            <h2>Frontend Modules</h2>
+            <ul>
+                <li><strong>Boot and state:</strong> <code>main.js</code>, <code>initialization.js</code>, <code>app.js</code>, <code>state.js</code>, <code>event-bus.js</code>.</li>
+                <li><strong>Editor:</strong> <code>editor.js</code>, <code>tabs.js</code>, <code>split-view.js</code>, <code>minimap.js</code>, <code>search.js</code>, <code>ha-autocomplete.js</code>.</li>
+                <li><strong>File UI:</strong> <code>file-tree.js</code>, <code>file-operations.js</code>, <code>downloads-uploads.js</code>, <code>asset-preview.js</code>, <code>favorites.js</code>, <code>recent-files.js</code>, <code>zip-progress.js</code>.</li>
+                <li><strong>Integrations:</strong> <code>git-operations.js</code>, <code>git-ui.js</code>, <code>github-integration.js</code>, <code>gitea-integration.js</code>, <code>sftp.js</code>, <code>terminal.js</code>, <code>ai.js</code>, <code>dev-tools.js</code>.</li>
+                <li><strong>Coordinators:</strong> File, Git, SFTP, terminal, settings, dialog, and UI coordinators wire events to module functions.</li>
+            </ul>
+
+            <h2>API Endpoints</h2>
+            <ul>
+                <li><code>/api/blueprint_studio</code> handles authenticated JSON actions.</li>
+                <li><code>/api/blueprint_studio/upload</code> streams multipart uploads to local files or SFTP.</li>
+                <li><code>/api/blueprint_studio/stream</code> serves token-protected file, folder ZIP, search, and SFTP media streams.</li>
+            </ul>
+
+            <div class="user-guide-tip">
+                <div class="user-guide-tip-title"><span class="material-icons">security</span> Security Boundary</div>
+                The UI and API are admin-only. Local file paths are constrained to the Home Assistant config root, while remote access happens only through explicitly saved SFTP/SSH host profiles.
+            </div>
         `
     },
     {
@@ -770,9 +854,11 @@ function createUserGuideModal() {
 function renderNav(container, filter = '') {
     container.innerHTML = '';
 
+    const normalizedFilter = filter.toLowerCase();
     const filtered = guideContent.filter(item =>
-        item.title.toLowerCase().includes(filter.toLowerCase()) ||
-        item.group.toLowerCase().includes(filter.toLowerCase())
+        item.title.toLowerCase().includes(normalizedFilter) ||
+        item.group.toLowerCase().includes(normalizedFilter) ||
+        item.content.toLowerCase().includes(normalizedFilter)
     );
 
     let currentGroup = '';
