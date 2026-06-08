@@ -41,15 +41,19 @@
 - [❓ FAQ](#-faq)
 - [🔍 Technical Details](#-technical-details)
 - [🤝 Contributing](#-contributing)
-- [🗺️ Roadmap](#️-roadmap)
 - [📞 Support](#-support)
+- [📄 License](#-license)
+- [🙌 Acknowledgments](#-acknowledgments)
+- [⚖️ Comparison with Other Solutions](#️-comparison-with-other-solutions)
+- [Support the Project](#support-the-project)
+- [⭐ Star History](#-star-history)
 
 ---
 
 ## Why Blueprint Studio? 🌟
 Tired of juggling external editors, SSH, or add-ons just to tweak your Home Assistant configs? Blueprint Studio brings the power of a full-fledged IDE right into your HA dashboard. Here's why it's a game-changer:
 
-- **No External Tools Required** - Edit files directly in Home Assistant without SSH or file shares 🚫
+- **No External Tools Required** - Edit local Home Assistant config files directly in Home Assistant without SSH or file shares 🚫
 - **Professional Editor** - Full-featured code editor with syntax highlighting and linting 💻
 - **Safe & Secure** - Built-in protection against path traversal and unauthorized access 🛡️
 - **Multi-File Editing** - Work with multiple files simultaneously using tabs 📁
@@ -99,7 +103,7 @@ Tired of juggling external editors, SSH, or add-ons just to tweak your Home Assi
 ### Git Settings & Authentication
 *One-click OAuth login or Personal Access Token authentication*
 
-![Git Settings Modal](images/screenshot-git-settings.png)
+![Git Settings Modal](images/screenshot-git-settings-1.png)
 
 ---
 
@@ -139,6 +143,8 @@ Tired of juggling external editors, SSH, or add-ons just to tweak your Home Assi
 - **Jinja Template Support** - Full syntax highlighting for Jinja2 templates with distinct coloring for brackets, keywords, and variables 📝
 - **Command Palette** - Instant access to all features with `Ctrl+K` ⌨️
 - **UUID Generator** - Instantly insert a random UUID v4 with `Ctrl+Shift+U` 🆔
+- **Split View** - Edit two files side-by-side with pane-aware tabs and split controls 🪟
+- **Minimap** - Optional VS Code-style minimap for fast navigation in long files 🗺️
 - **Professional Search** - Floating Find/Replace widget with navigation controls (`Ctrl+F`, `Ctrl+H`) 🔎
 - **Global Search** - Search across all files with Regex and Case Sensitivity support (`Ctrl+Shift+F`). Now optimized to skip binary files and hidden folders for lightning-fast results 🌐
 - **Entity Explorer Mode** - New mode in Global Search to browse the entity registry, view states, and copy IDs directly into your code 🔍
@@ -161,7 +167,9 @@ Tired of juggling external editors, SSH, or add-ons just to tweak your Home Assi
 - **File Type Icons** - Different colored icons for various file types (toggle on/off) 🎨
 - **Compact File Tree Mode** - Dense layout option for smaller screens 📱
 - **Multiple Tabs** - Open and edit multiple files simultaneously 🗂️
+- **Recent Files** - Quickly reopen recently edited files from the sidebar 🕘
 - **Resizable Sidebar** - Drag to resize the file explorer 📏
+- **Breadcrumb Navigation** - Move through folders without losing context 🧭
 - **File Search** - Filter files in the explorer 🔍
 - **Status Bar** - Shows cursor position, file type, and connection status 📊
 - **Toast Notifications** - Elegant success/error messages with persistent error display 🔔
@@ -178,12 +186,22 @@ Tired of juggling external editors, SSH, or add-ons just to tweak your Home Assi
 - **Delete** - Remove files and folders (with protection for critical files) 🗑️
 - **Folder Operations** - Upload/download entire folder structures as ZIP files 📦
 - **Folder Sizes** - View directory sizes directly in the file explorer 📊
-- **Image Preview** - View images (PNG, JPG, SVG, etc.) directly in the editor 🖼️
+- **Asset Preview** - View images, PDFs, videos, and audio files directly in the editor 🖼️
 - **Pin Favorites** - Pin frequently used files for quick access at the top of the sidebar 📌
+
+### Remote Access & Terminal 🖥️ **NEW!**
+- **SFTP Browser** - Connect to remote servers, browse folders, and edit files through the same editor 🔐
+- **Shared SSH Hosts** - Reuse saved hosts between SFTP and the embedded terminal 🔁
+- **Password or SSH Key Auth** - Store password-based or PEM key-based connection profiles 🔑
+- **Remote File Operations** - Create, rename, copy, move, delete, upload, download, and ZIP remote folders 📦
+- **Streaming Media Preview** - Preview remote images, PDFs, audio, and video through tokenized streams 🎬
+- **Embedded Terminal** - Run commands in an xterm.js terminal panel or move it into an editor tab ⌨️
+- **ZIP Progress UI** - Track large local and SFTP folder downloads without blocking the interface 📊
 
 ### Git Integration 🔗 **NEW!**
 - **Easy Authentication** - One-click OAuth Device Flow or manual PAT 🔐
 - **Create GitHub Repos** - One-click repository creation directly from Blueprint Studio 🚀
+- **Gitea Support** - Connect to self-hosted Gitea servers with repository creation and sync controls 🏠
 - **Stay Logged In** - Credentials persist across restarts ✨
 - **Push & Pull** - Sync your configs with GitHub 🔄
 - **Commit History** - Dedicated panel to browse past commits and view full diffs 📜
@@ -219,6 +237,8 @@ Tired of juggling external editors, SSH, or add-ons just to tweak your Home Assi
 - Refresh file list 🔄
 - Collapse/Expand all folders 📂📁
 - Upload/Download files and folders ⬆️⬇️
+- Developer Tools 🧰
+- Terminal ⌨️
 - **Git Pull / Push / Status / Settings** 🔗
 
 ### Keyboard Shortcuts ⌨️
@@ -357,7 +377,7 @@ Blueprint Studio requires **no configuration**! After installation:
 **Sync your Home Assistant configuration with GitHub!**
 
 <div align="center">
-  <img src="images/screenshot-git-settings.png" alt="Git Settings Modal" width="800">
+  <img src="images/screenshot-git-settings-1.png" alt="Git Settings Modal" width="800">
   <p><em>Git Settings - One-click OAuth login or Personal Access Token</em></p>
 </div>
 
@@ -438,6 +458,31 @@ Blueprint Studio requires **no configuration**! After installation:
 **Note:** The Git Changes panel appears automatically when you have uncommitted changes and disappears when everything is committed. No manual refresh needed!
 
 📖 **Full Guide:** See [GITHUB_AUTH_QUICKSTART.md](./GITHUB_AUTH_QUICKSTART.md) for complete instructions.
+
+### SFTP & Embedded Terminal 🖥️
+Blueprint Studio can manage files outside your Home Assistant config directory through saved SSH/SFTP hosts.
+
+- Enable **SFTP Integration** and **SSH (Terminal) Integration** in Settings → Integrations
+- Add a host with password authentication or a private key
+- Browse remote folders from the SFTP sidebar
+- Open remote text files in normal editor tabs and save them back over SFTP
+- Preview remote media files through secure short-lived stream links
+- Use the embedded terminal for local commands or SSH sessions to saved hosts
+
+### Gitea Integration 🏠
+Use Gitea when you prefer a self-hosted Git server instead of GitHub.
+
+- Enable **Gitea Integration** in Settings → Integrations
+- Configure your server URL, username, and token
+- Create repositories, add remotes, stage files, commit, pull, push, and recover stuck syncs from the Gitea panel
+
+### Developer Tools 🧰
+Blueprint Studio includes Home Assistant-aware tools for quick testing while you edit:
+
+- Action caller with form and YAML modes
+- Template renderer for Jinja testing
+- Entity/state browser
+- Config check and YAML reload helpers
 
 ---
 
@@ -528,7 +573,7 @@ Blueprint Studio includes multiple layers of security protection to keep your HA
 
 ## ❓ FAQ
 **Q: Can I edit files outside the Home Assistant config directory?**  
-A: No. Blueprint Studio is restricted to your Home Assistant config directory for security reasons. 🛡️
+A: Local file editing is restricted to your Home Assistant config directory for security reasons. Remote files can be edited through saved SFTP connections. 🛡️
 
 **Q: Why can't I see `.storage` or other hidden directories?**  
 A: These directories are excluded for security. Editing files in `.storage` can corrupt your Home Assistant installation. ⚠️
@@ -574,6 +619,52 @@ A: Yes! Starting with v1.2.0, empty folders are now visible in the file explorer
 
 **Q: Which is better: OAuth Device Flow or PAT?**
 A: OAuth Device Flow is recommended for easier setup. Both methods work equally well and persist credentials. See [GITHUB_AUTH_QUICKSTART.md](./GITHUB_AUTH_QUICKSTART.md) for comparison. 🔐
+
+## 🔍 Technical Details
+Blueprint Studio is a Home Assistant custom integration with an admin-only panel, a modular JavaScript frontend, and a domain-split Python backend.
+
+### Integration Layout
+```text
+custom_components/blueprint_studio/
+├── __init__.py, config_flow.py, const.py, manifest.json
+├── backend/
+│   ├── api.py              # HTTP API orchestrator and upload/stream views
+│   ├── api_files.py        # Local file CRUD, search, streaming, downloads
+│   ├── api_git.py          # Git, GitHub, and Gitea actions
+│   ├── api_misc.py         # Settings, HA metadata, syntax checks, reloads, AI actions
+│   ├── api_sftp.py         # SFTP dispatcher and remote streaming
+│   ├── api_terminal.py     # Terminal command API
+│   ├── file_manager.py     # Safe local filesystem operations
+│   ├── git_manager.py      # Repository, credentials, remotes, branches, conflicts
+│   ├── sftp_manager.py     # Paramiko-backed remote filesystem operations
+│   ├── terminal_manager.py # Embedded terminal session management
+│   ├── ai_*.py             # AI providers, generators, NLP, and validators
+│   ├── websocket.py        # Update/settings websocket subscriptions
+│   └── zip_utils.py        # Streaming ZIP helpers
+└── www/
+    ├── modules/            # Frontend ES modules
+    ├── styles/modules/     # Split CSS modules
+    └── vendor/             # Bundled CodeMirror, xterm.js, PDF.js, Prettier, etc.
+```
+
+### Frontend Modules
+- **Boot and state** - `main.js`, `initialization.js`, `app.js`, `state.js`, `constants.js`, `event-bus.js`, `translations.js`
+- **Editor experience** - `editor.js`, `tabs.js`, `split-view.js`, `minimap.js`, `search.js`, `global-search.js`, `command-palette.js`, `ha-autocomplete.js`, `editorconfig.js`, `status-bar.js`
+- **File UI** - `file-tree.js`, `file-operations.js`, `file-operations-ui.js`, `downloads-uploads.js`, `zip-progress.js`, `asset-preview.js`, `favorites.js`, `recent-files.js`, `breadcrumb.js`, `context-menu.js`, `selection.js`, `sidebar.js`, `toolbar.js`
+- **Integrations** - `git.js`, `git-operations.js`, `git-ui.js`, `git-diff.js`, `github-integration.js`, `gitea-integration.js`, `gitea-ui.js`, `sftp.js`, `terminal.js`, `ai.js`, `ai-ui.js`, `dev-tools.js`
+- **Settings and coordination** - `settings.js`, `settings-ui.js`, `settings-sync.js`, plus coordinator modules for files, Git, SFTP, terminal, dialogs, settings, and UI
+
+### Backend API Surface
+- `/api/blueprint_studio` handles authenticated JSON actions for files, Git/GitHub/Gitea, SFTP, terminal, AI, settings, Home Assistant metadata, config checks, template rendering, and service calls
+- `/api/blueprint_studio/upload` streams large multipart uploads to local storage or SFTP without relying on Home Assistant's default request size limit
+- `/api/blueprint_studio/stream` serves token-protected file, folder ZIP, search, and SFTP media streams for browser downloads/previews
+- WebSocket commands publish file update and settings change events to keep multiple tabs and the PWA in sync
+
+### Security Model
+- The panel and backend API require Home Assistant authentication and administrator privileges
+- Local paths are resolved through safe-path helpers to prevent traversal outside the configured root
+- Streaming endpoints use Home Assistant access tokens or short-lived opaque stream IDs so remote credentials are not exposed in URLs
+- Dangerous operations such as hard reset, force push, delete, service calls, template rendering, and Home Assistant restart are explicitly admin-gated
 
 
 
