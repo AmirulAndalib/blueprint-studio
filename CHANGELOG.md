@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Developer Tools panel reliability** — Closing and reopening the panel now cleans up keyboard and state observers, the States tab loads correctly when opened directly, state row expansion uses the visible entity list, YAML action calls handle simple nested maps/lists, and duplicate obsolete Developer Tools CSS was removed.
 
+- **Inline explorer naming no longer disappears while idle** — New File, New Folder, and Rename inputs now keep their draft text across explorer refreshes, so pausing for a few seconds while naming an item no longer cancels the inline edit.
+
+- **Documentation updated for new integration modules** — The README and in-app User Guide now cover SFTP remote file management, embedded terminal/SSH hosts, Gitea, Developer Tools, media previews, ZIP transfer progress, frontend/backend module structure, and API/security boundaries.
+
+- **User Guide search improved** — The in-app guide search now matches section body content, making module names, endpoints, and feature details discoverable instead of only matching guide titles and groups.
+
 ## [2.5.3] - 2026-06-02
 
 - **Editor tabs can be reordered** — Open editor tabs can now be rearranged by dragging them, with saved workspace order preserved across reloads.
