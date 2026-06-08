@@ -1139,6 +1139,12 @@ function createInlineExplorerInput(edit) {
   input.setAttribute("aria-label", edit.mode === "rename" ? "Rename item" : "Create item");
   wrap.appendChild(input);
 
+  input.addEventListener("input", () => {
+    if (state.inlineExplorerEdit === edit) {
+      edit.value = input.value;
+    }
+  });
+
   const confirmBtn = document.createElement("button");
   confirmBtn.className = "inline-edit-btn";
   confirmBtn.title = t("modal.confirm_button");
@@ -1173,6 +1179,7 @@ function createInlineExplorerInput(edit) {
 
   input.addEventListener("blur", () => {
     window.setTimeout(() => {
+      if (!wrap.isConnected) return;
       if (!wrap.contains(document.activeElement) && state.inlineExplorerEdit === edit) {
         cancelInlineExplorerEdit();
       }
@@ -1185,13 +1192,20 @@ function createInlineExplorerInput(edit) {
 function focusInlineExplorerInput() {
   if (!state.inlineExplorerEdit) return;
   window.setTimeout(() => {
+    const edit = state.inlineExplorerEdit;
+    if (!edit) return;
     const input = elements.fileTree?.querySelector(".inline-edit-input");
     if (!input) return;
-    input.focus();
-    const value = input.value || "";
-    const dotIndex = state.inlineExplorerEdit.type === "file" ? value.lastIndexOf(".") : -1;
-    const end = dotIndex > 0 ? dotIndex : value.length;
-    input.setSelectionRange(0, end);
+    if (document.activeElement !== input) {
+      input.focus();
+    }
+    if (edit.selectOnFocus) {
+      edit.selectOnFocus = false;
+      const value = input.value || "";
+      const dotIndex = edit.type === "file" ? value.lastIndexOf(".") : -1;
+      const end = dotIndex > 0 ? dotIndex : value.length;
+      input.setSelectionRange(0, end);
+    }
   }, 0);
 }
 
@@ -1300,6 +1314,7 @@ export function startInlineExplorerCreate(type, parentPath = null) {
     type,
     parentPath: targetParent,
     value: type === "folder" ? "new_folder" : "new_file.yaml",
+    selectOnFocus: true,
   };
 
   renderFileTree();
@@ -1324,6 +1339,7 @@ export function startInlineExplorerRename(path, isFolder) {
     path,
     parentPath,
     value: path.split("/").pop(),
+    selectOnFocus: true,
   };
 
   renderFileTree();
@@ -1340,6 +1356,9 @@ async function submitInlineExplorerEdit() {
   if (!edit) return;
 
   const input = elements.fileTree?.querySelector(".inline-edit-input");
+  if (input && state.inlineExplorerEdit === edit) {
+    edit.value = input.value;
+  }
   const name = normalizeExplorerName(input?.value, edit.type);
   if (!name) {
     showToast(edit.type === "folder" ? t("toast.please_enter_a_folder_name") : t("toast.please_enter_a_file_name"), "warning");
