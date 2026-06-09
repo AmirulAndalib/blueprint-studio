@@ -211,7 +211,7 @@ BLUEPRINT_SELECTOR_TYPES = {
 }
 
 # Valid blueprint domains
-BLUEPRINT_VALID_DOMAINS = {'automation', 'script'}
+BLUEPRINT_VALID_DOMAINS = {'automation', 'script', 'template'}
 
 # Known Home Assistant domains for validation
 HA_KNOWN_DOMAINS = {
@@ -224,7 +224,7 @@ HA_KNOWN_DOMAINS = {
     'lawn_mower', 'event', 'valve', 'date', 'datetime', 'time', 'text',
     'conversation', 'air_quality', 'image_processing', 'geo_location', 'tag',
     'wake_word', 'assist_satellite', 'ai_task', 'siren', 'humidifier',
-    'water_heater', 'input_text',
+    'water_heater', 'input_text', 'input_button', 'infrared', 'radio_frequency',
 }
 
 # Common Jinja2 template patterns for Home Assistant
