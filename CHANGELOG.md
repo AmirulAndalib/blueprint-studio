@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.5.5] - 2026-06-09
+
+- **Home Assistant 2026.6 YAML validator false positives fixed** — Template blueprints using `domain: template` are now accepted, and valid `infrared.*`, `radio_frequency.*`, and `input_button.*` entity IDs are no longer reported as unknown domains.
+
 ## [2.5.4] - 2026-06-08
 
 - **Developer Tools panel reliability** — Closing and reopening the panel now cleans up keyboard and state observers, the States tab loads correctly when opened directly, state row expansion uses the visible entity list, YAML action calls handle simple nested maps/lists, and duplicate obsolete Developer Tools CSS was removed.
@@ -1027,6 +1031,7 @@ Bring AI intelligence directly into your Home Assistant workflow with flexible p
 
 
 ## Version History
+- **2.5.5** - Bug Fix: Home Assistant 2026.6 YAML Domain Validation
 - **2.5.4** - Developer Tools Reliability, Inline Explorer Naming Fix & Documentation Search Improvements
 - **2.5.3** - HA 2026.6 Compatibility, Tab Reordering, Sidebar Startup Option & ZIP Transfer Improvements
 - **2.5.2** - Security Hardening, Donation Support & File Explorer Improvements
@@ -1063,7 +1068,8 @@ Bring AI intelligence directly into your Home Assistant workflow with flexible p
 - **1.2.0** - GitHub Integration, Pin Favorites & Auto-Refresh
 - **1.0.0** - First stable release
 
-[Unreleased]: https://github.com/ha-china/blueprint-studio/compare/v2.5.4...HEAD
+[Unreleased]: https://github.com/ha-china/blueprint-studio/compare/v2.5.5...HEAD
+[2.5.5]: https://github.com/ha-china/blueprint-studio/compare/v2.5.4...v2.5.5
 [2.5.4]: https://github.com/ha-china/blueprint-studio/compare/v2.5.3...v2.5.4
 [2.5.3]: https://github.com/ha-china/blueprint-studio/compare/v2.5.2...v2.5.3
 [2.5.2]: https://github.com/ha-china/blueprint-studio/releases/tag/v2.5.2
