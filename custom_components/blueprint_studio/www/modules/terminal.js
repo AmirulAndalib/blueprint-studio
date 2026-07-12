@@ -7,7 +7,7 @@ import { API_BASE } from './constants.js';
 import { showToast, showModal, showConfirmDialog } from './ui.js';
 import { saveSettings } from './settings.js';
 import { t } from './translations.js';
-import { getAuthToken } from './coordinators/TerminalCoordinator.js';
+import { issueConnectionTicket } from './api.js';
 
 let term = null;
 let fitAddon = null;
@@ -320,9 +320,9 @@ async function connectSocket() {
         socket = null;
     }
 
-    const token = await getAuthToken();
+    const ticket = await issueConnectionTicket("terminal");
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}${API_BASE}/terminal_ws?token=${token || ''}`;
+    const wsUrl = `${protocol}//${window.location.host}${API_BASE}/terminal_ws?ticket=${encodeURIComponent(ticket)}`;
 
     socket = new WebSocket(wsUrl);
     socket.binaryType = 'arraybuffer';

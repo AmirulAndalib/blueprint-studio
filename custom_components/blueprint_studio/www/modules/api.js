@@ -343,17 +343,35 @@ export function serveFileUrl(path) {
 }
 
 /**
- * Appends the HA access token as a query parameter to a URL.
- * Used for <video src>, <audio src>, and direct download links
- * where Authorization headers cannot be sent.
+ * Requests a short-lived, single-use ticket and appends it to a stream URL.
+ * The authenticated API call carries the HA token only in its header.
  * @param {string} url - The URL to authenticate
  * @returns {Promise<string>} URL with token appended
  */
-export async function urlWithToken(url) {
-  const token = await getAuthToken();
-  if (!token) return url;
+export async function urlWithTicket(url) {
+  const parsed = new URL(url, window.location.origin);
+  const body = { action: "issue_connection_ticket", ticket_action: parsed.searchParams.get("action") };
+  for (const key of ["path", "progress_id", "stream_id", "query", "case_sensitive", "use_regex", "match_word", "include", "exclude"]) {
+    if (parsed.searchParams.has(key)) body[key] = parsed.searchParams.get(key);
+  }
+  const result = await fetchWithAuth(API_BASE, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!result?.ticket) throw new Error("Failed to authorize stream");
   const sep = url.includes("?") ? "&" : "?";
-  return `${url}${sep}authorization=${encodeURIComponent(token)}`;
+  return `${url}${sep}ticket=${encodeURIComponent(result.ticket)}`;
+}
+
+export async function issueConnectionTicket(ticketAction, scope = {}) {
+  const result = await fetchWithAuth(API_BASE, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "issue_connection_ticket", ticket_action: ticketAction, ...scope }),
+  });
+  if (!result?.ticket) throw new Error("Failed to authorize connection");
+  return result.ticket;
 }
 
 /**
@@ -362,7 +380,7 @@ export async function urlWithToken(url) {
  * @returns {Promise<string>} Authenticated URL for download
  */
 export async function downloadFileUrl(path) {
-  return await urlWithToken(serveFileUrl(path));
+  return await urlWithTicket(serveFileUrl(path));
 }
 
 /**
@@ -372,7 +390,7 @@ export async function downloadFileUrl(path) {
  */
 export async function downloadFolderUrl(path, progressId = "") {
   const progressParam = progressId ? `&progress_id=${encodeURIComponent(progressId)}` : "";
-  return await urlWithToken(`${STREAM_BASE}?action=download_folder&path=${encodeURIComponent(path)}${progressParam}&_t=${Date.now()}`);
+  return await urlWithTicket(`${STREAM_BASE}?action=download_folder&path=${encodeURIComponent(path)}${progressParam}&_t=${Date.now()}`);
 }
 
 /**

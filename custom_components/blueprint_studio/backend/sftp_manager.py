@@ -11,13 +11,19 @@ import mimetypes
 import secrets
 import threading
 import time
+from pathlib import Path
 from contextlib import contextmanager
 from typing import Any, Callable
 
 _LOGGER = logging.getLogger(__name__)
+PROGRESS_RETENTION_SECONDS = 300
+ACTIVE_PROGRESS_RETENTION_SECONDS = 3600
+MAX_PROGRESS_ENTRIES = 128
+MAX_STREAM_TOKENS = 128
 
 from ..const import BINARY_EXTENSIONS, TEXT_EXTENSIONS
 from .zip_utils import is_macos_zip_metadata, safe_zip_member_path
+from .operation_tracker import TransferRegistry
 
 
 def _is_text_file(filename: str) -> bool:
@@ -60,6 +66,7 @@ class SftpManager:
         self._stream_token_ttl = 3600  # seconds
         self._zip_progress: dict[str, dict] = {}
         self._zip_progress_lock = threading.Lock()
+        self._transfers = TransferRegistry()
 
     # -- pool internals ------------------------------------------------------
 
@@ -164,6 +171,41 @@ class SftpManager:
                 pass
         _LOGGER.info("SFTP pool: all connections closed")
 
+    async def async_close(self, hass) -> None:
+        """Stop transfers, close connections, and clear transient state."""
+        workers = self._transfers.stop_all()
+        await hass.async_add_executor_job(self.close_all)
+        await hass.async_add_executor_job(self._transfers.join, workers)
+        with self._stream_tokens_lock:
+            self._stream_tokens.clear()
+        with self._zip_progress_lock:
+            self._zip_progress.clear()
+
+    def diagnostics_snapshot(self) -> dict[str, object]:
+        """Return safe connection and transient-state counts."""
+        self._cleanup_stream_tokens()
+        self._cleanup_zip_progress()
+        with self._pool_lock:
+            pooled_connections = len(self._pool)
+        with self._stream_tokens_lock:
+            stream_tokens = len(self._stream_tokens)
+        with self._zip_progress_lock:
+            progress = tuple(self._zip_progress.values())
+        transfers = self._transfers.snapshot()
+        return {
+            "ready": transfers["ready"],
+            "transfers": transfers,
+            "pooled_connections": pooled_connections,
+            "stream_tokens": stream_tokens,
+            "progress": {
+                "running": sum(item.get("status") == "running" for item in progress),
+                "completed": sum(item.get("status") in {"done", "error"} for item in progress),
+                "total": len(progress),
+                "retention_seconds": PROGRESS_RETENTION_SECONDS,
+                "maximum_entries": MAX_PROGRESS_ENTRIES,
+            },
+        }
+
     # -- streaming tokens ----------------------------------------------------
 
     def create_stream_token(self, host: str, port: int, username: str, auth: dict, path: str, stream_type: str = "file", progress_id: str | None = None) -> dict:
@@ -171,6 +213,13 @@ class SftpManager:
         token = secrets.token_urlsafe(32)
         expires_at = time.monotonic() + self._stream_token_ttl
         with self._stream_tokens_lock:
+            self._purge_stream_tokens(time.monotonic())
+            while len(self._stream_tokens) >= MAX_STREAM_TOKENS:
+                oldest = min(
+                    self._stream_tokens,
+                    key=lambda key: self._stream_tokens[key].get("expires_at", 0),
+                )
+                self._stream_tokens.pop(oldest, None)
             self._stream_tokens[token] = {
                 "host": host,
                 "port": int(port),
@@ -192,15 +241,26 @@ class SftpManager:
         """Return stream-token metadata and refresh its idle expiry."""
         now = time.monotonic()
         with self._stream_tokens_lock:
-            stale = [key for key, value in self._stream_tokens.items() if value.get("expires_at", 0) <= now]
-            for key in stale:
-                self._stream_tokens.pop(key, None)
+            self._purge_stream_tokens(now)
 
             value = self._stream_tokens.get(token)
             if not value:
                 return None
             value["expires_at"] = now + self._stream_token_ttl
             return dict(value)
+
+    def _cleanup_stream_tokens(self) -> None:
+        with self._stream_tokens_lock:
+            self._purge_stream_tokens(time.monotonic())
+
+    def _purge_stream_tokens(self, now: float) -> None:
+        """Remove expired tokens while the caller holds the token lock."""
+        stale = [
+            key for key, value in self._stream_tokens.items()
+            if value.get("expires_at", 0) <= now
+        ]
+        for key in stale:
+            self._stream_tokens.pop(key, None)
 
     # -- connection context manager ------------------------------------------
 
@@ -316,6 +376,9 @@ class SftpManager:
         )
 
         transport = paramiko.Transport((host, int(port)))
+        transport.banner_timeout = 15
+        transport.auth_timeout = 30
+        transport.channel_timeout = 30
         transport.connect()  # bare TCP connect first
 
         # Verify host key before authenticating (TOFU on first connect, strict thereafter)
@@ -444,6 +507,41 @@ class SftpManager:
                 return {"success": True}
         return _sftp_safe_exec("create_file_raw", op)
 
+    def create_file_from_path(self, host: str, port: int, username: str, auth: dict, path: str, source_path: Path, overwrite: bool = False) -> dict:
+        """Stream a local spool to a remote sibling and commit it after close."""
+        def op():
+            with self._get_connection(host, port, username, auth) as (_, sftp):
+                if not overwrite:
+                    try:
+                        sftp.stat(path)
+                        return {"success": False, "message": f"File already exists: {path}", "status_code": 409}
+                    except FileNotFoundError:
+                        pass
+
+                remote_temp = f"{path}.blueprint-upload-{secrets.token_hex(8)}"
+                try:
+                    with source_path.open("rb") as source, sftp.open(remote_temp, "wb") as target:
+                        while chunk := source.read(1024 * 1024):
+                            target.write(chunk)
+                        target.flush()
+                    if overwrite and hasattr(sftp, "posix_rename"):
+                        sftp.posix_rename(remote_temp, path)
+                    else:
+                        if overwrite:
+                            try:
+                                sftp.remove(path)
+                            except FileNotFoundError:
+                                pass
+                        sftp.rename(remote_temp, path)
+                except BaseException:
+                    try:
+                        sftp.remove(remote_temp)
+                    except Exception:
+                        pass
+                    raise
+                return {"success": True}
+        return _sftp_safe_exec("create_file_from_path", op)
+
     def upload_folder(self, host: str, port: int, username: str, auth: dict, path: str, zip_data: str, mode: str = "merge", overwrite: bool = False) -> dict:
         """Upload base64 ZIP and extract to remote folder. Returns {success, files_extracted}."""
         try:
@@ -453,10 +551,17 @@ class SftpManager:
         return self.upload_folder_bytes(host, port, username, auth, path, zip_bytes, mode, overwrite)
 
     def upload_folder_bytes(self, host: str, port: int, username: str, auth: dict, path: str, zip_bytes: bytes, mode: str = "merge", overwrite: bool = False) -> dict:
-        """Upload ZIP bytes and extract to remote folder. Returns {success, files_extracted}."""
+        """Compatibility wrapper for legacy in-memory ZIP uploads."""
+        return self._upload_folder_source(host, port, username, auth, path, io.BytesIO(zip_bytes), mode, overwrite)
+
+    def upload_folder_path(self, host: str, port: int, username: str, auth: dict, path: str, zip_path: Path, mode: str = "merge", overwrite: bool = False) -> dict:
+        """Extract a disk-backed ZIP to SFTP with bounded buffering."""
+        return self._upload_folder_source(host, port, username, auth, path, zip_path, mode, overwrite)
+
+    def _upload_folder_source(self, host: str, port: int, username: str, auth: dict, path: str, zip_source, mode: str, overwrite: bool) -> dict:
+        """Extract a seekable ZIP source to a remote folder."""
         def op():
             import zipfile
-            buf = io.BytesIO(zip_bytes)
             files_extracted = 0
             skipped_members: list[str] = []
             
@@ -487,7 +592,7 @@ class SftpManager:
                 self._mkdir_recursive(sftp, path)
                 
                 base_path = path.rstrip("/") or "/"
-                with zipfile.ZipFile(buf) as zf:
+                with zipfile.ZipFile(zip_source) as zf:
                     for info in zf.infolist():
                         try:
                             if is_macos_zip_metadata(info.filename):
@@ -645,15 +750,28 @@ class SftpManager:
                 _LOGGER.warning("Skipping file %s in stream_folder_zip: %s", full_path, e)
 
     def _cleanup_zip_progress(self) -> None:
-        cutoff = time.monotonic() - 900
+        now = time.monotonic()
         with self._zip_progress_lock:
             stale = [
                 progress_id
                 for progress_id, progress in self._zip_progress.items()
-                if progress.get("updated_at", 0) < cutoff
+                if now - progress.get("updated_at", 0) > (
+                    ACTIVE_PROGRESS_RETENTION_SECONDS
+                    if progress.get("status") == "running"
+                    else PROGRESS_RETENTION_SECONDS
+                )
             ]
             for progress_id in stale:
                 self._zip_progress.pop(progress_id, None)
+
+            while len(self._zip_progress) >= MAX_PROGRESS_ENTRIES:
+                completed = {
+                    key: value for key, value in self._zip_progress.items()
+                    if value.get("status") != "running"
+                }
+                candidates = completed or self._zip_progress
+                oldest = min(candidates, key=lambda key: candidates[key].get("updated_at", 0))
+                self._zip_progress.pop(oldest, None)
 
     def _start_zip_progress(self, progress_id: str | None, filename: str) -> None:
         if not progress_id:

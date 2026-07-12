@@ -4,13 +4,14 @@ from __future__ import annotations
 import json
 import logging
 import os
-import signal
 
 from aiohttp import web
 from homeassistant.components.http import HomeAssistantView
 
 from .util import json_message, json_response
 from .terminal_manager import TerminalManager
+from .ticket_manager import TicketManager
+from .transport_contracts import ValidationError, validate_terminal_message
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -18,46 +19,51 @@ _LOGGER = logging.getLogger(__name__)
 class TerminalWebSocketView(HomeAssistantView):
     """Dedicated view for terminal WebSocket connections.
 
-    Uses requires_auth = False because browser WebSocket connections cannot
-    send Authorization headers. Token is validated manually from the query
-    string using hass.auth.async_validate_access_token().
+    Browser WebSockets cannot send Authorization headers, so this route consumes
+    a short-lived, single-use ticket issued through the authenticated API.
     """
 
     url = "/api/blueprint_studio/terminal_ws"
     name = "api:blueprint_studio:terminal_ws"
     requires_auth = False
 
-    def __init__(self) -> None:
+    def __init__(self, terminal: TerminalManager | None = None, tickets: TicketManager | None = None) -> None:
         """Initialize the view."""
-        self.terminal: TerminalManager | None = None
+        self.terminal = terminal
+        self._active = terminal is not None
+        self.tickets = tickets or TicketManager()
+
+    def activate(self, terminal: TerminalManager, tickets: TicketManager) -> None:
+        """Bind this route to the active entry runtime."""
+        self.terminal = terminal
+        self._active = True
+        self.tickets = tickets
+
+    def deactivate(self) -> None:
+        """Reject new terminal sessions while the entry is unloaded."""
+        self._active = False
+        self.terminal = None
+        self.tickets = None
 
     async def get(self, request: web.Request) -> web.WebSocketResponse:
-        """Authenticate via query-string token, then upgrade to WebSocket."""
+        """Validate origin and consume a scoped ticket before upgrading."""
+        if not self._active or self.terminal is None:
+            return web.Response(status=503, text="Blueprint Studio is unavailable")
         hass = request.app["hass"]
 
-        # Validate token from query string
-        token = request.query.get("token", "")
-        if not token:
-            _LOGGER.warning("Blueprint Studio: Terminal WS missing token")
-            return web.Response(status=401, text="Missing token")
+        origin = request.headers.get("Origin")
+        expected_origin = f"{request.scheme}://{request.host}"
+        if not origin or origin.rstrip("/") != expected_origin:
+            return web.Response(status=403, text="Invalid origin")
 
-        # async_validate_access_token is sync despite its name (HA convention)
-        refresh_token = hass.auth.async_validate_access_token(token)
-        if refresh_token is None:
-            _LOGGER.warning("Blueprint Studio: Terminal WS invalid token")
-            return web.Response(status=401, text="Invalid token")
-
-        user = refresh_token.user
-        if not user or not user.is_active:
-            return web.Response(status=401, text="User not active")
-        if not user.is_admin:
-            _LOGGER.warning("Blueprint Studio: Non-admin user %s attempted terminal access", user.name)
+        ticket = self.tickets.consume(request.query.get("ticket", ""), {"action": "terminal"})
+        if ticket is None:
+            return web.Response(status=401, text="Invalid or expired ticket")
+        user = await hass.auth.async_get_user(ticket.user_id)
+        if not user or not user.is_active or not user.is_admin:
             return web.Response(status=403, text="Admin access required")
 
-        if not self.terminal:
-            self.terminal = TerminalManager(hass)
-        else:
-            self.terminal.hass = hass
+        self.terminal.hass = hass
 
         return await handle_terminal_ws(request, user, hass, self.terminal)
 
@@ -68,21 +74,11 @@ async def handle_terminal_ws(request, user, hass, terminal_manager):
     _LOGGER.debug("Blueprint Studio: Starting Terminal WebSocket for %s", user.name)
     ws = web.WebSocketResponse()
     await ws.prepare(request)
-
-    def cleanup_pty(pty_pid, pty_fd):
-        """Helper to clean up PTY resources."""
-        # pid == -1 is the sentinel for Paramiko sessions (no child process).
-        # Never send a signal in that case — pid -1 means "all processes" on Linux.
-        if pty_pid != -1:
-            try:
-                os.kill(pty_pid, signal.SIGTERM)
-                os.waitpid(pty_pid, os.WNOHANG)
-            except OSError:
-                pass
-        try:
-            os.close(pty_fd)
-        except OSError:
-            pass
+    try:
+        session = terminal_manager.create_session(ws)
+    except RuntimeError:
+        await ws.close(code=1001, message=b"Integration unloading")
+        return ws
 
     async def spawn_pty(username=None, host=None, port=22, password=None, private_key=None, key_passphrase=None):
         """Spawn a PTY session - either regular shell or SSH."""
@@ -110,9 +106,11 @@ async def handle_terminal_ws(request, user, hass, terminal_manager):
     # Initial PTY spawn
     try:
         master_fd, pid = await spawn_pty()
+        session.set_pty(master_fd, pid)
         _LOGGER.debug("Blueprint Studio: PTY spawned (pid %s)", pid)
     except Exception as e:
         _LOGGER.error("Failed to spawn terminal: %s", e)
+        terminal_manager.release_session(session)
         await ws.close()
         return ws
 
@@ -153,12 +151,13 @@ async def handle_terminal_ws(request, user, hass, terminal_manager):
                             try:
                                 json_str = msg.data[len("__SSH_KEY__"):]
                                 ssh_config = json.loads(json_str)
+                                validate_terminal_message({"type": "ssh_key", **ssh_config})
 
                                 old_master_fd = master_fd
                                 old_pid = pid
 
                                 hass.loop.remove_reader(old_master_fd)
-                                cleanup_pty(old_pid, old_master_fd)
+                                session.close_pty()
 
                                 try:
                                     master_fd, pid = await spawn_pty(
@@ -168,6 +167,7 @@ async def handle_terminal_ws(request, user, hass, terminal_manager):
                                         private_key=ssh_config.get('privateKey'),
                                         key_passphrase=ssh_config.get('privateKeyPassphrase')
                                     )
+                                    session.set_pty(master_fd, pid)
                                     hass.loop.add_reader(master_fd, forward_output)
                                     # Reset application cursor key mode so arrow keys work correctly
                                     await ws.send_str('\x1b[?1l\x1b[?7h')
@@ -176,6 +176,7 @@ async def handle_terminal_ws(request, user, hass, terminal_manager):
                                     _LOGGER.error("Failed to spawn SSH PTY: %s", spawn_error)
                                     await ws.send_str(f"Error: SSH connection failed: {str(spawn_error)}\r\n")
                                     master_fd, pid = await spawn_pty()
+                                    session.set_pty(master_fd, pid)
                                     hass.loop.add_reader(master_fd, forward_output)
                             except (json.JSONDecodeError, ValueError) as e:
                                 _LOGGER.error("Invalid SSH key command format: %s", e)
@@ -185,12 +186,13 @@ async def handle_terminal_ws(request, user, hass, terminal_manager):
                             try:
                                 json_str = msg.data[len("__SSH_PASSWORD__"):]
                                 ssh_config = json.loads(json_str)
+                                validate_terminal_message({"type": "ssh_password", **ssh_config})
 
                                 old_master_fd = master_fd
                                 old_pid = pid
 
                                 hass.loop.remove_reader(old_master_fd)
-                                cleanup_pty(old_pid, old_master_fd)
+                                session.close_pty()
 
                                 try:
                                     master_fd, pid = await spawn_pty(
@@ -199,6 +201,7 @@ async def handle_terminal_ws(request, user, hass, terminal_manager):
                                         port=ssh_config.get('port', 22),
                                         password=ssh_config.get('password')
                                     )
+                                    session.set_pty(master_fd, pid)
                                     hass.loop.add_reader(master_fd, forward_output)
                                     # Reset application cursor key mode so arrow keys work correctly
                                     await ws.send_str('\x1b[?1l\x1b[?7h')
@@ -207,6 +210,7 @@ async def handle_terminal_ws(request, user, hass, terminal_manager):
                                     _LOGGER.error("Failed to spawn SSH PTY with password: %s", spawn_error)
                                     await ws.send_str(f"Error: SSH connection failed: {str(spawn_error)}\r\n")
                                     master_fd, pid = await spawn_pty()
+                                    session.set_pty(master_fd, pid)
                                     hass.loop.add_reader(master_fd, forward_output)
                             except (json.JSONDecodeError, ValueError) as e:
                                 _LOGGER.error("Invalid SSH password command format: %s", e)
@@ -215,6 +219,7 @@ async def handle_terminal_ws(request, user, hass, terminal_manager):
                             # Regular input
                             data = msg.json() if isinstance(msg.data, str) else json.loads(msg.data)
                             if isinstance(data, dict):
+                                data = validate_terminal_message(data)
                                 if data.get('type') == 'resize':
                                     await hass.async_add_executor_job(terminal_manager.resize, master_fd, data['rows'], data['cols'])
                                 elif data.get('type') == 'input':
@@ -225,6 +230,9 @@ async def handle_terminal_ws(request, user, hass, terminal_manager):
                                 os.write(master_fd, msg.data.encode())
                     except (ValueError, json.JSONDecodeError):
                         os.write(master_fd, msg.data.encode())
+                    except ValidationError as err:
+                        _LOGGER.warning("Rejected invalid terminal control message: %s", err)
+                        await ws.send_str(f"Error: {err}\r\n")
             except OSError as e:
                 _LOGGER.warning("Terminal PTY Write Error: %s", e)
                 break
@@ -234,8 +242,7 @@ async def handle_terminal_ws(request, user, hass, terminal_manager):
             if msg.type == web.WSMsgType.ERROR:
                 _LOGGER.error('Terminal WS error: %s', ws.exception())
     finally:
-        hass.loop.remove_reader(master_fd)
-        cleanup_pty(pid, master_fd)
+        terminal_manager.release_session(session)
     return ws
 
 

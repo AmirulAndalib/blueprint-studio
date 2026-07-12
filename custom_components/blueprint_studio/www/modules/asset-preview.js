@@ -6,7 +6,7 @@ import { eventBus } from './event-bus.js';
 import { copyToClipboard } from './utils.js';
 import { saveSettings } from './settings.js';
 import { IMAGE_EXTENSIONS, AUDIO_EXTENSIONS } from './constants.js';
-import { urlWithToken, serveFileUrl } from './api.js';
+import { urlWithTicket, serveFileUrl } from './api.js';
 
 /**
  * Renders preview for binary assets (images, PDFs, videos)
@@ -315,7 +315,7 @@ async function renderVideoPreview(tab, filename) {
       tab.streamUrl = srcUrl;
     }
   } else {
-    srcUrl = await urlWithToken(serveFileUrl(tab.path));
+    srcUrl = await urlWithTicket(serveFileUrl(tab.path));
   }
 
   elements.assetPreview.innerHTML = `
@@ -375,7 +375,7 @@ async function renderAudioPreview(tab, filename) {
       tab.streamUrl = srcUrl;
     }
   } else {
-    srcUrl = await urlWithToken(serveFileUrl(tab.path));
+    srcUrl = await urlWithTicket(serveFileUrl(tab.path));
   }
 
   elements.assetPreview.innerHTML = `

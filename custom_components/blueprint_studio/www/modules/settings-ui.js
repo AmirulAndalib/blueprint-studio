@@ -12,35 +12,9 @@ import { showAddConnectionDialog, showEditConnectionDialog, deleteConnection } f
 const CUSTOM_MODEL_OPTION_VALUE = "__custom__";
 
 const AI_MODEL_PRESETS = {
-  "cloud:gemini": [
-    "gemini-3-pro-preview",
-    "gemini-3-flash-preview",
-    "gemini-2.5-pro",
-    "gemini-2.5-flash",
-    "gemini-2.5-flash-lite",
-  ],
-  "cloud:openai": [
-    "gpt-5.2",
-    "gpt-5.2-pro",
-    "gpt-5.2-chat-latest",
-    "gpt-5.1",
-    "gpt-5",
-    "gpt-5-mini",
-    "gpt-5-nano",
-    "gpt-4.1",
-    "gpt-4.1-mini",
-    "o3",
-    "o3-pro",
-    "o3-deep-research",
-    "o4-mini",
-    "o4-mini-deep-research",
-    "o1-pro",
-  ],
-  "cloud:claude": [
-    "claude-sonnet-4-5-20250929",
-    "claude-haiku-4-5-20251001",
-    "claude-opus-4-5-20251101",
-  ],
+  "cloud:gemini": [],
+  "cloud:openai": [],
+  "cloud:claude": [],
   "local:ollama": [],
   "local:lm-studio": [],
   "local:custom": [],
@@ -78,10 +52,10 @@ const AI_MODEL_PICKERS = {
     inputId: "claude-model-custom",
     buttonId: "btn-fetch-claude-models",
     statusId: "claude-model-fetch-status",
-    fetchSupported: false,
+    fetchSupported: true,
     inputLabel: "Custom Model Name",
     inputPlaceholder: "claude-sonnet-4-5-20250929",
-    helpText: "Anthropic does not expose a model-list endpoint here. Use the preset list or type a model name manually.",
+    helpText: "Models are fetched from Anthropic automatically; you can also type a model name manually.",
   },
   "local:ollama": {
     sourceKey: "local:ollama",
@@ -214,9 +188,6 @@ function getFetchStatusText(sourceKey) {
   }
   if (meta.fetchedAt) {
     return `Fetched ${meta.count || 0} model${meta.count === 1 ? "" : "s"}.`;
-  }
-  if (sourceKey === "cloud:claude") {
-    return "Use the preset list or type a model name manually.";
   }
   return "Pick from the list or fetch models from the endpoint.";
 }
@@ -482,7 +453,7 @@ function syncAllModelPickers() {
   Object.keys(AI_MODEL_PICKERS).forEach((sourceKey) => updateModelPickerUi(sourceKey));
 }
 
-async function refreshModelList(sourceKey) {
+async function refreshModelList(sourceKey, { silent = false } = {}) {
   const config = getModelPickerConfig(sourceKey);
   if (!config.fetchSupported) {
     updateModelPickerUi(sourceKey);
@@ -513,7 +484,9 @@ async function refreshModelList(sourceKey) {
       count: unique.length,
     };
     updateModelPickerUi(sourceKey);
-    showToast(`Fetched ${unique.length} model${unique.length === 1 ? "" : "s"}.`, "success");
+    if (!silent) {
+      showToast(`Fetched ${unique.length} model${unique.length === 1 ? "" : "s"}.`, "success");
+    }
   } catch (error) {
     state.aiModelFetchMeta[sourceKey] = {
       ...state.aiModelFetchMeta[sourceKey],
@@ -521,7 +494,9 @@ async function refreshModelList(sourceKey) {
       error: error.message || "Failed to fetch models.",
     };
     updateModelPickerUi(sourceKey);
-    showToast(error.message || "Failed to fetch models.", "error");
+    if (!silent) {
+      showToast(error.message || "Failed to fetch models.", "error");
+    }
   }
 }
 
@@ -2086,6 +2061,9 @@ export async function showAppSettings() {
     updateLocalProviderUi(state.localAiProvider);
     updateCloudProviderUi(state.cloudProvider);
     syncAllModelPickers();
+    if (state.aiType === "cloud") {
+      void refreshModelList(`cloud:${state.cloudProvider}`, { silent: true });
+    }
 
     if (cloudProviderSelect) {
       cloudProviderSelect.addEventListener("change", async (e) => {
@@ -2095,6 +2073,7 @@ export async function showAppSettings() {
         updateCloudProviderUi(provider);
         syncAllModelPickers();
         await saveSettingsImpl();
+        void refreshModelList(`cloud:${provider}`, { silent: true });
       });
     }
 

@@ -190,6 +190,17 @@ We use [Semantic Versioning](https://semver.org/):
 
 ## Questions?
 
+## Backend Quality Gates
+
+Backend changes must preserve `BACKEND_CONTRACT.md` and `STORAGE_SCHEMA.md`.
+Use generated streams instead of large fixtures, keep blocking work off the
+Home Assistant event loop, and cover cancellation and cleanup for affected
+resource paths. CI runs Ruff formatting and linting, mypy on modernization
+modules, the complete pytest suite (including Home Assistant fixtures),
+bytecode compilation, Hassfest, and HACS validation. Architecture and local
+verification guidance live in `BACKEND_ARCHITECTURE.md` and
+`TROUBLESHOOTING.md`.
+
 Feel free to open an issue with your question or contact the maintainers.
 
 ## License

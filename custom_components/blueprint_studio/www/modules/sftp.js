@@ -6,7 +6,7 @@ import { t } from './translations.js';
 import { enableLongPressContextMenu } from './utils.js';
 import { eventBus } from './event-bus.js';
 import { API_BASE, STREAM_BASE, IMAGE_EXTENSIONS, VIDEO_EXTENSIONS, AUDIO_EXTENSIONS } from './constants.js';
-import { fetchWithAuth, getAuthToken, urlWithToken } from './api.js';
+import { fetchWithAuth, getAuthToken, urlWithTicket } from './api.js';
 import {
   showToast,
   showConfirmDialog,
@@ -160,8 +160,8 @@ export async function sftpStreamFile(connId, remotePath) {
 
 /**
  * Prepare a direct GET streaming URL for SFTP media.
- * The URL contains only an opaque short-lived stream id plus the HA auth token;
- * SFTP credentials stay server-side.
+ * The URL contains only opaque, short-lived stream authorization values;
+ * HA and SFTP credentials stay out of the URL.
  */
 export async function sftpStreamUrl(connId, remotePath) {
   const conn = findConnection(connId);
@@ -172,7 +172,7 @@ export async function sftpStreamUrl(connId, remotePath) {
     throw new Error(result?.message || "Failed to prepare SFTP stream");
   }
 
-  return await urlWithToken(
+  return await urlWithTicket(
     `${STREAM_BASE}?action=sftp_serve_file&stream_id=${encodeURIComponent(result.stream_id)}&_t=${Date.now()}`
   );
 }
@@ -190,7 +190,7 @@ async function sftpFolderZipUrl(connId, remotePath, progressId = "") {
     throw new Error(result?.message || "Failed to prepare SFTP folder download");
   }
 
-  return await urlWithToken(
+  return await urlWithTicket(
     `${STREAM_BASE}?action=sftp_serve_file&stream_id=${encodeURIComponent(result.stream_id)}&_t=${Date.now()}`
   );
 }

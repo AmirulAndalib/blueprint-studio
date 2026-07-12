@@ -2,7 +2,7 @@
 import { state, elements } from './state.js';
 import { HA_ENTITIES } from './ha-autocomplete.js';
 import { t } from './translations.js';
-import { fetchWithAuth, getAuthToken } from './api.js';
+import { fetchWithAuth, urlWithTicket } from './api.js';
 import { eventBus } from './event-bus.js';
 import { API_BASE, STREAM_BASE } from './constants.js';
 import {
@@ -43,11 +43,9 @@ export async function performGlobalSearch(query, options = {}) {
 
   // Search Files using streaming NDJSON — results appear as each file is scanned
   try {
-      const token = await getAuthToken() || "";
       const params = new URLSearchParams({
           action: "search_stream",
           query: query,
-          authorization: token,
       });
       if (options.caseSensitive) params.set("case_sensitive", "true");
       if (options.useRegex) params.set("use_regex", "true");
@@ -55,7 +53,7 @@ export async function performGlobalSearch(query, options = {}) {
       if (options.include) params.set("include", options.include);
       if (options.exclude) params.set("exclude", options.exclude);
 
-      const response = await fetch(`${STREAM_BASE}?${params}`);
+      const response = await fetch(await urlWithTicket(`${STREAM_BASE}?${params}`));
       if (!response.ok || !response.body) throw new Error("Stream unavailable");
 
       const fileResults = [];

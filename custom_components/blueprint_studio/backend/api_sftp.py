@@ -198,8 +198,6 @@ async def sftp_stream_file(sftp_manager, hass, request, host, port, username, au
 async def sftp_stream_folder_zip(sftp_manager, hass, request, host, port, username, auth, path):
     """Stream a remote SFTP folder as ZIP without base64 or full buffering."""
     folder_name = os.path.basename(path.rstrip("/")) or "download"
-    loop = asyncio.get_running_loop()
-
     chunks: queue.Queue[bytes | None] = queue.Queue(maxsize=8)
     result_holder: dict = {}
     stopped = threading.Event()
@@ -214,21 +212,32 @@ async def sftp_stream_folder_zip(sftp_manager, hass, request, host, port, userna
         raise RuntimeError("SFTP folder ZIP stream cancelled")
 
     def worker() -> None:
-        result_holder["result"] = sftp_manager.stream_folder_zip(
-            host, port, username, auth, path, write_chunk, getattr(request, "_blueprint_zip_progress_id", None)
-        )
-        while not stopped.is_set():
-            try:
-                chunks.put(None, timeout=0.5)
-                return
-            except queue.Full:
-                continue
+        try:
+            result_holder["result"] = sftp_manager.stream_folder_zip(
+                host, port, username, auth, path, write_chunk, getattr(request, "_blueprint_zip_progress_id", None)
+            )
+            while not stopped.is_set():
+                try:
+                    chunks.put(None, timeout=0.5)
+                    return
+                except queue.Full:
+                    continue
+        finally:
+            sftp_manager._transfers.release(thread)
 
     thread = threading.Thread(target=worker, name="blueprint-sftp-zip-stream", daemon=True)
+    sftp_manager._transfers.register(thread, stopped)
     thread.start()
 
+    async def next_chunk() -> bytes | None:
+        while True:
+            try:
+                return chunks.get_nowait()
+            except queue.Empty:
+                await asyncio.sleep(0.05)
+
     try:
-        first_chunk = await loop.run_in_executor(None, chunks.get)
+        first_chunk = await next_chunk()
         if first_chunk is None:
             thread.join(timeout=1)
             result = result_holder.get("result", {})
@@ -246,7 +255,7 @@ async def sftp_stream_folder_zip(sftp_manager, hass, request, host, port, userna
             await response.write(first_chunk)
 
         while True:
-            chunk = await loop.run_in_executor(None, chunks.get)
+            chunk = await next_chunk()
             if chunk is None:
                 break
             await response.write(chunk)

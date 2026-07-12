@@ -10,6 +10,7 @@ import aiohttp
 
 from aiohttp import web
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .util import json_response, json_message
 from .ai_constants import DOMAIN_ACTIONS
@@ -153,8 +154,9 @@ class AIManager:
     ) -> web.Response:
         """Execute an HTTP JSON request and normalize success/error handling."""
         try:
-            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=60)) as session:
-                async with session.post(url, headers=headers, json=payload) as response:
+            session = async_get_clientsession(self.hass)
+            timeout = aiohttp.ClientTimeout(total=60, connect=15, sock_read=45)
+            async with session.post(url, headers=headers, json=payload, timeout=timeout) as response:
                     response_text = await response.text()
                     try:
                         response_data: Any = json.loads(response_text) if response_text else {}
@@ -195,8 +197,9 @@ class AIManager:
     ) -> tuple[Any | None, web.Response | None]:
         """Execute an HTTP GET request and return decoded JSON or an error response."""
         try:
-            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=60)) as session:
-                async with session.get(url, headers=headers) as response:
+            session = async_get_clientsession(self.hass)
+            timeout = aiohttp.ClientTimeout(total=60, connect=15, sock_read=45)
+            async with session.get(url, headers=headers, timeout=timeout) as response:
                     response_text = await response.text()
                     try:
                         response_data: Any = json.loads(response_text) if response_text else {}
@@ -362,6 +365,28 @@ class AIManager:
             })
         return models
 
+    def _parse_gemini_models(self, response_data: Any) -> list[dict[str, Any]]:
+        """Parse Gemini /v1beta/models responses and keep generative models."""
+        if not isinstance(response_data, dict):
+            return []
+
+        models: list[dict[str, Any]] = []
+        for item in response_data.get("models", []):
+            if not isinstance(item, dict):
+                continue
+            methods = item.get("supportedGenerationMethods", [])
+            if "generateContent" not in methods:
+                continue
+            model_id = str(item.get("name") or "").removeprefix("models/").strip()
+            if not model_id:
+                continue
+            models.append({
+                "id": model_id,
+                "label": item.get("displayName") or model_id,
+                "description": item.get("description"),
+            })
+        return models
+
     def _parse_ollama_models(self, response_data: Any) -> list[dict[str, Any]]:
         """Parse Ollama /api/tags responses."""
         if not isinstance(response_data, dict):
@@ -458,13 +483,19 @@ class AIManager:
                 raw_models = self._parse_openai_models(payload)
                 source = "remote"
             elif provider == "gemini":
-                raw_models = [
-                    "gemini-3-pro-preview",
-                    "gemini-3-flash-preview",
-                    "gemini-2.5-pro",
-                    "gemini-2.5-flash",
-                    "gemini-2.5-flash-lite",
-                ]
+                key = settings.get("geminiApiKey")
+                if not key:
+                    return json_message("No API key for Gemini", status_code=400)
+                endpoint = "https://generativelanguage.googleapis.com/v1beta/models"
+                payload, error_response = await self._get_json_payload(
+                    "Gemini",
+                    f"{endpoint}?key={key}",
+                    {"Content-Type": "application/json"},
+                )
+                if error_response:
+                    return error_response
+                raw_models = self._parse_gemini_models(payload)
+                source = "remote"
             elif provider == "claude":
                 key = settings.get("claudeApiKey")
                 if not key:

@@ -1,0 +1,46 @@
+name: Backend quality
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: pip
+      - name: Install quality tools and Home Assistant test fixtures
+        run: python -m pip install -r requirements-test.txt ruff mypy
+      - name: Format check
+        run: >-
+          ruff format --check
+          custom_components/blueprint_studio/backend/runtime.py
+          custom_components/blueprint_studio/backend/storage.py
+          custom_components/blueprint_studio/backend/ticket_manager.py
+          custom_components/blueprint_studio/backend/operation_tracker.py
+          custom_components/blueprint_studio/backend/reliability.py
+          tests/test_generated_transfers.py
+          tests/test_git_process_contract.py
+          tests/test_security_boundaries.py
+      - name: Lint
+        run: ruff check --select E9,F63,F7,F82 custom_components/blueprint_studio tests
+      - name: Type check modernization modules
+        run: >-
+          mypy --ignore-missing-imports --follow-imports=skip
+          custom_components/blueprint_studio/backend/runtime.py
+          custom_components/blueprint_studio/backend/storage.py
+          custom_components/blueprint_studio/backend/ticket_manager.py
+          custom_components/blueprint_studio/backend/operation_tracker.py
+          custom_components/blueprint_studio/backend/reliability.py
+      - name: Unit and Home Assistant integration tests
+        run: pytest
+      - name: Bytecode compilation
+        run: python -m compileall -q custom_components/blueprint_studio

@@ -12,6 +12,8 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
+import tempfile
 from pathlib import Path
 
 from aiohttp import web
@@ -25,6 +27,15 @@ from .ai_manager import AIManager
 from .file_manager import FileManager
 from .sftp_manager import SftpManager
 from .terminal_manager import TerminalManager
+from .operation_tracker import OperationTracker, tracked_operation
+from .reliability import OperationCoordinator
+from .ticket_manager import TicketManager
+from .transport_contracts import (
+    ValidationError,
+    validate_action,
+    validate_stream,
+    validate_upload_metadata,
+)
 
 from . import api_files
 from . import api_git
@@ -58,17 +69,81 @@ class BlueprintStudioApiView(HomeAssistantView):
     name = "api:blueprint_studio"
     requires_auth = True
 
-    def __init__(self, config_dir: Path, store: Store, data: dict) -> None:
+    def __init__(
+        self,
+        config_dir: Path,
+        store: Store,
+        data: dict,
+        *,
+        git: GitManager | None = None,
+        ai: AIManager | None = None,
+        file: FileManager | None = None,
+        sftp: SftpManager | None = None,
+        terminal: TerminalManager | None = None,
+        operations: OperationTracker | None = None,
+        tickets: TicketManager | None = None,
+        coordinator: OperationCoordinator | None = None,
+    ) -> None:
         """Initialize the view."""
         self.config_dir = config_dir
         self.store = store
         self.data = data
         self.hass = None
-        self.git = GitManager(None, config_dir, data, store)
-        self.ai = AIManager(None, data)
-        self.file = FileManager(None, config_dir)
-        self.sftp = SftpManager(config_dir)
+        self.git = git or GitManager(None, config_dir, data, store)
+        self.ai = ai or AIManager(None, data)
+        self.file = file or FileManager(None, config_dir)
+        self.sftp = sftp or SftpManager(config_dir)
+        self.terminal = terminal
+        self.operations = operations
+        self.tickets = tickets or TicketManager()
+        self.coordinator = coordinator or OperationCoordinator()
+        self._active = True
+
+    def activate(
+        self,
+        store: Store,
+        data: dict,
+        git: GitManager,
+        ai: AIManager,
+        file: FileManager,
+        sftp: SftpManager,
+        terminal: TerminalManager,
+        operations: OperationTracker,
+        tickets: TicketManager,
+        coordinator: OperationCoordinator,
+    ) -> None:
+        """Bind this process-lifetime route to the active entry runtime."""
+        self.store = store
+        self.data = data
+        self.git = git
+        self.ai = ai
+        self.file = file
+        self.sftp = sftp
+        self.terminal = terminal
+        self.operations = operations
+        self.tickets = tickets
+        self.coordinator = coordinator
+        self._active = True
+
+    def deactivate(self) -> None:
+        """Reject requests while the config entry has no active runtime."""
+        self._active = False
+        self.hass = None
+        self.store = None
+        self.data = {}
+        self.git = None
+        self.ai = None
+        self.file = None
+        self.sftp = None
         self.terminal = None
+        self.operations = None
+        self.tickets = None
+        self.coordinator = None
+
+    def _unavailable(self) -> web.Response | None:
+        if not self._active:
+            return json_message("Blueprint Studio is unavailable", status_code=503)
+        return None
 
     async def _authenticate(self, request):
         """Authenticate request. With requires_auth = True, HA middleware
@@ -110,12 +185,24 @@ class BlueprintStudioApiView(HomeAssistantView):
         status_code = sftp_progress.pop("status_code", 200) if "status_code" in sftp_progress else 200
         return json_response(sftp_progress, status_code=status_code)
 
+    def _issue_connection_ticket(self, data: dict, user) -> web.Response:
+        """Issue an exact-scope ticket for a browser stream or terminal socket."""
+        scope = _ticket_scope(data)
+        if scope is None:
+            return json_message("Invalid ticket scope", status_code=400)
+        result = self.tickets.issue(user.id, scope)
+        return json_response({"success": True, **result})
+
     # ========== GET ==========
 
+    @tracked_operation
     async def get(self, request: web.Request) -> web.Response:
         """Handle GET requests."""
+        if unavailable := self._unavailable():
+            return unavailable
         params = request.query
         action = params.get("action")
+        request["blueprint_studio_operation"] = action or "missing_action"
 
         user = await self._authenticate(request)
         if not user:
@@ -125,6 +212,11 @@ class BlueprintStudioApiView(HomeAssistantView):
 
         if not action:
             return json_message("Missing action", status_code=400)
+
+        try:
+            params = validate_action(action, params, transport="get")
+        except ValidationError as err:
+            return json_message(str(err), status_code=err.status)
 
         hass = request.app["hass"]
         self._update_hass(hass)
@@ -162,13 +254,19 @@ class BlueprintStudioApiView(HomeAssistantView):
                 return await result
             return result
         except Exception as err:
-            _LOGGER.error("GET action %s failed: %s", action, err, exc_info=True)
+            _LOGGER.error(
+                "GET action %s failed [correlation_id=%s]: %s",
+                action, request.get("blueprint_studio_correlation_id"), err, exc_info=True,
+            )
             return json_message("Action failed. See server logs for details.", status_code=500)
 
     # ========== POST ==========
 
+    @tracked_operation
     async def post(self, request: web.Request) -> web.Response:
         """Handle POST requests."""
+        if unavailable := self._unavailable():
+            return unavailable
         user = await self._authenticate(request)
         if not user:
             return web.Response(status=401, text="Unauthorized")
@@ -178,24 +276,42 @@ class BlueprintStudioApiView(HomeAssistantView):
         try:
             body = await request.read()
             data = json.loads(body)
+            if not isinstance(data, dict):
+                raise ValueError("request body must be an object")
         except Exception as e:
             _LOGGER.error("Blueprint Studio: Failed to parse POST JSON: %s", e)
             return json_message(f"Invalid JSON: {str(e)}", status_code=400)
 
         action = data.get("action")
+        request["blueprint_studio_operation"] = action or "missing_action"
         _LOGGER.debug("Blueprint Studio: POST action: %s", action)
 
         if not action:
             return json_message("Missing action", status_code=400)
+
+        try:
+            data = validate_action(
+                action,
+                data,
+                transport="sftp" if action in api_sftp.SFTP_ACTIONS else "post",
+            )
+        except ValidationError as err:
+            return json_message(str(err), status_code=err.status)
 
         hass = request.app["hass"]
         self._update_hass(hass)
 
         # SFTP actions — handled by dedicated dispatcher
         if action in api_sftp.SFTP_ACTIONS:
-            return await api_sftp.sftp_action(self.sftp, action, data, hass, request)
+            try:
+                async with self.coordinator.admit(action) as timeout:
+                    operation = api_sftp.sftp_action(self.sftp, action, data, hass, request)
+                    return await asyncio.wait_for(operation, timeout) if timeout else await operation
+            except asyncio.TimeoutError:
+                return json_message("SFTP operation timed out", status_code=504)
 
         post_handlers = {
+            "issue_connection_ticket": lambda d, h, u: self._issue_connection_ticket(d, u),
             # Settings
             "save_settings": lambda d, h, u: api_misc.save_settings(d, self.store, h, self.data),
             # Files
@@ -307,20 +423,50 @@ class BlueprintStudioApiView(HomeAssistantView):
             return json_message("Admin privileges required for this action", status_code=403)
 
         try:
-            result = handler(data, hass, user)
-            return await result if asyncio.iscoroutine(result) else result
+            async with self.coordinator.admit(action) as timeout:
+                result = handler(data, hass, user)
+                if not asyncio.iscoroutine(result):
+                    return result
+                return await asyncio.wait_for(result, timeout) if timeout else await result
+        except asyncio.TimeoutError:
+            return json_message("Operation timed out", status_code=504)
         except Exception as err:
-            _LOGGER.error("POST action %s failed: %s", action, err, exc_info=True)
+            _LOGGER.error(
+                "POST action %s failed [correlation_id=%s]: %s",
+                action, request.get("blueprint_studio_correlation_id"), err, exc_info=True,
+            )
             return json_message("Action failed. See server logs for details.", status_code=500)
+
+
+def _ticket_scope(params) -> dict[str, str] | None:
+    """Build the only ticket scopes accepted by unauthenticated transports."""
+    action = params.get("ticket_action") or params.get("action")
+    keys_by_action = {
+        "serve_file": ("path",),
+        "download_folder": ("path", "progress_id"),
+        "download_multi": ("stream_id",),
+        "search_stream": ("query", "case_sensitive", "use_regex", "match_word", "include", "exclude"),
+        "sftp_serve_file": ("stream_id",),
+        "terminal": (),
+    }
+    keys = keys_by_action.get(action)
+    if keys is None:
+        return None
+    scope = {"action": action}
+    for key in keys:
+        value = params.get(key, "")
+        if key in {"path", "stream_id", "query"} and not value:
+            return None
+        scope[key] = value
+    return scope
 
 
 class BlueprintStudioStreamView(HomeAssistantView):
     """Dedicated view for streaming file content (serve_file, download_folder).
 
-    Uses requires_auth = False because <video src>, <audio src>, and direct
-    download links cannot send Authorization headers. Token is validated
-    manually from the query string, same pattern as TerminalWebSocketView
-    and HA's camera streams.
+    Uses requires_auth = False because media and direct download links cannot
+    send Authorization headers. A short-lived, single-use ticket is consumed
+    from the query string instead of exposing a reusable HA access token.
 
     Only supports read-only GET actions — no mutations.
     """
@@ -329,34 +475,58 @@ class BlueprintStudioStreamView(HomeAssistantView):
     name = "api:blueprint_studio:stream"
     requires_auth = False
 
-    def __init__(self, file_manager: FileManager, sftp_manager: SftpManager) -> None:
+    def __init__(self, file_manager: FileManager, sftp_manager: SftpManager, operations: OperationTracker | None = None, tickets: TicketManager | None = None) -> None:
         """Initialize the view."""
         self.file = file_manager
         self.sftp = sftp_manager
+        self.operations = operations
+        self.tickets = tickets or TicketManager()
+        self._active = True
 
+    def activate(self, file_manager: FileManager, sftp_manager: SftpManager, operations: OperationTracker, tickets: TicketManager) -> None:
+        """Bind this route to the active entry runtime."""
+        self.file = file_manager
+        self.sftp = sftp_manager
+        self.operations = operations
+        self.tickets = tickets
+        self._active = True
+
+    def deactivate(self) -> None:
+        """Reject requests while the config entry is unloaded."""
+        self._active = False
+        self.file = None
+        self.sftp = None
+        self.operations = None
+        self.tickets = None
+
+    @tracked_operation
     async def get(self, request: web.Request) -> web.Response:
-        """Authenticate via query-param token, then serve the file."""
+        """Consume a scoped ticket, then serve the requested resource."""
+        if not self._active:
+            return web.Response(status=503, text="Blueprint Studio is unavailable")
         hass = request.app["hass"]
 
-        # Validate token from query string
-        token = request.query.get("authorization", "")
-        if not token:
-            return web.Response(status=401, text="Missing token")
-
-        # async_validate_access_token is sync despite its name (HA convention)
-        refresh_token = hass.auth.async_validate_access_token(token)
-        if refresh_token is None:
-            return web.Response(status=401, text="Invalid token")
-
-        user = refresh_token.user
-        if not user or not user.is_active:
-            return web.Response(status=401, text="User not active")
-        if not user.is_admin:
-            _LOGGER.warning("Blueprint Studio: non-admin user %s attempted stream access", user.name)
-            return web.Response(status=403, text="Admin access required")
-
         action = request.query.get("action")
+        request["blueprint_studio_operation"] = action or "missing_action"
         params = request.query
+        try:
+            params = validate_stream(action, params)
+        except ValidationError as err:
+            return web.Response(status=err.status, text=str(err))
+        scope = _ticket_scope(params)
+        if scope is None:
+            return web.Response(status=401, text="Invalid or expired ticket")
+        grant = self.tickets.validate_grant(request.query.get("grant", ""), scope)
+        if grant is None:
+            grant_token = self.tickets.exchange_for_grant(request.query.get("ticket", ""), scope)
+            if grant_token is None:
+                return web.Response(status=401, text="Invalid or expired ticket")
+            query = [(key, value) for key, value in request.query.items() if key != "ticket"]
+            query.append(("grant", grant_token))
+            raise web.HTTPFound(location=str(request.rel_url.with_query(query)))
+        user = await hass.auth.async_get_user(grant.user_id)
+        if not user or not user.is_active or not user.is_admin:
+            return web.Response(status=403, text="Admin access required")
         self.file.hass = hass
 
         if action == "serve_file":
@@ -418,13 +588,33 @@ class BlueprintStudioUploadView(HomeAssistantView):
     name = "api:blueprint_studio:upload"
     requires_auth = True
 
-    def __init__(self, file_manager: FileManager, sftp_manager: SftpManager) -> None:
+    def __init__(self, file_manager: FileManager, sftp_manager: SftpManager, operations: OperationTracker | None = None) -> None:
         """Initialize the view."""
         self.file = file_manager
         self.sftp = sftp_manager
+        self.operations = operations
+        self._active = True
 
+    def activate(self, file_manager: FileManager, sftp_manager: SftpManager, operations: OperationTracker) -> None:
+        """Bind this route to the active entry runtime."""
+        self.file = file_manager
+        self.sftp = sftp_manager
+        self.operations = operations
+        self._active = True
+
+    def deactivate(self) -> None:
+        """Reject requests while the config entry is unloaded."""
+        self._active = False
+        self.file = None
+        self.sftp = None
+        self.operations = None
+
+    @tracked_operation
     async def post(self, request: web.Request) -> web.Response:
         """Handle multipart file upload, streaming to disk or SFTP."""
+        request["blueprint_studio_operation"] = "upload"
+        if not self._active:
+            return web.Response(status=503, text="Blueprint Studio is unavailable")
         user = request.get("hass_user")
         if not user:
             return web.Response(status=401, text="Unauthorized")
@@ -446,13 +636,18 @@ class BlueprintStudioUploadView(HomeAssistantView):
 
         file_path = None
         overwrite = False
-        file_data = None
+        upload_path: Path | None = None
         connection = None  # SFTP connection details (JSON string)
         extract_zip = False
         mode = "merge"
 
         while True:
-            part = await reader.next()
+            try:
+                part = await reader.next()
+            except BaseException:
+                if upload_path:
+                    upload_path.unlink(missing_ok=True)
+                raise
             if part is None:
                 break
 
@@ -468,52 +663,56 @@ class BlueprintStudioUploadView(HomeAssistantView):
                 try:
                     connection = json.loads(await part.text())
                 except Exception:
+                    if upload_path:
+                        upload_path.unlink(missing_ok=True)
                     return json_message("Invalid connection JSON", status_code=400)
             elif part.name == "file":
-                chunks = []
-                while True:
-                    chunk = await part.read_chunk()
-                    if not chunk:
-                        break
-                    chunks.append(chunk)
-                file_data = b"".join(chunks)
+                # Multipart fields generated by the frontend place metadata first,
+                # but the disk spool also keeps arbitrary multipart ordering safe.
+                spool_dir = Path(hass.config.path(".storage"))
+                spool_dir.mkdir(parents=True, exist_ok=True)
+                fd, raw_path = tempfile.mkstemp(prefix="blueprint-upload-", dir=spool_dir)
+                upload_path = Path(raw_path)
+                try:
+                    with os.fdopen(fd, "wb") as spool:
+                        while chunk := await part.read_chunk(1024 * 1024):
+                            await hass.async_add_executor_job(spool.write, chunk)
+                        await hass.async_add_executor_job(spool.flush)
+                        await hass.async_add_executor_job(os.fsync, spool.fileno())
+                except BaseException:
+                    upload_path.unlink(missing_ok=True)
+                    raise
 
-        if not file_path or file_data is None:
+        if not file_path or upload_path is None:
+            if upload_path:
+                upload_path.unlink(missing_ok=True)
             return json_message("Missing file or path", status_code=400)
 
-        # SFTP upload
-        if connection:
-            if extract_zip:
-                return await self._upload_sftp_folder(hass, connection, file_path, file_data, mode, overwrite)
-            return await self._upload_sftp(hass, connection, file_path, file_data, overwrite)
-
-        # Local upload
-        if extract_zip:
-            return await self._upload_local_folder(file_path, file_data, mode, overwrite)
-        return await self._upload_local(hass, file_path, file_data, overwrite)
-
-    async def _upload_local(self, hass, file_path, file_data, overwrite):
-        """Write uploaded bytes to local filesystem."""
-        from .util import get_safe_path
-        safe_path = get_safe_path(self.file._get_root_dir(), file_path)
-        if not safe_path:
-            return json_message("Not allowed", status_code=403)
-
-        if safe_path.exists() and not overwrite:
-            return json_response(
-                {"success": False, "message": "File already exists"},
-                status_code=409,
-            )
+        try:
+            validate_upload_metadata(file_path, overwrite, extract_zip, mode, connection)
+        except ValidationError as err:
+            upload_path.unlink(missing_ok=True)
+            return json_message(str(err), status_code=err.status)
 
         try:
-            await hass.async_add_executor_job(safe_path.write_bytes, file_data)
-            self.file._fire_update("upload", file_path)
-            return json_response({"success": True, "path": file_path})
-        except Exception as e:
-            _LOGGER.error("Upload write failed: %s", e)
-            return json_message(str(e), status_code=500)
+            if connection:
+                if extract_zip:
+                    return await self._upload_sftp_folder(hass, connection, file_path, upload_path, mode, overwrite)
+                return await self._upload_sftp(hass, connection, file_path, upload_path, overwrite)
+            if extract_zip:
+                return await self._upload_local_folder(file_path, upload_path, mode, overwrite)
+            return await self._upload_local(hass, file_path, upload_path, overwrite)
+        except (asyncio.CancelledError, ConnectionResetError):
+            _LOGGER.info("Upload cancelled or client disconnected")
+            raise
+        finally:
+            await hass.async_add_executor_job(upload_path.unlink, True)
 
-    async def _upload_sftp(self, hass, connection, file_path, file_data, overwrite):
+    async def _upload_local(self, hass, file_path, upload_path, overwrite):
+        """Atomically finalize a disk-backed local upload."""
+        return await self.file.upload_file_path(file_path, upload_path, overwrite)
+
+    async def _upload_sftp(self, hass, connection, file_path, upload_path, overwrite):
         """Write uploaded bytes to remote SFTP server."""
         host = connection.get("host", "")
         port = int(connection.get("port", 22))
@@ -524,7 +723,7 @@ class BlueprintStudioUploadView(HomeAssistantView):
             return json_message("Missing SFTP connection parameters", status_code=400)
 
         def _write():
-            return self.sftp.create_file_raw(host, port, username, auth, file_path, file_data, overwrite)
+            return self.sftp.create_file_from_path(host, port, username, auth, file_path, upload_path, overwrite)
 
         try:
             result = await hass.async_add_executor_job(_write)
@@ -534,11 +733,11 @@ class BlueprintStudioUploadView(HomeAssistantView):
             _LOGGER.error("SFTP upload failed: %s", e)
             return json_response({"success": False, "message": str(e)})
 
-    async def _upload_local_folder(self, file_path, file_data, mode, overwrite):
-        """Extract uploaded ZIP bytes to a local folder."""
-        return await self.file.upload_folder_bytes(file_path, file_data, mode, overwrite)
+    async def _upload_local_folder(self, file_path, upload_path, mode, overwrite):
+        """Extract a disk-backed ZIP upload to a local folder."""
+        return await self.file.upload_folder_path(file_path, upload_path, mode, overwrite)
 
-    async def _upload_sftp_folder(self, hass, connection, file_path, file_data, mode, overwrite):
+    async def _upload_sftp_folder(self, hass, connection, file_path, upload_path, mode, overwrite):
         """Extract uploaded ZIP bytes to a remote SFTP folder."""
         host = connection.get("host", "")
         port = int(connection.get("port", 22))
@@ -549,7 +748,7 @@ class BlueprintStudioUploadView(HomeAssistantView):
             return json_message("Missing SFTP connection parameters", status_code=400)
 
         def _extract():
-            return self.sftp.upload_folder_bytes(host, port, username, auth, file_path, file_data, mode, overwrite)
+            return self.sftp.upload_folder_path(host, port, username, auth, file_path, upload_path, mode, overwrite)
 
         try:
             result = await hass.async_add_executor_job(_extract)

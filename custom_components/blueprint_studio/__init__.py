@@ -6,25 +6,17 @@ import logging
 from pathlib import Path
 
 from homeassistant.components import frontend
-try:
-    from homeassistant.components.http import StaticPathConfig
-except ImportError:
-    # Fallback for HA < 2024.7
-    class StaticPathConfig:
-        """Shim for StaticPathConfig for older HA versions."""
-        def __init__(self, url_path: str, path: str, cache_headers: bool) -> None:
-            self.url_path = url_path
-            self.path = path
-            self.cache_headers = cache_headers
+from homeassistant.components.http import StaticPathConfig
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import config_validation as cv
-from homeassistant.helpers.storage import Store
 
 from .const import DOMAIN, NAME, VERSION
 from .backend.api import BlueprintStudioApiView, BlueprintStudioStreamView, BlueprintStudioUploadView
 from .backend.api_terminal import TerminalWebSocketView
+from .backend.runtime import BlueprintStudioRuntime
+from .backend.storage import CURRENT_STORAGE_VERSION
 from .backend.websocket import async_register_websockets
 
 # Import for service worker view
@@ -34,8 +26,9 @@ from homeassistant.components.http import HomeAssistantView
 _LOGGER = logging.getLogger(__name__)
 
 # Storage version for credentials
-STORAGE_VERSION = 1
+STORAGE_VERSION = CURRENT_STORAGE_VERSION
 STORAGE_KEY = f"{DOMAIN}.credentials"
+_REGISTRATION_KEY = "_global_registration"
 
 
 def _read_and_replace(file_path: str) -> str:
@@ -113,6 +106,112 @@ class BlueprintStudioPanelView(HomeAssistantView):
         return await _serve_file_with_headers(self.html_path, "text/html", {"Cache-Control": "no-cache"})
 
 
+class BlueprintStudioGlobalRegistration:
+    """Own process-lifetime routes and bind them to the active runtime."""
+
+    def __init__(
+        self,
+        api: BlueprintStudioApiView,
+        stream: BlueprintStudioStreamView,
+        upload: BlueprintStudioUploadView,
+        terminal: TerminalWebSocketView,
+    ) -> None:
+        self.api = api
+        self.stream = stream
+        self.upload = upload
+        self.terminal = terminal
+        self.active_runtime: BlueprintStudioRuntime | None = None
+        self.panel_registered = False
+
+    def activate(self, runtime: BlueprintStudioRuntime) -> None:
+        """Route new requests to the current config-entry runtime."""
+        self.api.activate(
+            runtime.store,
+            runtime.data,
+            runtime.git,
+            runtime.ai,
+            runtime.file,
+            runtime.sftp,
+            runtime.terminal,
+            runtime.operations,
+            runtime.tickets,
+            runtime.coordinator,
+        )
+        self.stream.activate(runtime.file, runtime.sftp, runtime.operations, runtime.tickets)
+        self.upload.activate(runtime.file, runtime.sftp, runtime.operations)
+        self.terminal.activate(runtime.terminal, runtime.tickets)
+        self.active_runtime = runtime
+
+    def deactivate(self, runtime: BlueprintStudioRuntime) -> None:
+        """Stop accepting requests for an unloading runtime."""
+        if self.active_runtime is not runtime:
+            return
+        self.api.deactivate()
+        self.stream.deactivate()
+        self.upload.deactivate()
+        self.terminal.deactivate()
+        self.active_runtime = None
+
+
+async def _async_get_or_register_global_routes(
+    hass: HomeAssistant,
+    runtime: BlueprintStudioRuntime,
+) -> BlueprintStudioGlobalRegistration:
+    """Register permanent HA routes once, then reuse them across reloads."""
+    domain_data = hass.data.setdefault(DOMAIN, {})
+    existing = domain_data.get(_REGISTRATION_KEY)
+    if isinstance(existing, BlueprintStudioGlobalRegistration):
+        existing.activate(runtime)
+        return existing
+
+    config_dir = Path(hass.config.config_dir)
+    api_view = BlueprintStudioApiView(
+        config_dir,
+        runtime.store,
+        runtime.data,
+        git=runtime.git,
+        ai=runtime.ai,
+        file=runtime.file,
+        sftp=runtime.sftp,
+        terminal=runtime.terminal,
+        operations=runtime.operations,
+        tickets=runtime.tickets,
+    )
+    stream_view = BlueprintStudioStreamView(runtime.file, runtime.sftp, runtime.operations, runtime.tickets)
+    upload_view = BlueprintStudioUploadView(runtime.file, runtime.sftp, runtime.operations)
+    terminal_view = TerminalWebSocketView(runtime.terminal, runtime.tickets)
+
+    for view in (api_view, stream_view, upload_view, terminal_view):
+        hass.http.register_view(view)
+
+    sw_path = str(hass.config.path("custom_components", DOMAIN, "www", "service-worker.js"))
+    html_path = str(hass.config.path("custom_components", DOMAIN, "www", "panels", "panel_custom.html"))
+    hass.http.register_view(ServiceWorkerView(sw_path))
+    hass.http.register_view(BlueprintStudioPWAView(html_path))
+    hass.http.register_view(BlueprintStudioPanelView(html_path))
+
+    async_register_websockets(hass)
+
+    url_path = f"/local/{DOMAIN}"
+    path_on_disk = str(hass.config.path("custom_components", DOMAIN, "www"))
+    if hasattr(hass.http, "async_register_static_paths"):
+        await hass.http.async_register_static_paths([
+            StaticPathConfig(url_path=url_path, path=path_on_disk, cache_headers=False)
+        ])
+    elif hasattr(hass.http, "register_static_path"):
+        hass.http.register_static_path(url_path, path_on_disk, False)
+    else:
+        _LOGGER.error("Failed to register static path: No registration method found on hass.http")
+
+    registration = BlueprintStudioGlobalRegistration(
+        api_view, stream_view, upload_view, terminal_view
+    )
+    registration.activate(runtime)
+    domain_data[_REGISTRATION_KEY] = registration
+    _LOGGER.info("Blueprint Studio: global HTTP, WebSocket, and static routes registered")
+    return registration
+
+
 # This integration is configured via config entries (UI)
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
@@ -124,102 +223,50 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Blueprint Studio from a config entry."""
     hass.data.setdefault(DOMAIN, {})
-    hass.data[DOMAIN][entry.entry_id] = {}
+    runtime = await BlueprintStudioRuntime.async_create(hass, STORAGE_KEY)
+    entry.runtime_data = runtime
+    hass.data[DOMAIN][entry.entry_id] = runtime
 
-    # Initialize credential storage
-    store = Store(hass, STORAGE_VERSION, STORAGE_KEY)
-    data = await store.async_load() or {}
-
-    # Migrate legacy credentials (flat structure -> nested)
-    if "username" in data and "credentials" not in data:
-        data = {
-            "credentials": {
-                "username": data.pop("username"),
-                "token": data.pop("token", None)
-            },
-            "settings": data.get("settings", {})
-        }
-
-    config_dir = Path(hass.config.config_dir)
-    api_view = BlueprintStudioApiView(config_dir, store, data)
-    hass.http.register_view(api_view)
-
-    # Register streaming view for serve_file/download_folder (requires_auth=False, validates token manually)
-    stream_view = BlueprintStudioStreamView(api_view.file, api_view.sftp)
-    hass.http.register_view(stream_view)
-
-    # Register multipart upload view for large binary files (bypasses 16MB JSON body limit)
-    upload_view = BlueprintStudioUploadView(api_view.file, api_view.sftp)
-    hass.http.register_view(upload_view)
-
-    # Register terminal WebSocket on its own URL (requires_auth=False, validates token manually)
-    terminal_ws_view = TerminalWebSocketView()
-    hass.http.register_view(terminal_ws_view)
-
-    # Register custom service worker view with PWA headers
-    sw_path = str(hass.config.path("custom_components", DOMAIN, "www", "service-worker.js"))
-    sw_view = ServiceWorkerView(sw_path)
-    hass.http.register_view(sw_view)
-
-    # Register PWA view (standalone, not iframe) for installability
-    html_path = str(hass.config.path("custom_components", DOMAIN, "www", "panels", "panel_custom.html"))
-    pwa_view = BlueprintStudioPWAView(html_path)
-    hass.http.register_view(pwa_view)
-
-    # Register panel view with version injection (used by iframe)
-    panel_view = BlueprintStudioPanelView(html_path)
-    hass.http.register_view(panel_view)
-    _LOGGER.info("Blueprint Studio: PWA views registered (standalone mode enabled)")
+    registration = await _async_get_or_register_global_routes(hass, runtime)
 
     # Subscribe file manager to HA folder-watcher events so the list_all
     # cache is invalidated immediately on any file change, not just on TTL.
-    api_view.file.hass = hass
-    api_view.file.subscribe_to_ha_events()
+    if unsubscribe := runtime.file.subscribe_to_ha_events():
+        runtime.add_unsubscriber(unsubscribe)
 
     # Defer git status check — don't block HA startup waiting for git subprocess
     async def _deferred_git_check():
         try:
-            api_view.git.hass = hass
-            await api_view.git.get_status()
+            await runtime.git.get_status()
         except Exception:
             pass  # Non-critical; the panel will fetch status on first open
 
-    hass.async_create_task(_deferred_git_check())
+    runtime.create_task(_deferred_git_check())
 
-    # Register WebSocket commands
-    async_register_websockets(hass)
-
-    # Register Static Paths with fallback for different HA versions
-    url_path = f"/local/{DOMAIN}"
-    path_on_disk = str(hass.config.path("custom_components", DOMAIN, "www"))
-    
-    if hasattr(hass.http, "async_register_static_paths"):
-        await hass.http.async_register_static_paths([
-            StaticPathConfig(
-                url_path=url_path,
-                path=path_on_disk,
-                cache_headers=False,
-            )
-        ])
-    elif hasattr(hass.http, "register_static_path"):
-        hass.http.register_static_path(url_path, path_on_disk, False)
-    else:
-        _LOGGER.error("Failed to register static path: No registration method found on hass.http")
-
-    frontend.async_register_built_in_panel(
-        hass,
-        component_name="iframe",
-        sidebar_title=NAME,
-        sidebar_icon="mdi:file-document-edit",
-        frontend_url_path=DOMAIN,
-        config={"url": f"/{DOMAIN}/panel"},
-        require_admin=True,
-    )
+    if not registration.panel_registered:
+        frontend.async_register_built_in_panel(
+            hass,
+            component_name="iframe",
+            sidebar_title=NAME,
+            sidebar_icon="mdi:file-document-edit",
+            frontend_url_path=DOMAIN,
+            config={"url": f"/{DOMAIN}/panel"},
+            require_admin=True,
+        )
+        registration.panel_registered = True
 
     return True
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
-    frontend.async_remove_panel(hass, DOMAIN)
+    runtime = hass.data[DOMAIN].get(entry.entry_id)
+    if isinstance(runtime, BlueprintStudioRuntime):
+        registration = hass.data[DOMAIN].get(_REGISTRATION_KEY)
+        if isinstance(registration, BlueprintStudioGlobalRegistration):
+            registration.deactivate(runtime)
+            if registration.panel_registered:
+                frontend.async_remove_panel(hass, DOMAIN)
+                registration.panel_registered = False
+        await runtime.async_shutdown()
     hass.data[DOMAIN].pop(entry.entry_id, None)
     return True

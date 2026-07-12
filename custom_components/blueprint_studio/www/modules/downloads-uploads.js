@@ -1,7 +1,7 @@
 import { t } from './translations.js';
 /** DOWNLOADS-UPLOADS.JS | Purpose: File transfers - download files/folders, upload files via drag-drop */
 import { state, elements } from './state.js';
-import { fetchWithAuth, downloadFileUrl, downloadFolderUrl, getAuthToken, urlWithToken } from './api.js';
+import { fetchWithAuth, downloadFileUrl, downloadFolderUrl, getAuthToken, urlWithTicket } from './api.js';
 import { eventBus } from './event-bus.js';
 import { API_BASE, STREAM_BASE, UPLOAD_BASE } from './constants.js';
 import { 
@@ -156,7 +156,7 @@ export async function downloadSelectedItems() {
       throw new Error(result?.message || "Failed to prepare selected items download");
     }
 
-    const url = await urlWithToken(
+    const url = await urlWithTicket(
       `${STREAM_BASE}?action=download_multi&stream_id=${encodeURIComponent(result.stream_id)}&_t=${Date.now()}`
     );
     const a = document.createElement("a");

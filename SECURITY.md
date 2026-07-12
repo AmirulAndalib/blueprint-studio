@@ -112,6 +112,17 @@ The following are **out of scope**:
 
 ## Security Update Policy
 
+## Backend Security Model
+
+Backend operations require an active Home Assistant administrator. JSON and
+upload routes use Home Assistant authentication; direct stream and terminal
+connections consume short-lived, single-use tickets scoped to the issuing user
+and exact resource. Local paths are resolved below the configuration directory,
+including symlink resolution, and ZIP members reject traversal and absolute
+paths. Logs and diagnostics exclude credentials, tokens, tickets, private keys,
+file contents, and full paths. See `BACKEND_ARCHITECTURE.md` for runtime and
+transfer ownership details.
+
 When a security vulnerability is identified:
 
 1. A security advisory will be created

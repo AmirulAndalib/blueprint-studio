@@ -3,7 +3,7 @@ import { eventBus } from './event-bus.js';
 import { enableLongPressContextMenu } from './utils.js';
 /** FILE-TREE.JS | Purpose: * Handles file tree rendering, folder expansion/collapse, drag & drop, */
 import { state, elements, gitState } from './state.js';
-import { fetchWithAuth, getAuthToken } from './api.js';
+import { fetchWithAuth, urlWithTicket } from './api.js';
 import { API_BASE, STREAM_BASE, IMAGE_EXTENSIONS } from './constants.js';
 import {
   showToast,
@@ -148,11 +148,8 @@ export async function performContentSearch() {
     return;
   }
 
-  // Get auth token for the stream request
-  const token = await getAuthToken() || "";
-  const url = `${STREAM_BASE}?action=search_stream&query=${encodeURIComponent(query)}&authorization=${encodeURIComponent(token)}`;
-
   try {
+    const url = await urlWithTicket(`${STREAM_BASE}?action=search_stream&query=${encodeURIComponent(query)}`);
     state.contentSearchResults = new Set();
 
     const response = await fetch(url);

@@ -4,6 +4,8 @@ from __future__ import annotations
 import logging
 import re
 import subprocess
+import asyncio
+import signal
 import shlex
 import os
 import shutil
@@ -99,12 +101,87 @@ class _TofuHostKeyPolicy:
             _LOGGER.warning("Terminal SSH: could not save known_hosts: %s", exc)
 
 
+class TerminalSession:
+    """Own one terminal WebSocket and its current PTY."""
+
+    def __init__(self, loop, websocket):
+        self.loop = loop
+        self.websocket = websocket
+        self.master_fd = None
+        self.pid = None
+
+    def set_pty(self, master_fd: int, pid: int) -> None:
+        """Track the current PTY after removing any previous one."""
+        self.close_pty()
+        self.master_fd = master_fd
+        self.pid = pid
+
+    def close_pty(self) -> None:
+        """Remove the reader and terminate the current PTY."""
+        master_fd, pid = self.master_fd, self.pid
+        self.master_fd = None
+        self.pid = None
+        if master_fd is None:
+            return
+        try:
+            self.loop.remove_reader(master_fd)
+        except (OSError, ValueError):
+            pass
+        # pid == -1 denotes a Paramiko-backed session, not a child process.
+        if pid is not None and pid != -1:
+            try:
+                os.kill(pid, signal.SIGTERM)
+                os.waitpid(pid, os.WNOHANG)
+            except OSError:
+                pass
+        try:
+            os.close(master_fd)
+        except OSError:
+            pass
+
+    async def async_close(self) -> None:
+        """Close the WebSocket and release its PTY."""
+        self.close_pty()
+        if not self.websocket.closed:
+            await self.websocket.close(code=1001, message=b"Integration unloading")
+
+
 class TerminalManager:
     """Manages secure terminal command execution."""
 
     def __init__(self, hass):
         """Initialize the terminal manager."""
         self.hass = hass
+        self._sessions = set()
+        self._closing = False
+
+    def create_session(self, websocket) -> TerminalSession:
+        """Register a live terminal session."""
+        if self._closing:
+            raise RuntimeError("Terminal manager is shutting down")
+        session = TerminalSession(self.hass.loop, websocket)
+        self._sessions.add(session)
+        return session
+
+    def release_session(self, session: TerminalSession) -> None:
+        """Release a terminal session after its request exits."""
+        session.close_pty()
+        self._sessions.discard(session)
+
+    async def async_close(self) -> None:
+        """Reject new sessions and close all active terminals."""
+        self._closing = True
+        sessions = tuple(self._sessions)
+        if sessions:
+            await asyncio.gather(
+                *(session.async_close() for session in sessions),
+                return_exceptions=True,
+            )
+        self._sessions.clear()
+
+    def diagnostics_snapshot(self) -> dict[str, int | bool]:
+        """Return terminal readiness without command or host details."""
+        return {"ready": not self._closing, "active_sessions": len(self._sessions)}
 
     def _parse_ssh_key(self, key_text: str, passphrase: str = None) -> tuple:
         """Parse SSH private key and return (key_object, key_type) tuple.
