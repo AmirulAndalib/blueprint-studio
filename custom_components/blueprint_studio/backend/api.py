@@ -314,6 +314,7 @@ class BlueprintStudioApiView(HomeAssistantView):
             "issue_connection_ticket": lambda d, h, u: self._issue_connection_ticket(d, u),
             # Settings
             "save_settings": lambda d, h, u: api_misc.save_settings(d, self.store, h, self.data),
+            "get_device_automations": lambda d, h, u: api_misc.get_device_automations(h, d),
             # Files
             "write_file": lambda d, h, u: api_files.write_file(self.file, d, h),
             "create_file": lambda d, h, u: api_files.create_file(self.file, d),

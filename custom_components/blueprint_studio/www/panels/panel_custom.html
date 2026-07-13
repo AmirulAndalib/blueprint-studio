@@ -10,6 +10,7 @@
 
   <link rel="manifest" href="/local/blueprint_studio/site.webmanifest?v={{VERSION}}">
   <link rel="apple-touch-icon" href="/local/blueprint_studio/icon.png">
+  <link rel="preload" href="/local/blueprint_studio/fonts/material-icons.woff2" as="font" type="font/woff2" crossorigin>
 
   <!-- CodeMirror (local) -->
   <link rel="stylesheet" href="/local/blueprint_studio/vendor/codemirror/css/codemirror.min.css?v={{VERSION}}">
@@ -765,7 +766,7 @@
 
   <!-- Command Palette Overlay -->
   <div class="command-palette-overlay" id="command-palette-overlay">
-    <div class="command-palette">
+    <div class="command-palette" role="dialog" aria-modal="true" aria-label="Command palette">
       <div class="command-palette-search">
         <input type="text" class="command-palette-input" id="command-palette-input" placeholder="Type a command..." autocomplete="off">
       </div>
@@ -777,14 +778,14 @@
   <!-- We'll use the existing modal system but add a specific body structure if needed -->
 
   <!-- Toast container -->
-  <div class="toast-container" id="toast-container"></div>
+  <div class="toast-container" id="toast-container" role="region" aria-label="Notifications" aria-live="polite"></div>
 
   <!-- Modal overlay -->
   <div class="modal-overlay" id="modal-overlay">
-    <div class="modal" id="modal">
+    <div class="modal" id="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" aria-describedby="modal-hint">
       <div class="modal-header">
         <span class="modal-title" id="modal-title">Modal Title</span>
-        <button class="modal-close" id="modal-close">
+        <button class="modal-close" id="modal-close" type="button" aria-label="Close dialog">
           <span class="material-icons">close</span>
         </button>
       </div>
@@ -892,7 +893,7 @@
   </div>
 
   <!-- Loading Overlay -->
-  <div class="loading-overlay visible" id="loading-overlay">
+  <div class="loading-overlay visible" id="loading-overlay" role="status" aria-live="polite" aria-label="Application loading">
     <div class="loading-content">
       <div class="loading-spinner"></div>
       <div class="loading-text" id="loading-text">Loading...</div>
@@ -901,10 +902,10 @@
 
   <!-- Donation Modal -->
   <div class="modal-overlay" id="modal-donation-overlay">
-    <div class="modal donation-modal" style="max-width: 540px;">
+    <div class="modal donation-modal" style="max-width: 540px;" role="dialog" aria-modal="true" aria-labelledby="donation-modal-title">
       <div class="modal-header">
-        <div class="modal-title">Support Development</div>
-        <button class="modal-close" id="btn-close-donation">
+        <div class="modal-title" id="donation-modal-title">Support Development</div>
+        <button class="modal-close" id="btn-close-donation" type="button" aria-label="Close support development dialog">
           <span class="material-icons">close</span>
         </button>
       </div>
@@ -979,10 +980,10 @@
 
   <!-- Support Modal -->
   <div class="modal-overlay" id="modal-support-overlay">
-    <div class="modal" style="max-width: 500px;">
+    <div class="modal" style="max-width: 500px;" role="dialog" aria-modal="true" aria-labelledby="support-modal-title">
       <div class="modal-header">
-        <div class="modal-title">Help & Support</div>
-        <button class="modal-close" id="btn-close-support">
+        <div class="modal-title" id="support-modal-title">Help & Support</div>
+        <button class="modal-close" id="btn-close-support" type="button" aria-label="Close help and support dialog">
           <span class="material-icons">close</span>
         </button>
       </div>

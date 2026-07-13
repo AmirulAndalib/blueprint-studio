@@ -1,0 +1,29 @@
+{
+  "stream": {
+    "method": "GET",
+    "route": "/api/blueprint_studio/stream",
+    "authentication": {"current": "single_use_ticket", "field": "ticket"},
+    "actions": ["serve_file", "download_folder", "download_multi", "search_stream", "sftp_serve_file"]
+  },
+  "upload": {
+    "method": "POST",
+    "route": "/api/blueprint_studio/upload",
+    "authentication": "home_assistant_admin_bearer",
+    "content_type": "multipart/form-data",
+    "fields": ["path", "overwrite", "extract_zip", "mode", "connection", "file"],
+    "defaults": {"overwrite": false, "extract_zip": false, "mode": "merge"},
+    "size_limit": null
+  },
+  "terminal": {
+    "route": "/api/blueprint_studio/terminal_ws",
+    "authentication": {"current": "single_use_ticket", "field": "ticket"},
+    "message_types": ["binary_input", "plain_text_input", "input", "resize", "ssh_password", "ssh_key"],
+    "resize_fixture": {"type": "resize", "rows": 24, "cols": 80},
+    "input_fixture": {"type": "input", "data": "pwd\n"},
+    "legacy_prefixes": ["__SSH_PASSWORD__", "__SSH_KEY__"]
+  },
+  "home_assistant_websocket": [
+    {"type": "blueprint_studio/subscribe_updates", "event": "blueprint_studio_update"},
+    {"type": "blueprint_studio/subscribe_settings", "event": "blueprint_studio_settings_changed"}
+  ]
+}

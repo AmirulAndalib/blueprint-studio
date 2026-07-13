@@ -11,6 +11,7 @@ import {
 import {
   loadEntities,
   loadServices,
+  loadRegistries,
   defineHAYamlMode,
   defineCSVMode,
   defineShowWhitespaceMode
@@ -279,7 +280,8 @@ export async function init() {
 
       // Load entities and services for autocomplete (independent)
       Promise.resolve().then(() => loadEntities()),
-      Promise.resolve().then(() => loadServices())
+      Promise.resolve().then(() => loadServices()),
+      Promise.resolve().then(() => loadRegistries())
     ]);
 
     // Display version if fetched successfully

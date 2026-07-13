@@ -182,8 +182,8 @@ async def get_entities(hass, data):
     except Exception:
         pass  # Graceful fallback — entities just won't have integration info
 
-    ensured = []   # entities from ensure_domains — always included
-    general = []   # everything else — capped
+    ensured = []   # entities from ensure_domains — returned first
+    general = []   # everything else
 
     for s in hass.states.async_all():
         eid = s.entity_id
@@ -221,10 +221,9 @@ async def get_entities(hass, data):
         else:
             general.append(entry)
 
-    # Always include all ensured entities, fill remaining cap with general entities
-    cap = 1000
-    remaining = max(0, cap - len(ensured))
-    entities = ensured + general[:remaining]
+    # Autocomplete must see every entity. Ensured domains are ordered first for
+    # callers that want their most relevant results at the front.
+    entities = ensured + general
 
     if use_cache:
         _HassCache.set(cache_key, entities)
@@ -314,6 +313,27 @@ async def get_floors(hass):
     except Exception as e:
         _LOGGER.debug("get_floors failed: %s", e)
         return json_response({"success": True, "floors": []})
+
+
+async def get_device_automations(hass, data):
+    """Return integration-provided automations for one selected device."""
+    from homeassistant.components.device_automation import (
+        DeviceAutomationType,
+        async_get_device_automations,
+    )
+
+    device_id = data["device_id"]
+    result = {}
+    for name, automation_type in (
+        ("trigger", DeviceAutomationType.TRIGGER),
+        ("condition", DeviceAutomationType.CONDITION),
+        ("action", DeviceAutomationType.ACTION),
+    ):
+        automations = await async_get_device_automations(
+            hass, automation_type, [device_id]
+        )
+        result[name] = automations.get(device_id, [])
+    return json_response({"success": True, "automations": result})
 
 
 async def reload_automations(hass):
@@ -632,4 +652,3 @@ def _parse_check_output(output: str, returncode: int, config_dir: str = "") -> d
         "output": output,
         "errors": errors,
     }
-

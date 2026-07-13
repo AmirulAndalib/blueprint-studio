@@ -1,0 +1,33 @@
+{
+  "method": "GET",
+  "route": "/api/blueprint_studio",
+  "authentication": "home_assistant_admin_bearer",
+  "common_errors": {
+    "missing_action": {"status": 400, "required_keys": ["message"]},
+    "unknown_action": {"status": 400, "required_keys": ["message"]},
+    "unauthenticated": {"status": 401, "body_type": "text"},
+    "non_admin": {"status": 403, "required_keys": ["message"]}
+  },
+  "actions": [
+    {"action": "list_files", "query": {"show_hidden": "false"}, "success": {"status": 200, "body_type": "array"}},
+    {"action": "list_all", "query": {"show_hidden": "false", "force": "false"}, "success": {"status": 200, "body_type": "array"}},
+    {"action": "list_directory", "query": {"path": "", "show_hidden": "false"}, "success": {"status": 200, "body_type": "object"}},
+    {"action": "list_git_files", "query": {}, "success": {"status": 200, "body_type": "array"}},
+    {"action": "read_file", "query": {"path": "configuration.yaml", "optional": "false"}, "success": {"status": 200, "body_type": "object"}},
+    {"action": "global_search", "query": {"query": "automation", "case_sensitive": "false", "use_regex": "false", "match_word": "false", "include": "", "exclude": ""}, "success": {"status": 200, "body_type": "array"}},
+    {"action": "get_file_stat", "query": {"path": "configuration.yaml"}, "success": {"status": 200, "body_type": "object"}},
+    {"action": "get_tree_snapshot", "query": {"show_hidden": "false"}, "success": {"status": 200, "body_type": "object"}},
+    {"action": "get_settings", "query": {}, "success": {"status": 200, "body_type": "object"}},
+    {"action": "get_version", "query": {}, "success": {"status": 200, "body_type": "object", "required_keys": ["ha_version", "integration_version", "is_haos"]}},
+    {"action": "get_devices", "query": {}, "success": {"status": 200, "body_type": "object", "required_keys": ["success", "devices"]}},
+    {"action": "get_areas", "query": {}, "success": {"status": 200, "body_type": "object", "required_keys": ["success", "areas"]}},
+    {"action": "get_labels", "query": {}, "success": {"status": 200, "body_type": "object", "required_keys": ["success", "labels"]}},
+    {"action": "get_floors", "query": {}, "success": {"status": 200, "body_type": "object", "required_keys": ["success", "floors"]}},
+    {"action": "get_themes", "query": {}, "success": {"status": 200, "body_type": "object", "required_keys": ["success", "themes"]}},
+    {"action": "get_addons", "query": {}, "success": {"status": 200, "body_type": "object", "required_keys": ["success", "addons"]}},
+    {"action": "get_services", "query": {}, "success": {"status": 200, "body_type": "object", "required_keys": ["success", "services"]}},
+    {"action": "zip_progress", "query": {"progress_id": "fixture-progress"}, "success": {"status": 200, "body_type": "object"}},
+    {"action": "run_config_check", "query": {}, "success": {"status": 200, "body_type": "object", "required_keys": ["success", "output", "errors"]}},
+    {"action": "list_hass_agents", "query": {}, "success": {"status": 200, "body_type": "object", "required_keys": ["success", "agents"]}}
+  ]
+}

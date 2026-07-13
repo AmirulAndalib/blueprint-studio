@@ -321,6 +321,32 @@ export function showToast(message, type = "success", duration = 3000, action = n
 // ============================================
 
 export let modalCallback = null;
+let modalReturnFocus = null;
+
+function rememberModalFocus() {
+  const activeElement = document.activeElement;
+  modalReturnFocus = activeElement instanceof HTMLElement ? activeElement : null;
+}
+
+function restoreModalFocus() {
+  const returnTarget = modalReturnFocus;
+  modalReturnFocus = null;
+  if (returnTarget?.isConnected) {
+    returnTarget.focus();
+  }
+}
+
+function focusModalControl(preferInput = false) {
+  setTimeout(() => {
+    if (!elements.modalOverlay?.classList.contains("visible")) return;
+    const target = preferInput && elements.modalInput?.style.display !== "none"
+      ? elements.modalInput
+      : elements.modalCancel?.style.display !== "none"
+        ? elements.modalCancel
+        : elements.modalConfirm;
+    target?.focus();
+  }, 0);
+}
 
 export const DEFAULT_MODAL_BODY_HTML = `
     <input type="text" class="modal-input" id="modal-input" placeholder="${t("modal.new_file_placeholder")}">
@@ -374,6 +400,7 @@ export function resetModalToDefault() {
 }
 
 export function showModal(options) {
+    rememberModalFocus();
     // Support both the previous positional-style call and new object-style
     const { 
         title, 
@@ -436,6 +463,7 @@ export function showModal(options) {
         elements.modalHint.textContent = hint || "";
         
         setTimeout(() => {
+            if (!elements.modalOverlay?.classList.contains("visible")) return;
             elements.modalInput.focus();
             if (elements.modalInput.value) {
                 const len = elements.modalInput.value.length;
@@ -445,6 +473,7 @@ export function showModal(options) {
     }
 
     elements.modalOverlay.classList.add("visible");
+    if (message || image) focusModalControl(false);
 
     return new Promise((resolve) => {
       modalCallback = resolve;
@@ -452,6 +481,7 @@ export function showModal(options) {
 }
 
 export function showConfirmDialog(options) {
+    rememberModalFocus();
     const { title, message, confirmText = t("modal.confirm_button"), cancelText = t("modal.cancel_button"), isDanger = false } = options;
 
     resetModalToDefault();
@@ -467,6 +497,7 @@ export function showConfirmDialog(options) {
     elements.modalCancel.className = "modal-btn secondary";
 
     elements.modalOverlay.classList.add("visible");
+    focusModalControl(false);
 
     return new Promise((resolve) => {
       let settled = false;
@@ -475,6 +506,7 @@ export function showConfirmDialog(options) {
         if (settled) return;
         settled = true;
         elements.modalOverlay.classList.remove("visible");
+        restoreModalFocus();
         resolve(value);
         cleanup();
       };
@@ -521,6 +553,7 @@ export function hideModal() {
       modalCallback(null);
       modalCallback = null;
     }
+    restoreModalFocus();
 }
 
 export function confirmModal() {
@@ -530,6 +563,7 @@ export function confirmModal() {
       modalCallback(value);
       modalCallback = null;
     }
+    restoreModalFocus();
 }
 
 export function initElements() {

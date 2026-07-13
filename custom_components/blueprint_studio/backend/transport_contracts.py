@@ -74,7 +74,7 @@ POST_ACTIONS = frozenset({
     "gitea_remove_remote", "gitea_create_repo", "ai_query", "ai_get_models",
     "github_create_repo", "github_set_default_branch", "github_device_flow_start",
     "github_device_flow_poll", "github_star", "github_follow", "restart_home_assistant",
-    "get_entities", "render_template", "call_service", "convert_to_blueprint",
+    "get_entities", "get_device_automations", "render_template", "call_service", "convert_to_blueprint",
     "parse_blueprint_inputs", "instantiate_blueprint", "reload_automations", "reload_yaml",
 })
 
@@ -125,6 +125,7 @@ _REQUIRED = {
     "github_device_flow_start": ("client_id",),
     "github_device_flow_poll": ("client_id", "device_code"),
     "render_template": ("template",), "call_service": ("domain", "service"),
+    "get_device_automations": ("device_id",),
     "convert_to_blueprint": ("content",), "parse_blueprint_inputs": ("content",),
     "instantiate_blueprint": ("content", "input_values", "name"), "reload_yaml": ("domain",),
     "sftp_read": ("path",), "sftp_write": ("path", "content"),
@@ -147,6 +148,10 @@ _BOOL_FIELDS = frozenset({
 _LIST_FIELDS = frozenset({"paths", "files", "domains"})
 _DICT_FIELDS = frozenset({"settings", "service_data", "input_values", "auth", "connection"})
 _INT_FIELDS = frozenset({"port", "rows", "cols", "limit", "max_results"})
+# These fields are required to be present, but an empty string is valid data.
+# Empty editor buffers must be writable and validatable, an empty replacement
+# deletes matches, and rendering an empty template is a valid HA operation.
+_EMPTY_STRING_FIELDS = frozenset({"content", "replacement", "template"})
 _ENUM_FIELDS = {
     "mode": frozenset({"merge", "replace"}),
     "resolution": frozenset({"ours", "theirs", "resolved"}),
@@ -167,7 +172,9 @@ def validate_action(action: Any, values: Mapping[str, Any], *, transport: str) -
     data = dict(values)
     schema = ACTION_SCHEMAS[action]
     for field in schema.required:
-        if field not in data or data[field] is None or data[field] == "":
+        if field not in data or data[field] is None or (
+            data[field] == "" and field not in _EMPTY_STRING_FIELDS
+        ):
             raise ValidationError(f"Missing required field: {field}")
         if field not in _LIST_FIELDS | _DICT_FIELDS and not isinstance(data[field], str):
             raise ValidationError(f"Field '{field}' must be a string")
