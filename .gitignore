@@ -58,8 +58,15 @@ dmypy.json
 /tests/
 /scripts/*
 
-# Planning
+# Internal development documentation
 /*_PLAN.md
+/*_ARCHITECTURE.md
+/*_CONTRACT.md
+/*_INVENTORY.md
+/*_CHECKLIST.md
+/*_BASELINE.md
+/*_PARITY.md
+/LIVE_*_TESTING.md
 
 # Home Assistant
 .storage/
