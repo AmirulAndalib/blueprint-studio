@@ -55,7 +55,11 @@ htmlcov/
 dmypy.json
 /artifacts/*
 /test/*
+/tests/
 /scripts/*
+
+# Planning
+/*_PLAN.md
 
 # Home Assistant
 .storage/
