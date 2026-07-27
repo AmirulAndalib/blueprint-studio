@@ -17,7 +17,7 @@ export const state = {
   explorerSearchLoading: false,
   isMobile: window.innerWidth <= MOBILE_BREAKPOINT,
   sidebarVisible: false,
-  activeSidebarView: "explorer", // Current active sidebar view (explorer, search, sftp)
+  activeSidebarView: "explorer", // Current active sidebar view (explorer, search, source-control, sftp)
   terminalVisible: false, // Terminal panel state
   sshHosts: [], // Saved SSH connections
   defaultSshHost: 'local', // Default SSH target ('local' or JSON string of host)
@@ -96,6 +96,8 @@ export const state = {
   tabSize: 2,
   indentWithTabs: false,
   sidebarWidth: 320,
+  aiSidebarWidth: 350,
+  terminalPanelHeight: 300,
   tabPosition: "top",
   terminalIntegrationEnabled: true,
   wordWrap: true,

@@ -2,6 +2,7 @@
 import { API_BASE } from './constants.js';
 import { fetchWithAuth } from './api.js';
 import { elements } from './state.js';
+import { closeDialog, openDialog } from './dialog-manager.js';
 
 /**
  * Opens GitHub issue form with bug report template
@@ -86,9 +87,13 @@ Add any other context, links, or references about the feature request here.
 /**
  * Shows keyboard shortcuts overlay
  */
-export function showShortcuts() {
+export function showShortcuts(options = {}) {
   if (elements.shortcutsOverlay) {
-    elements.shortcutsOverlay.classList.add("visible");
+    openDialog(elements.shortcutsOverlay, {
+      initialFocus: '#shortcuts-close',
+      returnFocus: options.returnFocus,
+      onRequestClose: hideShortcuts,
+    });
   }
 }
 
@@ -97,6 +102,6 @@ export function showShortcuts() {
  */
 export function hideShortcuts() {
   if (elements.shortcutsOverlay) {
-    elements.shortcutsOverlay.classList.remove("visible");
+    closeDialog(elements.shortcutsOverlay);
   }
 }

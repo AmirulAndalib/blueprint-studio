@@ -10,6 +10,7 @@
       z-index: 10000; /* Higher than loading overlay (9999) */
       align-items: center;
       justify-content: center;
+      overscroll-behavior: contain;
       padding: 20px;
     }
 
@@ -70,6 +71,12 @@
     .modal-close:hover {
       background: var(--bg-hover);
       color: var(--text-primary);
+    }
+
+    .modal-close-icon {
+      font-size: 16px;
+      height: 16px;
+      width: 16px;
     }
 
     .modal-body {
@@ -204,6 +211,11 @@
       color: var(--text-secondary);
     }
 
+    .context-menu-icon {
+      height: 18px;
+      width: 18px;
+    }
+
     .context-menu-item.danger .material-icons {
       color: var(--error-color);
     }
@@ -240,6 +252,11 @@
       transition: opacity 0.18s ease, transform 0.18s ease, filter 0.18s ease;
       pointer-events: auto;
       overflow: hidden;
+    }
+
+    .toast.dismissing {
+      opacity: 0;
+      transform: translateX(100%);
     }
 
     .toast.success { background: linear-gradient(135deg, color-mix(in srgb, var(--success-color) 14%, var(--bg-secondary)), var(--bg-secondary)); }
@@ -381,6 +398,24 @@
       flex-shrink: 0;
     }
 
+    .theme-trigger-icon {
+      font-size: 14px;
+      height: 14px;
+      width: 14px;
+    }
+
+    .status-connection-icon {
+      font-size: 14px;
+      height: 14px;
+      width: 14px;
+    }
+
+    .theme-menu-icon {
+      font-size: 16px;
+      height: 16px;
+      width: 16px;
+    }
+
     /* Command Palette */
     .command-palette-overlay {
         position: fixed;
@@ -433,6 +468,12 @@
         overflow-y: auto;
     }
 
+    .mobile-command-icon {
+      font-size: 20px;
+      height: 20px;
+      width: 20px;
+    }
+
     .command-item {
         padding: 10px 16px;
         display: flex;
@@ -446,6 +487,15 @@
         background: var(--bg-hover);
     }
 
+    .command-item.is-disabled {
+        cursor: not-allowed;
+    }
+
+    .command-item.is-disabled .command-item-name,
+    .command-item.is-disabled .command-item-icon {
+        color: var(--text-muted);
+    }
+
     .command-item.selected {
         border-left: 3px solid var(--accent-color);
     }
@@ -454,10 +504,51 @@
         display: flex;
         align-items: center;
         gap: 12px;
+        min-width: 0;
+    }
+
+    .command-item-text {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+        min-width: 0;
+    }
+
+    .command-item-name,
+    .command-item-metadata {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .command-item-metadata {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--text-muted);
+        font-size: 11px;
+    }
+
+    .command-item-status::before,
+    .command-item-disabled-reason::before {
+        content: '';
+        display: inline-block;
+        width: 5px;
+        height: 5px;
+        margin-right: 5px;
+        border-radius: 50%;
+        background: var(--success-color);
+        vertical-align: 1px;
+    }
+
+    .command-item-disabled-reason::before {
+        background: var(--warning-color);
     }
 
     .command-item-icon {
         color: var(--text-secondary);
+        font-size: 24px;
+        height: 24px;
         width: 20px;
         display: flex;
         justify-content: center;
@@ -470,6 +561,24 @@
         background: var(--bg-tertiary);
         padding: 2px 6px;
         border-radius: 4px;
+        flex-shrink: 0;
+    }
+
+    @media (max-width: 520px) {
+        .command-item {
+            align-items: flex-start;
+        }
+
+        .command-item-metadata {
+            flex-wrap: wrap;
+            gap: 3px 8px;
+            overflow: visible;
+            white-space: normal;
+        }
+
+        .command-item-disabled-reason {
+            flex-basis: 100%;
+        }
     }
 
     /* Keyboard Shortcuts Overlay */
@@ -735,9 +844,11 @@
       font-weight: 600;
     }
 
-    .zip-progress-header .material-icons {
+    .zip-progress-icon {
       color: var(--accent-color);
       font-size: 18px;
+      height: 18px;
+      width: 18px;
       flex-shrink: 0;
     }
 
@@ -895,6 +1006,47 @@
         gap: 2px;
     }
 
+    .global-replace-toggle {
+        color: var(--text-secondary);
+        cursor: pointer;
+        transition: transform 0.2s;
+    }
+
+    .global-search-loading-icon {
+        color: var(--text-secondary);
+        display: none;
+        font-size: 16px;
+        height: 16px;
+        position: absolute;
+        right: 8px;
+        top: 50%;
+        width: 16px;
+    }
+
+    .global-search-loading-icon.active {
+        display: block;
+    }
+
+    .global-search-empty-icon {
+        font-size: 48px;
+        height: 48px;
+        margin-bottom: 16px;
+        opacity: 0.3;
+        width: 48px;
+    }
+
+    .search-replace-action-icon {
+        font-size: 16px;
+        height: 16px;
+        width: 16px;
+    }
+
+    .search-navigation-icon {
+        font-size: 24px;
+        height: 24px;
+        width: 24px;
+    }
+
     .search-actions button {
         background: transparent;
         border: none;
@@ -983,8 +1135,9 @@
       background: var(--bg-hover);
     }
 
-    .picker-option .material-icons {
+    .tab-size-picker-icon {
       font-size: 16px;
+      height: 16px;
       width: 16px;
       color: var(--accent-color);
     }
@@ -1095,6 +1248,39 @@
       font-family: monospace;
     }
 
+/* Settings icon presentation */
+.settings-host-icon,
+.settings-host-action-icon,
+.settings-info-icon {
+    font-size: 16px;
+    height: 16px;
+    width: 16px;
+}
+
+.settings-host-icon {
+    color: var(--content-secondary);
+    flex-shrink: 0;
+}
+
+.settings-info-icon {
+    color: var(--status-info);
+    vertical-align: middle;
+}
+
+.settings-external-link-icon {
+    font-size: 12px;
+    height: 12px;
+    margin-left: 2px;
+    width: 12px;
+}
+
+.settings-refresh-icon {
+    font-size: 14px;
+    height: 14px;
+    vertical-align: middle;
+    width: 14px;
+}
+
 /* ============================================================================
    Developer Tools Panel (.bdt-*)
    ============================================================================ */
@@ -1133,6 +1319,28 @@
 }
 .bdt-header:active { cursor: grabbing; }
 .bdt-header-icon { font-size: 18px; color: var(--accent-color, #89b4fa); flex-shrink: 0; }
+.bdt-action-empty-icon {
+    color: var(--text-muted, #6c7086);
+    display: block;
+    font-size: 36px;
+    height: 36px;
+    margin-bottom: 8px;
+    width: 36px;
+}
+.bdt-button-icon {
+    font-size: 15px;
+    height: 15px;
+    vertical-align: middle;
+    width: 15px;
+}
+.bdt-toolbar-icon,
+.bdt-section-icon {
+    font-size: 16px;
+    height: 16px;
+    vertical-align: middle;
+    width: 16px;
+}
+.bdt-section-icon { margin-right: 6px; }
 .bdt-title { font-size: 13px; font-weight: 600; color: var(--text-primary, #cdd6f4); flex-shrink: 0; }
 .bdt-tabs { display: flex; gap: 2px; margin-left: 8px; flex: 1; }
 .bdt-tab-btn {
@@ -1147,6 +1355,9 @@
   font-size: 14px; padding: 2px 6px; border-radius: 4px; line-height: 1; flex-shrink: 0;
 }
 .bdt-close:hover { color: var(--text-primary, #cdd6f4); background: var(--hover-bg, rgba(255,255,255,0.06)); }
+.bdt-close .ui-icon { width: 18px; height: 18px; font-size: 18px; }
+.bdt-tab-btn:focus-visible,
+.bdt-close:focus-visible { outline: 2px solid var(--focus-color); outline-offset: 1px; }
 
 .bdt-body { flex: 1; overflow: hidden; position: relative; }
 .bdt-pane { display: none; height: 100%; overflow: auto; padding: 12px; box-sizing: border-box; }
@@ -1173,6 +1384,14 @@
 .bdt-btn-ghost:hover { background: var(--hover-bg, rgba(255,255,255,0.06)); color: var(--text-primary); }
 
 .bdt-ok { color: var(--success-color, #a6e3a1); }
+
+.blueprint-form-heading-icon {
+  font-size: 1.1em;
+  height: 1.1em;
+  margin-right: 8px;
+  opacity: 0.7;
+  width: 1.1em;
+}
 .bdt-err { color: var(--error-color, #f38ba8); }
 
 /* ── Actions tab ── */
@@ -1430,3 +1649,60 @@
 .bdt-reload-status.bdt-ok { color: var(--success-color, #a6e3a1); }
 .bdt-reload-status.bdt-err { color: var(--error-color, #f38ba8); }
 .bdt-reload-status.bdt-loading { color: var(--text-muted, #6c7086); }
+    /* Compact operational context shared by repositories, SFTP, and terminal. */
+    .workspace-context {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      min-width: 0;
+      max-width: 100%;
+      padding: 2px 6px;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      background: transparent;
+      color: var(--text-secondary);
+      font: inherit;
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: 0;
+      line-height: 1.2;
+      text-transform: none;
+    }
+
+    button.workspace-context {
+      cursor: pointer;
+    }
+
+    button.workspace-context:hover {
+      border-color: var(--text-muted);
+      background: var(--bg-hover);
+      color: var(--text-primary);
+    }
+
+    button.workspace-context:focus-visible {
+      outline: 2px solid var(--focus-color);
+      outline-offset: 1px;
+    }
+
+    .workspace-context-dot {
+      width: 7px;
+      height: 7px;
+      flex: 0 0 7px;
+      border-radius: 50%;
+      background: var(--text-muted);
+    }
+
+    .workspace-context-dot[data-state="connected"] {
+      background: var(--success-color);
+    }
+
+    .workspace-context-dot[data-state="connecting"] {
+      background: var(--warning-color);
+    }
+
+    .workspace-context-label {
+      overflow: hidden;
+      min-width: 0;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }

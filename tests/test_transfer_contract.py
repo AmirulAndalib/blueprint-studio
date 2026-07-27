@@ -10,6 +10,8 @@ def test_multipart_upload_uses_disk_spool_instead_of_chunk_accumulation():
 
     assert 'tempfile.mkstemp(prefix="blueprint-upload-"' in source
     assert "await part.read_chunk(1024 * 1024)" in source
+    assert "request._client_max_size = sys.maxsize" in source
+    assert "request._client_max_size = 0" not in source
     assert "chunks.append(chunk)" not in source
     assert 'file_data = b"".join(chunks)' not in source
 

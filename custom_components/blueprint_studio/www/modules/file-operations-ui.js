@@ -8,7 +8,9 @@ import {
   showModal, 
   showConfirmDialog,
   confirmModal,
-  hideModal
+  hideModal,
+  activateSharedModal,
+  deactivateSharedModal
 } from './ui.js';
 
 /**
@@ -36,7 +38,7 @@ export function showInputModal({ title, placeholder, value, hint, confirmText })
       elements.modalCancel.textContent = t("modal.cancel_button");
 
       // Show Modal
-      elements.modalOverlay.classList.add("visible");
+      activateSharedModal({ initialFocus: elements.modalInput });
 
       // Focus Input
       setTimeout(() => {
@@ -51,7 +53,7 @@ export function showInputModal({ title, placeholder, value, hint, confirmText })
 
       // Handlers
       const cleanup = () => {
-          elements.modalOverlay.classList.remove("visible");
+          deactivateSharedModal();
           elements.modalConfirm.removeEventListener("click", handleConfirm);
           elements.modalCancel.removeEventListener("click", handleCancel);
           elements.modalClose.removeEventListener("click", handleCancel);

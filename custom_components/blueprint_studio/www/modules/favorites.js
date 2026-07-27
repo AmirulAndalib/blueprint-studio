@@ -68,12 +68,12 @@ export function renderFavoritesPanel() {
     item.innerHTML = `
       <div class="tree-chevron hidden"></div>
       <div class="tree-icon ${fileIcon.class}">
-        <span class="material-icons">${fileIcon.icon}</span>
+        <span class="ui-icon material-icons favorite-file-icon">${fileIcon.icon}</span>
       </div>
       <span class="tree-name">${fileName}</span>
       <div class="tree-item-actions">
         <button class="tree-action-btn" title="Unpin from favorites">
-          <span class="material-icons">push_pin</span>
+          <span class="ui-icon material-icons favorite-unpin-icon">push_pin</span>
         </button>
       </div>
     `;

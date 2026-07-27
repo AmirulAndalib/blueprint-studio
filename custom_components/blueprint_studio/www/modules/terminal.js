@@ -5,9 +5,15 @@ import { eventBus } from './event-bus.js';
 import { loadScript } from './utils.js';
 import { API_BASE } from './constants.js';
 import { showToast, showModal, showConfirmDialog } from './ui.js';
-import { saveSettings } from './settings.js';
+import { saveSettings } from './settings.js?v=2.5.75';
+import { setOverflowTooltip } from './tooltip.js?v=2.5.75';
 import { t } from './translations.js';
 import { issueConnectionTicket } from './api.js';
+import {
+    constrainTerminalHeight,
+    getTerminalMaxHeight,
+    TERMINAL_MIN_HEIGHT,
+} from './workspace-layout.js';
 
 let term = null;
 let fitAddon = null;
@@ -18,6 +24,11 @@ let tabBtn = null;
 let closeBtn = null;
 let sshSelect = null;
 let initPromise = null;
+let terminalStatus = null;
+let terminalScope = null;
+let reconnectBtn = null;
+let reconnectTimer = null;
+let activeTerminalScope = 'Local';
 
 function insertTerminalIntoBody() {
   const statusBar = document.querySelector('.status-bar');
@@ -26,6 +37,25 @@ function insertTerminalIntoBody() {
   } else {
     document.body.appendChild(terminalContainer);
   }
+}
+
+function setTerminalConnectionState(status, label, scope = activeTerminalScope) {
+    activeTerminalScope = scope || 'Local';
+    if (terminalContainer) terminalContainer.dataset.connectionState = status;
+    if (terminalStatus) {
+        terminalStatus.dataset.status = status;
+        terminalStatus.textContent = label;
+    }
+    if (terminalScope) {
+        terminalScope.textContent = activeTerminalScope;
+        terminalScope.setAttribute('aria-label', activeTerminalScope);
+        setOverflowTooltip(terminalScope, activeTerminalScope);
+    }
+    if (reconnectBtn) {
+        const pending = status === 'connecting' || status === 'reconnecting';
+        reconnectBtn.disabled = pending;
+        reconnectBtn.setAttribute('aria-busy', String(pending));
+    }
 }
 
 /**
@@ -105,31 +135,42 @@ export async function initTerminal() {
         terminalContainer = document.createElement("div");
         terminalContainer.id = 'terminal-panel';
         terminalContainer.className = 'terminal-panel';
-        terminalContainer.style.cssText = `
-            height: 300px;
-            min-height: 100px;
-            background: var(--bg-primary);
-            border-top: 1px solid var(--border-color);
-            flex-shrink: 0;
-            display: ${state.terminalVisible ? 'flex' : 'none'};
-            flex-direction: column;
-        `;
+        terminalContainer.classList.toggle('hidden', !state.terminalVisible);
+        terminalContainer.style.height = `${constrainTerminalHeight(state.terminalPanelHeight)}px`;
 
         // Resize Handle
         const resizeHandle = document.createElement('div');
         resizeHandle.id = 'terminal-resize-handle';
-        resizeHandle.style.cssText = `
-            height: 4px;
-            cursor: row-resize;
-            background: transparent;
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            z-index: 10;
-        `;
+        resizeHandle.className = 'terminal-resize-handle';
+        resizeHandle.setAttribute('role', 'separator');
+        resizeHandle.setAttribute('aria-label', 'Resize terminal panel');
+        resizeHandle.setAttribute('aria-orientation', 'horizontal');
+        resizeHandle.setAttribute('aria-controls', 'xterm-container');
+        resizeHandle.tabIndex = 0;
+        const applyPanelHeight = (height) => {
+            const nextHeight = constrainTerminalHeight(height);
+            terminalContainer.style.height = `${nextHeight}px`;
+            resizeHandle.setAttribute('aria-valuemin', String(TERMINAL_MIN_HEIGHT));
+            resizeHandle.setAttribute('aria-valuemax', String(getTerminalMaxHeight()));
+            resizeHandle.setAttribute('aria-valuenow', String(Math.round(nextHeight)));
+            safeFit();
+            return nextHeight;
+        };
         resizeHandle.addEventListener('mousedown', initDrag);
         resizeHandle.addEventListener('touchstart', initTouchDrag, { passive: false });
+        resizeHandle.addEventListener('keydown', (event) => {
+            const currentHeight = terminalContainer.getBoundingClientRect().height;
+            const step = event.shiftKey ? 40 : 10;
+            let nextHeight = currentHeight;
+            if (event.key === 'ArrowUp') nextHeight += step;
+            else if (event.key === 'ArrowDown') nextHeight -= step;
+            else if (event.key === 'Home') nextHeight = TERMINAL_MIN_HEIGHT;
+            else if (event.key === 'End') nextHeight = getTerminalMaxHeight();
+            else return;
+            event.preventDefault();
+            state.terminalPanelHeight = Math.round(applyPanelHeight(nextHeight));
+            saveSettings();
+        });
         terminalContainer.appendChild(resizeHandle);
 
         function initDrag(e) {
@@ -150,11 +191,7 @@ export async function initTerminal() {
         function doDrag(e) {
             const clientY = e.touches ? e.touches[0].clientY : e.clientY;
             const rect = terminalContainer.getBoundingClientRect();
-            const newHeight = rect.bottom - clientY;
-            if (newHeight > 100 && newHeight < window.innerHeight - 50) {
-                terminalContainer.style.height = newHeight + 'px';
-                safeFit();
-            }
+            applyPanelHeight(rect.bottom - clientY);
         }
 
         function stopDrag() {
@@ -163,67 +200,83 @@ export async function initTerminal() {
             window.removeEventListener('touchmove', doDrag);
             window.removeEventListener('touchend', stopDrag);
             document.body.style.cursor = '';
+            state.terminalPanelHeight = Math.round(terminalContainer.getBoundingClientRect().height);
+            saveSettings();
             safeFit();
         }
 
         // Header
         const header = document.createElement('div');
         header.id = 'terminal-header';
-        header.style.cssText = `
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 4px 12px;
-            background: var(--bg-secondary);
-            border-bottom: 1px solid var(--border-color);
-            height: 32px;
-        `;
+        header.className = 'terminal-header';
         
-        const title = document.createElement('span');
-        title.innerHTML = '<span class="material-icons" style="font-size:14px; vertical-align:text-bottom; margin-right:6px">terminal</span>Terminal';
-        title.style.fontSize = '12px';
-        title.style.fontWeight = '500';
-        title.style.flex = '1';
+        const identity = document.createElement('div');
+        identity.className = 'terminal-identity';
+        identity.innerHTML = `
+          <span class="ui-icon material-icons terminal-title-icon" aria-hidden="true">terminal</span>
+          <span class="terminal-title">Terminal</span>
+        `;
+
+        terminalScope = document.createElement('span');
+        terminalScope.className = 'terminal-scope';
+        terminalScope.textContent = activeTerminalScope;
+        terminalScope.tabIndex = 0;
+        terminalScope.setAttribute('aria-label', activeTerminalScope);
+        setOverflowTooltip(terminalScope, activeTerminalScope);
+        identity.appendChild(terminalScope);
+
+        const connection = document.createElement('div');
+        connection.className = 'terminal-connection';
+        const connectionDot = document.createElement('span');
+        connectionDot.className = 'terminal-connection-dot';
+        connectionDot.setAttribute('aria-hidden', 'true');
+        terminalStatus = document.createElement('span');
+        terminalStatus.className = 'terminal-connection-label';
+        terminalStatus.setAttribute('role', 'status');
+        terminalStatus.setAttribute('aria-live', 'polite');
+        terminalStatus.textContent = 'Connecting';
+        connection.append(connectionDot, terminalStatus);
         
         const actionsDiv = document.createElement('div');
-        actionsDiv.style.display = 'flex';
-        actionsDiv.style.gap = '4px';
+        actionsDiv.className = 'terminal-header-actions';
+
+        reconnectBtn = document.createElement('button');
+        reconnectBtn.type = 'button';
+        reconnectBtn.innerHTML = '<span class="ui-icon material-icons">refresh</span>';
+        reconnectBtn.title = 'Reconnect terminal';
+        reconnectBtn.setAttribute('aria-label', 'Reconnect terminal');
+        reconnectBtn.className = 'ui-button ui-icon-button terminal-header-btn';
+        reconnectBtn.onclick = () => connectSocket({ reconnecting: true });
 
         tabBtn = document.createElement('button');
-        tabBtn.innerHTML = '<span class="material-icons">open_in_new</span>';
+        tabBtn.type = 'button';
+        tabBtn.innerHTML = '<span class="ui-icon material-icons">open_in_new</span>';
         tabBtn.title = t("terminal.move_to_tab");
-        tabBtn.className = 'icon-btn';
-        tabBtn.style.cssText = 'background:none; border:none; color:var(--text-secondary); cursor:pointer; padding:2px;';
+        tabBtn.setAttribute('aria-label', t("terminal.move_to_tab"));
+        tabBtn.className = 'ui-button ui-icon-button terminal-header-btn';
         tabBtn.onclick = () => eventBus.emit('terminal:open-tab');
 
         closeBtn = document.createElement('button');
-        closeBtn.innerHTML = '<span class="material-icons">close</span>';
+        closeBtn.type = 'button';
+        closeBtn.innerHTML = '<span class="ui-icon material-icons">close</span>';
         closeBtn.title = t("terminal.close_panel");
-        closeBtn.className = 'icon-btn';
-        closeBtn.style.cssText = 'background:none; border:none; color:var(--text-secondary); cursor:pointer; padding:2px;';
+        closeBtn.setAttribute('aria-label', t("terminal.close_panel"));
+        closeBtn.className = 'ui-button ui-icon-button terminal-header-btn';
         closeBtn.onclick = () => eventBus.emit('terminal:toggle', false);
 
+        actionsDiv.appendChild(reconnectBtn);
         actionsDiv.appendChild(tabBtn);
         actionsDiv.appendChild(closeBtn);
 
-        header.appendChild(title);
+        header.appendChild(identity);
+        header.appendChild(connection);
 
         // SSH Dropdown
         const sshDiv = document.createElement('div');
-        sshDiv.style.marginRight = '8px';
+        sshDiv.className = 'terminal-ssh-control';
         sshSelect = document.createElement('select');
-        sshSelect.className = 'ssh-select';
-        sshSelect.style.cssText = `
-            background: var(--input-bg);
-            color: var(--text-primary);
-            border: 1px solid var(--border-color);
-            border-radius: 4px;
-            padding: 2px 4px;
-            font-size: 11px;
-            min-height: 44px;
-            max-width: 150px;
-            outline: none;
-        `;
+        sshSelect.className = 'ui-select ssh-select';
+        sshSelect.setAttribute('aria-label', 'Connect to SSH host');
         
         sshSelect.onchange = () => {
             const val = sshSelect.value;
@@ -233,6 +286,7 @@ export async function initTerminal() {
                 const cmd = buildSshCommand(host);
                 if (socket && socket.readyState === WebSocket.OPEN) {
                     socket.send(cmd + '\r');
+                    setTerminalConnectionState('connected', 'Connected', `SSH: ${host.name || host.host}`);
                     term.focus();
                 } else {
                     showToast(t("toast.terminal_not_connected"), "error");
@@ -251,7 +305,6 @@ export async function initTerminal() {
         // Terminal Div
         const termDiv = document.createElement('div');
         termDiv.id = 'xterm-container';
-        termDiv.style.cssText = 'flex: 1; padding: 4px; overflow: hidden; background: var(--bg-primary);';
         terminalContainer.appendChild(termDiv);
 
         insertTerminalIntoBody();
@@ -293,6 +346,7 @@ export async function initTerminal() {
         });
 
         window.addEventListener('resize', () => {
+            if (!isTerminalInTab) applyPanelHeight(state.terminalPanelHeight);
             if ((state.terminalVisible || isTerminalInTab) && fitAddon) {
                 safeFit();
             }
@@ -306,7 +360,12 @@ export async function initTerminal() {
     return initPromise;
 }
 
-async function connectSocket() {
+async function connectSocket(options = {}) {
+    if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+    }
+    setTerminalConnectionState(options.reconnecting ? 'reconnecting' : 'connecting', options.reconnecting ? 'Reconnecting' : 'Connecting');
     if (socket) {
         socket.onclose = null;
         socket.onerror = null;
@@ -320,7 +379,14 @@ async function connectSocket() {
         socket = null;
     }
 
-    const ticket = await issueConnectionTicket("terminal");
+    let ticket;
+    try {
+        ticket = await issueConnectionTicket("terminal");
+    } catch (error) {
+        setTerminalConnectionState('error', 'Connection failed');
+        showToast(`Terminal connection failed: ${error.message}`, 'error');
+        return;
+    }
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${protocol}//${window.location.host}${API_BASE}/terminal_ws?ticket=${encodeURIComponent(ticket)}`;
 
@@ -328,6 +394,7 @@ async function connectSocket() {
     socket.binaryType = 'arraybuffer';
 
     socket.onopen = () => {
+        setTerminalConnectionState('connected', 'Connected', 'Local');
         // Reset cursor key mode left over from the previous session.
         // \x1b[?1l disables application cursor key mode (DECCKM off) so arrow
         // keys send normal CSI sequences (^[[A/B/C/D) instead of SS3 (^[OA/B/C/D).
@@ -341,6 +408,7 @@ async function connectSocket() {
             try {
                 const host = JSON.parse(state.defaultSshHost);
                 const cmd = buildSshCommand(host);
+                setTerminalConnectionState('connected', 'Connected', `SSH: ${host.name || host.host}`);
                 term.write(`\x1b[1;34mAuto-connecting to ${host.name}...\x1b[0m\r\n`);
                 setTimeout(() => {
                     if (socket && socket.readyState === WebSocket.OPEN) {
@@ -364,11 +432,15 @@ async function connectSocket() {
     };
 
     socket.onclose = () => {
+        setTerminalConnectionState('disconnected', 'Disconnected');
+        if (!state.terminalIntegrationEnabled) return;
         term.write('\r\n\x1b[1;31mConnection closed. Reconnecting in 3s...\x1b[0m\r\n');
-        setTimeout(connectSocket, 3000);
+        setTerminalConnectionState('reconnecting', 'Reconnecting');
+        reconnectTimer = setTimeout(() => connectSocket({ reconnecting: true }), 3000);
     };
 
     socket.onerror = (error) => {
+        setTerminalConnectionState('error', 'Connection error');
         console.error('Terminal WebSocket error:', error);
     };
 }
@@ -420,49 +492,31 @@ export function setTerminalMode(mode) {
     const resizeHandle = document.getElementById('terminal-resize-handle');
 
     if (mode === 'tab') {
-        terminalContainer.style.cssText = `
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            height: 100%;
-            width: 100%;
-            z-index: 1;
-            background: var(--bg-primary);
-            display: flex;
-            flex-direction: column;
-            border-top: none;
-            box-shadow: none;
-        `;
+        terminalContainer.classList.add('terminal-panel--tab');
+        terminalContainer.classList.remove('hidden');
         
         if (header) header.style.display = 'flex';
         if (resizeHandle) resizeHandle.style.display = 'none';
 
         if (tabBtn) {
-            tabBtn.innerHTML = '<span class="material-icons">vertical_align_bottom</span>';
+            tabBtn.innerHTML = '<span class="ui-icon material-icons">vertical_align_bottom</span>';
             tabBtn.title = "Move to Bottom Panel";
+            tabBtn.setAttribute('aria-label', 'Move to Bottom Panel');
             tabBtn.onclick = () => eventBus.emit('terminal:close-tab');
         }
         if (closeBtn) closeBtn.style.display = 'none';
 
     } else {
-        terminalContainer.style.cssText = `
-            height: 300px;
-            min-height: 100px;
-            background: var(--bg-primary);
-            border-top: 1px solid var(--border-color);
-            flex-shrink: 0;
-            display: ${state.terminalVisible ? 'flex' : 'none'};
-            flex-direction: column;
-        `;
+        terminalContainer.classList.remove('terminal-panel--tab');
+        terminalContainer.classList.toggle('hidden', !state.terminalVisible);
         
         if (header) header.style.display = 'flex';
         if (resizeHandle) resizeHandle.style.display = 'block';
         
         if (tabBtn) {
-            tabBtn.innerHTML = '<span class="material-icons">open_in_new</span>';
+            tabBtn.innerHTML = '<span class="ui-icon material-icons">open_in_new</span>';
             tabBtn.title = "Move to Editor Tab";
+            tabBtn.setAttribute('aria-label', 'Move to Editor Tab');
             tabBtn.onclick = () => eventBus.emit('terminal:open-tab');
         }
         if (closeBtn) closeBtn.style.display = '';
@@ -476,6 +530,7 @@ export function setTerminalMode(mode) {
 
 export async function toggleTerminal(forceState = null) {
     if (!state.terminalIntegrationEnabled) return;
+    const wasInitialized = Boolean(term);
     if (!term) await initTerminal();
     
     if (isTerminalInTab) {
@@ -486,12 +541,12 @@ export async function toggleTerminal(forceState = null) {
 
     if (forceState !== null) {
         state.terminalVisible = forceState;
-    } else {
+    } else if (wasInitialized || !state.terminalVisible) {
         state.terminalVisible = !state.terminalVisible;
     }
 
     if (terminalContainer) {
-        terminalContainer.style.display = state.terminalVisible ? 'flex' : 'none';
+        terminalContainer.classList.toggle('hidden', !state.terminalVisible);
         if (state.terminalVisible) {
             if (terminalContainer.parentNode !== document.body) {
                 insertTerminalIntoBody();
@@ -531,13 +586,14 @@ export function updateSshDropdown() {
     sshSelect.innerHTML = "";
     const defaultOption = document.createElement('option');
     defaultOption.value = "";
-    defaultOption.text = t("ssh.connect");
+    defaultOption.text = 'Connect to SSH host...';
     sshSelect.appendChild(defaultOption);
     if (state.sshHosts) {
         state.sshHosts.forEach(host => {
             const opt = document.createElement('option');
             opt.value = JSON.stringify(host);
-            opt.text = host.name || `${host.username}@${host.host}`;
+            const name = host.name || host.host;
+            opt.text = `${name} - ${host.username}@${host.host}`;
             sshSelect.appendChild(opt);
         });
     }
@@ -561,8 +617,8 @@ async function showSshManager() {
                     <span style="font-size: 11px; color: var(--text-secondary);">${host.username}@${host.host}:${host.port}</span>
                 </div>
                 <div style="display: flex; gap: 4px;">
-                    <button class="icon-btn edit-ssh-btn" data-index="${index}" style="color: var(--accent-color); cursor: pointer; padding: 4px;"><span class="material-icons" style="font-size: 18px;">edit</span></button>
-                    <button class="icon-btn delete-ssh-btn" data-index="${index}" style="color: var(--error-color); cursor: pointer; padding: 4px;"><span class="material-icons" style="font-size: 18px;">delete</span></button>
+                    <button class="icon-btn edit-ssh-btn" data-index="${index}" style="color: var(--accent-color); cursor: pointer; padding: 4px;"><span class="ui-icon ui-icon--size-action material-icons">edit</span></button>
+                    <button class="icon-btn delete-ssh-btn" data-index="${index}" style="color: var(--error-color); cursor: pointer; padding: 4px;"><span class="ui-icon ui-icon--size-action material-icons">delete</span></button>
                 </div>
             </div>`;
         });
@@ -634,11 +690,17 @@ async function addSshHost(editIndex = null) {
 export function applyTerminalVisibility() {
     if (elements.btnTerminal) elements.btnTerminal.style.display = state.terminalIntegrationEnabled ? 'flex' : 'none';
     if (!state.terminalIntegrationEnabled) {
-        if (terminalContainer) terminalContainer.style.display = 'none';
+        if (terminalContainer) terminalContainer.classList.add('hidden');
         state.terminalVisible = false;
-        if (socket) { socket.close(); socket = null; }
+        if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+        if (socket) {
+            socket.onclose = null;
+            socket.close();
+            socket = null;
+        }
+        setTerminalConnectionState('disconnected', 'Disabled');
     } else if (terminalContainer && !isTerminalInTab) {
-        terminalContainer.style.display = state.terminalVisible ? 'flex' : 'none';
+        terminalContainer.classList.toggle('hidden', !state.terminalVisible);
     }
 }
 
@@ -649,7 +711,7 @@ export function openTerminalTab() {
       state.openTabs.push(tab);
     }
     state.terminalVisible = false;
-    if (terminalContainer) terminalContainer.style.display = 'none';
+    if (terminalContainer) terminalContainer.classList.add('hidden');
     eventBus.emit('tab:activate', { tab });
     eventBus.emit('ui:refresh-tabs');
 }
@@ -658,7 +720,7 @@ export function onTerminalTabClosed() {
     isTerminalInTab = false;
     state.terminalVisible = false;
     if (terminalContainer) {
-        terminalContainer.style.display = 'none';
+        terminalContainer.classList.add('hidden');
         setTerminalMode('panel');
     }
 }

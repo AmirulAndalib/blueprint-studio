@@ -781,14 +781,14 @@ export async function showBranchManager() {
     return `
       <tr data-branch="${b}" style="border-bottom: 1px solid var(--border-color);">
         <td style="padding: 8px 12px; display: flex; align-items: center; gap: 8px;">
-          <span class="material-icons" style="font-size: 16px; color: ${isCurrent ? 'var(--success-color)' : 'var(--text-secondary)'};">
+          <span class="git-branch-state-icon ui-icon ui-icon--size-sm ${isCurrent ? 'is-current' : ''} material-icons">
             ${isCurrent ? 'radio_button_checked' : 'radio_button_unchecked'}
           </span>
           <span style="font-weight: ${isCurrent ? '600' : '400'};">${b}</span>
           ${isCurrent ? '<span style="font-size: 10px; padding: 2px 6px; background: var(--success-color); color: white; border-radius: 10px;">current</span>' : ''}
         </td>
         <td style="padding: 8px 12px; color: var(--text-secondary); font-size: 12px;">
-          ${hasRemote ? '<span class="material-icons" style="font-size: 14px; vertical-align: middle;">cloud</span> remote' : 'local only'}
+          ${hasRemote ? '<span class="ui-icon ui-icon--size-xs ui-icon--align-middle material-icons">cloud</span> remote' : 'local only'}
         </td>
         <td style="padding: 8px 12px; text-align: right;">
           ${!isCurrent ? `
@@ -817,7 +817,7 @@ export async function showBranchManager() {
           display: flex; align-items: center; justify-content: space-between;
         ">
           <div style="display: flex; align-items: center; gap: 10px;">
-            <span class="material-icons" style="color: var(--accent-color);">account_tree</span>
+            <span class="ui-icon ui-icon--tone-accent material-icons">account_tree</span>
             <span style="font-weight: 600; font-size: 15px;">Branch Manager</span>
           </div>
           <div style="display: flex; gap: 8px; align-items: center;">
@@ -826,13 +826,13 @@ export async function showBranchManager() {
               border: none; border-radius: 4px; cursor: pointer; font-size: 13px;
               display: flex; align-items: center; gap: 6px;
             ">
-              <span class="material-icons" style="font-size: 16px;">add</span> New Branch
+              <span class="ui-icon ui-icon--size-sm material-icons">add</span> New Branch
             </button>
             <button id="btn-branch-manager-close" style="
               background: transparent; border: none; cursor: pointer; padding: 4px;
               color: var(--text-secondary);
             ">
-              <span class="material-icons">close</span>
+              <span class="ui-icon material-icons">close</span>
             </button>
           </div>
         </div>

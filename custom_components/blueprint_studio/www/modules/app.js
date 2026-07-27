@@ -229,10 +229,12 @@ import {
   gitPush,
   giteaStatus,
   checkGitStatusIfEnabled
-} from './coordinators/index.js';
+} from './coordinators/index.js?v=2.5.75';
 
 // Re-export everything for modules that still import from app.js
 export {
+  state,
+  elements,
   initializeEventHandlers,
   getAuthToken,
   gitStage,
@@ -455,4 +457,3 @@ export {
   giteaStatus,
   checkGitStatusIfEnabled
 };
-

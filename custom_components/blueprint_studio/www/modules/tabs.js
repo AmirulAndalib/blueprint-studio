@@ -11,15 +11,16 @@ import {
     disableSplitView,
     updatePaneSizes,
     initSplitResize
-} from './split-view.js';
+} from './split-view.js?v=2.5.75';
 import { cleanupMarkdownPreview } from './asset-preview.js';
+import { showConfirmDialog } from './ui.js';
 import { 
     getTerminalContainer, 
     initTerminal, 
     fitTerminal,
     toggleTerminal as toggleTerminalImpl,
     setTerminalMode
-} from './terminal.js';
+} from './terminal.js?v=2.5.75';
 import {
     createEditor,
     createSecondaryEditor,
@@ -43,12 +44,13 @@ import {
 } from './status-bar.js';
 import {
     saveSettings as saveSettingsImpl
-} from './settings.js';
+} from './settings.js?v=2.5.75';
 import {
     isSftpPath as isSftpPathImpl,
     parseSftpPath as parseSftpPathImpl,
     openSftpFile as openSftpFileImpl
-} from './sftp.js';
+} from './sftp.js?v=2.5.75';
+import { setOverflowTooltip } from './tooltip.js?v=2.5.75';
 import { getEditorConfigIndent } from './editorconfig.js';
 
 /**
@@ -150,11 +152,14 @@ function createTabElement(tab, tabIndex, isActive, pane) {
   const fileName = tab.path.split("/").pop();
 
   tabEl.innerHTML = `
-    <span class="tab-icon material-icons" style="color: var(--icon-${icon.class})">${icon.icon}</span>
+    <span class="tab-icon ${icon.class} ui-icon material-icons">${icon.icon}</span>
     <span class="tab-name">${fileName}</span>
     ${tab.modified ? '<div class="tab-modified"></div>' : ""}
-    <div class="tab-close"><span class="material-icons">close</span></div>
+    <div class="tab-close"><span class="ui-icon material-icons">close</span></div>
   `;
+  const tabName = tabEl.querySelector('.tab-name');
+  tabEl.setAttribute('aria-label', tab.path);
+  setOverflowTooltip(tabEl, tab.path, tabName);
 
   tabEl.addEventListener("click", (e) => {
     if (!e.target.closest(".tab-close")) {
@@ -237,7 +242,7 @@ export function getModifiedTabs() {
 export async function closeAllTabs(force = false) {
   if (!force && hasUnsavedTabs()) {
     const modifiedCount = getModifiedTabs().length;
-    if (!confirm(`${modifiedCount} tab(s) have unsaved changes. Close all anyway?`)) {
+    if (!await showConfirmDialog({ title: 'Close All Tabs', message: `${modifiedCount} tab(s) have unsaved changes. Close all anyway?`, confirmText: 'Close All', isDanger: true })) {
       return false;
     }
   }
@@ -287,7 +292,7 @@ export async function closeOtherTabs(keepTab, force = false) {
   const modifiedOthers = otherTabs.filter(t => t.modified);
 
   if (!force && modifiedOthers.length > 0) {
-    if (!confirm(`${modifiedOthers.length} other tab(s) have unsaved changes. Close them anyway?`)) {
+    if (!await showConfirmDialog({ title: 'Close Other Tabs', message: `${modifiedOthers.length} other tab(s) have unsaved changes. Close them anyway?`, confirmText: 'Close Others', isDanger: true })) {
       return false;
     }
   }
@@ -326,7 +331,7 @@ export async function closeTabsToRight(tab, force = false) {
   const modifiedTabs = tabsToClose.filter(t => t.modified);
 
   if (!force && modifiedTabs.length > 0) {
-    if (!confirm(`${modifiedTabs.length} tab(s) to the right have unsaved changes. Close them anyway?`)) {
+    if (!await showConfirmDialog({ title: 'Close Tabs to the Right', message: `${modifiedTabs.length} tab(s) to the right have unsaved changes. Close them anyway?`, confirmText: 'Close Tabs', isDanger: true })) {
       return false;
     }
   }
@@ -530,7 +535,7 @@ export async function activateTab(tab, skipSave = false) {
           
         if (previewContainer) {
             if (!getTerminalContainer()) {
-                previewContainer.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-secondary)"><span class="material-icons loading-spinner" style="font-size:24px;margin-right:8px">sync</span> Loading Terminal...</div>';
+                previewContainer.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-secondary)"><span class="tab-terminal-loading-icon ui-icon ui-icon--size-lg ui-icon--space-after-8 material-icons">sync</span> Loading Terminal...</div>';
                 previewContainer.classList.add("visible");
                 
                 initTerminal().then(() => {
@@ -689,7 +694,7 @@ export async function closeTab(data, force = false) {
     }
 
     if (!force && tab.modified) {
-      if (!confirm(`File ${tab.path.split("/").pop()} has unsaved changes. Close anyway?`)) {
+      if (!await showConfirmDialog({ title: 'Close Unsaved File', message: `File ${tab.path.split("/").pop()} has unsaved changes. Close anyway?`, confirmText: 'Close File', isDanger: true })) {
         return;
       }
     }

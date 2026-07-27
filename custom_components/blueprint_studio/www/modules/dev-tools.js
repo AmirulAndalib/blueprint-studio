@@ -26,26 +26,28 @@ function _buildPanel(activeTab) {
   const panel = document.createElement('div');
   const cleanupFns = [];
   panel.id = PANEL_ID;
+  panel.setAttribute('role', 'region');
+  panel.setAttribute('aria-labelledby', 'bps-dev-tools-title');
   panel._bdtCleanup = () => {
     while (cleanupFns.length) cleanupFns.pop()();
   };
   panel.innerHTML = `
     <div class="bdt-header">
-      <span class="material-icons bdt-header-icon">construction</span>
-      <span class="bdt-title">Developer Tools</span>
-      <div class="bdt-tabs">
-        <button class="bdt-tab-btn" data-tab="actions">Actions</button>
-        <button class="bdt-tab-btn" data-tab="template">Template</button>
-        <button class="bdt-tab-btn" data-tab="states">States</button>
-        <button class="bdt-tab-btn" data-tab="config">Config</button>
+      <span class="ui-icon material-icons bdt-header-icon">construction</span>
+      <span class="bdt-title" id="bps-dev-tools-title">Developer Tools</span>
+      <div class="bdt-tabs" role="tablist" aria-label="Developer Tool views">
+        <button class="bdt-tab-btn" id="bdt-tab-actions" data-tab="actions" type="button" role="tab" aria-controls="bdt-pane-actions" aria-selected="false" tabindex="-1">Actions</button>
+        <button class="bdt-tab-btn" id="bdt-tab-template" data-tab="template" type="button" role="tab" aria-controls="bdt-pane-template" aria-selected="false" tabindex="-1">Template</button>
+        <button class="bdt-tab-btn" id="bdt-tab-states" data-tab="states" type="button" role="tab" aria-controls="bdt-pane-states" aria-selected="false" tabindex="-1">States</button>
+        <button class="bdt-tab-btn" id="bdt-tab-config" data-tab="config" type="button" role="tab" aria-controls="bdt-pane-config" aria-selected="false" tabindex="-1">Config</button>
       </div>
-      <button class="bdt-close" title="Close">✕</button>
+      <button class="bdt-close" type="button" title="Close Developer Tools" aria-label="Close Developer Tools"><span class="ui-icon material-icons">close</span></button>
     </div>
     <div class="bdt-body">
-      <div class="bdt-pane" data-pane="actions">${_actionsPane()}</div>
-      <div class="bdt-pane" data-pane="template">${_templatePane()}</div>
-      <div class="bdt-pane" data-pane="states">${_statesPane()}</div>
-      <div class="bdt-pane" data-pane="config">${_configPane()}</div>
+      <div class="bdt-pane" id="bdt-pane-actions" data-pane="actions" role="tabpanel" aria-labelledby="bdt-tab-actions">${_actionsPane()}</div>
+      <div class="bdt-pane" id="bdt-pane-template" data-pane="template" role="tabpanel" aria-labelledby="bdt-tab-template">${_templatePane()}</div>
+      <div class="bdt-pane" id="bdt-pane-states" data-pane="states" role="tabpanel" aria-labelledby="bdt-tab-states">${_statesPane()}</div>
+      <div class="bdt-pane" id="bdt-pane-config" data-pane="config" role="tabpanel" aria-labelledby="bdt-tab-config">${_configPane()}</div>
     </div>
   `;
 
@@ -54,6 +56,19 @@ function _buildPanel(activeTab) {
 
   panel.querySelectorAll('.bdt-tab-btn').forEach(btn => {
     btn.addEventListener('click', () => _switchTab(panel, btn.dataset.tab));
+    btn.addEventListener('keydown', event => {
+      if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+      event.preventDefault();
+      const tabs = Array.from(panel.querySelectorAll('.bdt-tab-btn'));
+      const current = tabs.indexOf(btn);
+      const next = event.key === 'Home'
+        ? 0
+        : event.key === 'End'
+          ? tabs.length - 1
+          : (current + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
+      _switchTab(panel, tabs[next].dataset.tab);
+      tabs[next].focus();
+    });
   });
   panel.querySelector('.bdt-close').addEventListener('click', () => _destroyPanel(panel));
 
@@ -70,8 +85,17 @@ function _buildPanel(activeTab) {
 }
 
 function _switchTab(panel, tab) {
-  panel.querySelectorAll('.bdt-tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
-  panel.querySelectorAll('.bdt-pane').forEach(p => p.classList.toggle('active', p.dataset.pane === tab));
+  panel.querySelectorAll('.bdt-tab-btn').forEach(button => {
+    const selected = button.dataset.tab === tab;
+    button.classList.toggle('active', selected);
+    button.setAttribute('aria-selected', String(selected));
+    button.tabIndex = selected ? 0 : -1;
+  });
+  panel.querySelectorAll('.bdt-pane').forEach(pane => {
+    const selected = pane.dataset.pane === tab;
+    pane.classList.toggle('active', selected);
+    pane.hidden = !selected;
+  });
 }
 
 function _destroyPanel(panel) {
@@ -89,8 +113,8 @@ function _actionsPane() {
       <!-- Top bar: action search + YAML mode toggle -->
       <div class="bdt-actions-topbar">
         <div class="bdt-action-search-wrap">
-          <span class="material-icons bdt-search-icon">search</span>
-          <input class="bdt-action-search" placeholder="Search for an action… (e.g. light.turn_on)" autocomplete="off" spellcheck="false">
+          <span class="ui-icon material-icons bdt-search-icon">search</span>
+          <input class="bdt-action-search" aria-label="Search actions" placeholder="Search for an action… (e.g. light.turn_on)" autocomplete="off" spellcheck="false">
           <button class="bdt-action-clear-search" style="display:none;" title="Clear">✕</button>
           <!-- Search dropdown is inside the search-wrap so position:absolute works correctly -->
           <div class="bdt-action-dropdown" style="display:none;"></div>
@@ -105,7 +129,7 @@ function _actionsPane() {
       <!-- Form view (default) -->
       <div class="bdt-action-form-view">
         <div class="bdt-action-none-selected">
-          <span class="material-icons" style="font-size:36px;color:var(--text-muted,#6c7086);display:block;margin-bottom:8px;">play_circle</span>
+          <span class="ui-icon material-icons bdt-action-empty-icon">play_circle</span>
           Select an action above to get started
         </div>
         <div class="bdt-action-selected-view" style="display:none;">
@@ -118,7 +142,7 @@ function _actionsPane() {
           <div class="bdt-action-fields"></div>
           <div class="bdt-action-footer">
             <button class="bdt-btn-primary bdt-perform-btn">
-              <span class="material-icons" style="font-size:15px;vertical-align:middle;">play_arrow</span> Perform action
+              <span class="ui-icon material-icons bdt-button-icon">play_arrow</span> Perform action
             </button>
             <div class="bdt-action-result" style="display:none;"></div>
           </div>
@@ -130,7 +154,7 @@ function _actionsPane() {
         <div class="bdt-pane-label" style="margin-bottom:6px;">
           Action <span class="bdt-hint">— enter the full action call as YAML</span>
         </div>
-        <textarea class="bdt-yaml-input" spellcheck="false" placeholder="action: light.turn_on
+        <textarea class="bdt-yaml-input" aria-label="Action YAML" spellcheck="false" placeholder="action: light.turn_on
 target:
   entity_id: light.living_room
 data:
@@ -138,7 +162,7 @@ data:
 # 'service:' is also accepted for backward compatibility"></textarea>
         <div class="bdt-action-footer" style="margin-top:8px;">
           <button class="bdt-btn-primary bdt-yaml-perform-btn">
-            <span class="material-icons" style="font-size:15px;vertical-align:middle;">play_arrow</span> Perform action
+            <span class="ui-icon material-icons bdt-button-icon">play_arrow</span> Perform action
           </button>
           <div class="bdt-yaml-result" style="display:none;"></div>
         </div>
@@ -270,7 +294,7 @@ function _initActions(panel) {
     let html = `
       <div class="bdt-field-row bdt-field-target" data-field="entity_id">
         <label class="bdt-field-label">Targets <span class="bdt-field-hint">— entity_id, area_id, device_id</span></label>
-        <input class="bdt-field-input bdt-target-input" type="text" placeholder="e.g. light.living_room" data-field="entity_id"
+        <input class="bdt-field-input bdt-target-input" type="text" aria-label="Action targets" placeholder="e.g. light.living_room" data-field="entity_id"
                list="bdt-entity-list">
       </div>
     `;
@@ -292,9 +316,9 @@ function _initActions(panel) {
             const label = typeof o === 'object' ? (o.label || o.value) : o;
             return `<option value="${_esc(val)}">${_esc(label)}</option>`;
           }).join('');
-          input = `<select class="bdt-field-input bdt-field-select" data-field="${_esc(key)}"><option value="">— select —</option>${opts}</select>`;
+          input = `<select class="bdt-field-input bdt-field-select" aria-label="${_esc(key)}" data-field="${_esc(key)}"><option value="">— select —</option>${opts}</select>`;
         } else if (selType === 'boolean') {
-          input = `<select class="bdt-field-input bdt-field-select" data-field="${_esc(key)}">
+          input = `<select class="bdt-field-input bdt-field-select" aria-label="${_esc(key)}" data-field="${_esc(key)}">
             <option value="">— select —</option>
             <option value="true">true</option>
             <option value="false">false</option>
@@ -309,24 +333,24 @@ function _initActions(panel) {
           const unitSpan = unit ? `<span class="bdt-field-unit">${_esc(unit)}</span>` : '';
           if (hasRange) {
             input = `<div class="bdt-field-slider-wrap">
-              <input class="bdt-field-slider" type="range" min="${min}" max="${max}" step="${step}"
+              <input class="bdt-field-slider" type="range" aria-label="${_esc(key)} slider" min="${min}" max="${max}" step="${step}"
                      value="${example || min}" data-field="${_esc(key)}" data-sync="bdt-num-${_esc(key)}">
-              <input class="bdt-field-input bdt-field-num" type="number" min="${min}" max="${max}" step="${step}"
+              <input class="bdt-field-input bdt-field-num" type="number" aria-label="${_esc(key)} value" min="${min}" max="${max}" step="${step}"
                      value="${example || ''}" placeholder="${example}" data-field="${_esc(key)}" id="bdt-num-${_esc(key)}">
               ${unitSpan}
             </div>`;
           } else {
             input = `<div class="bdt-field-number-wrap">
-              <input class="bdt-field-input" type="number" min="${min}" max="${max}" step="${step}"
+              <input class="bdt-field-input" type="number" aria-label="${_esc(key)}" min="${min}" max="${max}" step="${step}"
                      placeholder="${example}" data-field="${_esc(key)}">
               ${unitSpan}
             </div>`;
           }
         } else if (selType === 'entity') {
-          input = `<input class="bdt-field-input" type="text" placeholder="${f.example != null ? _esc(String(f.example)) : 'entity_id'}" data-field="${_esc(key)}" list="bdt-entity-list">`;
+          input = `<input class="bdt-field-input" type="text" aria-label="${_esc(key)}" placeholder="${f.example != null ? _esc(String(f.example)) : 'entity_id'}" data-field="${_esc(key)}" list="bdt-entity-list">`;
         } else {
           const example = f.example != null ? String(f.example) : '';
-          input = `<input class="bdt-field-input" type="text" placeholder="${_esc(example)}" data-field="${_esc(key)}">`;
+          input = `<input class="bdt-field-input" type="text" aria-label="${_esc(key)}" placeholder="${_esc(example)}" data-field="${_esc(key)}">`;
         }
 
         return `
@@ -418,7 +442,7 @@ function _initActions(panel) {
 
   async function _callAction(domain, service, serviceData, target, btn, resultEl, label) {
     btn.disabled = true;
-    btn.innerHTML = `<span class="material-icons" style="font-size:15px;vertical-align:middle;">hourglass_empty</span> Calling…`;
+    btn.innerHTML = `<span class="ui-icon material-icons bdt-button-icon">hourglass_empty</span> Calling…`;
     resultEl.style.display = 'none';
     try {
       const d = await fetchWithAuth(API_BASE, {
@@ -431,7 +455,7 @@ function _initActions(panel) {
       _showResult(resultEl, false, e.message);
     } finally {
       btn.disabled = false;
-      btn.innerHTML = `<span class="material-icons" style="font-size:15px;vertical-align:middle;">play_arrow</span> ${label}`;
+      btn.innerHTML = `<span class="ui-icon material-icons bdt-button-icon">play_arrow</span> ${label}`;
     }
   }
 
@@ -449,10 +473,10 @@ function _templatePane() {
     <div class="bdt-template-wrap">
       <div class="bdt-split-left">
         <div class="bdt-pane-label">Template <span class="bdt-hint">(Jinja2 — renders live)</span></div>
-        <textarea class="bdt-template-input" placeholder="{{ states('sensor.temperature') }}&#10;{% if is_state('light.living_room', 'on') %}on{% endif %}"></textarea>
+        <textarea class="bdt-template-input" aria-label="Template input" placeholder="{{ states('sensor.temperature') }}&#10;{% if is_state('light.living_room', 'on') %}on{% endif %}"></textarea>
         <div class="bdt-template-actions">
           <button class="bdt-btn-primary bdt-render-btn">
-            <span class="material-icons" style="font-size:15px;vertical-align:middle;">play_arrow</span> Render
+            <span class="ui-icon material-icons bdt-button-icon">play_arrow</span> Render
           </button>
           <button class="bdt-btn-ghost bdt-clear-btn">Clear</button>
         </div>
@@ -508,10 +532,10 @@ function _statesPane() {
   return `
     <div class="bdt-states-wrap">
       <div class="bdt-states-toolbar">
-        <input class="bdt-states-search" placeholder="Filter by entity_id or friendly name…" autocomplete="off" spellcheck="false">
-        <select class="bdt-domain-filter"><option value="">All domains</option></select>
+        <input class="bdt-states-search" aria-label="Filter states" placeholder="Filter by entity_id or friendly name…" autocomplete="off" spellcheck="false">
+        <select class="bdt-domain-filter" aria-label="Filter states by domain"><option value="">All domains</option></select>
         <button class="bdt-btn-ghost bdt-states-refresh" title="Refresh">
-          <span class="material-icons" style="font-size:16px;vertical-align:middle;">refresh</span>
+          <span class="ui-icon material-icons bdt-toolbar-icon">refresh</span>
         </button>
       </div>
       <div class="bdt-states-table-wrap">
@@ -650,11 +674,11 @@ function _configPane() {
       <!-- Config check -->
       <div class="bdt-config-section">
         <div class="bdt-config-section-title">
-          <span class="material-icons" style="font-size:16px;vertical-align:middle;margin-right:6px;">fact_check</span>
+          <span class="ui-icon material-icons bdt-section-icon">fact_check</span>
           Configuration check
         </div>
         <button class="bdt-btn-primary bdt-run-check-btn" style="width:100%;">
-          <span class="material-icons" style="font-size:15px;vertical-align:middle;">play_arrow</span> Check configuration
+          <span class="ui-icon material-icons bdt-button-icon">play_arrow</span> Check configuration
         </button>
         <div class="bdt-check-result" style="display:none;"></div>
         <div class="bdt-check-errors" style="display:none;"></div>
@@ -667,13 +691,13 @@ function _configPane() {
       <!-- YAML reloads -->
       <div class="bdt-config-section">
         <div class="bdt-config-section-title">
-          <span class="material-icons" style="font-size:16px;vertical-align:middle;margin-right:6px;">cached</span>
+          <span class="ui-icon material-icons bdt-section-icon">cached</span>
           Reload YAML configuration
         </div>
         <div class="bdt-reload-grid">
           ${RELOAD_ITEMS.map(item => `
             <button class="bdt-reload-btn" data-domain="${_esc(item.domain)}" title="Reload ${_esc(item.label)}">
-              <span class="material-icons bdt-reload-icon">${_esc(item.icon)}</span>
+              <span class="ui-icon material-icons bdt-reload-icon">${_esc(item.icon)}</span>
               <span class="bdt-reload-label">${_esc(item.label)}</span>
               <span class="bdt-reload-status"></span>
             </button>
@@ -697,7 +721,7 @@ function _initConfig(panel) {
 
   checkBtn.addEventListener('click', async () => {
     checkBtn.disabled = true;
-    checkBtn.innerHTML = `<span class="material-icons" style="font-size:15px;vertical-align:middle;">hourglass_empty</span> Checking…`;
+    checkBtn.innerHTML = `<span class="ui-icon material-icons bdt-button-icon">hourglass_empty</span> Checking…`;
     checkResult.style.display = 'none';
     checkErrors.style.display = 'none';
     checkRawWrap.style.display = 'none';
@@ -732,7 +756,7 @@ function _initConfig(panel) {
       checkResult.style.display = 'block';
     } finally {
       checkBtn.disabled = false;
-      checkBtn.innerHTML = `<span class="material-icons" style="font-size:15px;vertical-align:middle;">play_arrow</span> Check configuration`;
+      checkBtn.innerHTML = `<span class="ui-icon material-icons bdt-button-icon">play_arrow</span> Check configuration`;
     }
   });
 

@@ -5,7 +5,7 @@ import { fetchWithAuth } from './api.js';
 import { eventBus } from './event-bus.js';
 import { API_BASE } from './constants.js';
 import { showGlobalLoading, hideGlobalLoading, showToast, showConfirmDialog } from './ui.js';
-import { parseSftpPath } from './sftp.js';
+import { parseSftpPath } from './sftp.js?v=2.5.75';
 
 /**
  * Toggle selection mode on/off

@@ -58,6 +58,20 @@
       display: none !important;
     }
 
+    body.dialog-open {
+      overflow: hidden;
+    }
+
+    .workspace-initially-hidden.workspace-initially-hidden {
+      display: none;
+    }
+
+    .clipboard-fallback-control {
+      left: -9999px;
+      position: fixed;
+      top: 0;
+    }
+
     /* Light theme override - will be applied by JS */
     [data-theme="light"] {
       /* Variables will be set by JavaScript */

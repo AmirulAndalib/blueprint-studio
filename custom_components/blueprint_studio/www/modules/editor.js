@@ -3,8 +3,9 @@ import { state, elements } from './state.js';
 import { eventBus } from './event-bus.js';
 import { validateYaml, validateByFileType } from './file-operations.js';
 import { homeAssistantHint, HA_ENTITIES } from './ha-autocomplete.js';
-import { enableSplitView, disableSplitView } from './split-view.js';
+import { enableSplitView, disableSplitView } from './split-view.js?v=2.5.75';
 import { showToast } from './ui.js';
+import { copyToClipboard } from './utils.js';
 
 // CodeMirror is loaded globally via script tags
 
@@ -19,8 +20,8 @@ function _showEntityPopup(entity, clientX, clientY) {
 
   const iconName = entity.icon ? entity.icon.replace('mdi:', '') : null;
   const iconHtml = iconName
-    ? `<span class="mdi mdi-${iconName}" style="margin-right:6px;font-size:1.2em;vertical-align:middle;"></span>`
-    : `<span class="material-icons" style="margin-right:6px;font-size:1.1em;vertical-align:middle;color:var(--accent-color);">device_hub</span>`;
+    ? `<span class="mdi mdi-${iconName} entity-popup-mdi-icon"></span>`
+    : `<span class="ui-icon material-icons entity-popup-fallback-icon">device_hub</span>`;
 
   const stateVal = entity.state !== undefined ? String(entity.state) : '—';
   const domain = entity.entity_id.split('.')[0];
@@ -51,28 +52,14 @@ function _showEntityPopup(entity, clientX, clientY) {
     ${attrRows ? `<div class="eip-attrs">${attrRows}</div>` : ''}
     <div class="eip-actions">
       <button class="eip-btn" id="eip-copy-btn">
-        <span class="material-icons" style="font-size:14px;vertical-align:middle;">content_copy</span> Copy ID
+        <span class="ui-icon material-icons entity-popup-copy-icon">content_copy</span> Copy ID
       </button>
     </div>
   `;
 
   // Position near click, keep within viewport
-  popup.style.cssText = `
-    position: fixed;
-    z-index: 99999;
-    top: ${clientY + 10}px;
-    left: ${clientX}px;
-    min-width: 260px;
-    max-width: 360px;
-    background: var(--bg-primary, #1e1e2e);
-    border: 1px solid var(--border-color, #333);
-    border-radius: 8px;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
-    padding: 12px;
-    font-size: 13px;
-    color: var(--text-primary, #cdd6f4);
-    font-family: var(--font-mono, monospace);
-  `;
+  popup.style.top = `${clientY + 10}px`;
+  popup.style.left = `${clientX}px`;
 
   document.body.appendChild(popup);
 
@@ -89,12 +76,9 @@ function _showEntityPopup(entity, clientX, clientY) {
   popup.querySelector('.eip-close').addEventListener('click', () => popup.remove());
 
   // Copy ID button
-  popup.querySelector('#eip-copy-btn').addEventListener('click', () => {
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(entity.entity_id).then(() => showToast(`Copied: ${entity.entity_id}`, 'success')).catch(() => _fallbackCopy(entity.entity_id));
-    } else {
-      _fallbackCopy(entity.entity_id);
-    }
+  popup.querySelector('#eip-copy-btn').addEventListener('click', async () => {
+    const success = await copyToClipboard(entity.entity_id);
+    showToast(success ? `Copied: ${entity.entity_id}` : 'Copy failed', success ? 'success' : 'error');
   });
 
   // Dismiss on outside click or Escape
@@ -115,16 +99,6 @@ function _showEntityPopup(entity, clientX, clientY) {
     document.addEventListener('mousedown', dismiss, true);
     document.addEventListener('keydown', dismissKey, true);
   }, 50);
-}
-
-function _fallbackCopy(text) {
-  const el = document.createElement('textarea');
-  el.value = text;
-  el.style.cssText = 'position:fixed;top:-999px;left:-999px;';
-  document.body.appendChild(el);
-  el.select();
-  try { document.execCommand('copy'); showToast(`Copied: ${text}`, 'success'); } catch { showToast('Copy failed', 'error'); }
-  document.body.removeChild(el);
 }
 
 /**

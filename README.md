@@ -651,7 +651,7 @@ custom_components/blueprint_studio/
 - **Boot and state** - `main.js`, `initialization.js`, `app.js`, `state.js`, `constants.js`, `event-bus.js`, `translations.js`
 - **Editor experience** - `editor.js`, `tabs.js`, `split-view.js`, `minimap.js`, `search.js`, `global-search.js`, `command-palette.js`, `ha-autocomplete.js`, `editorconfig.js`, `status-bar.js`
 - **File UI** - `file-tree.js`, `file-operations.js`, `file-operations-ui.js`, `downloads-uploads.js`, `zip-progress.js`, `asset-preview.js`, `favorites.js`, `recent-files.js`, `breadcrumb.js`, `context-menu.js`, `selection.js`, `sidebar.js`, `toolbar.js`
-- **Integrations** - `git.js`, `git-operations.js`, `git-ui.js`, `git-diff.js`, `github-integration.js`, `gitea-integration.js`, `gitea-ui.js`, `sftp.js`, `terminal.js`, `ai.js`, `ai-ui.js`, `dev-tools.js`
+- **Integrations** - `git.js`, `git-operations.js`, `git-ui.js`, `git-diff.js`, `github-integration.js`, `gitea-integration.js`, `gitea-ui.js`, `sftp.js`, `terminal.js`, `ai-ui.js`, `dev-tools.js`
 - **Settings and coordination** - `settings.js`, `settings-ui.js`, `settings-sync.js`, plus coordinator modules for files, Git, SFTP, terminal, dialogs, settings, and UI
 
 ### Backend API Surface

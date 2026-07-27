@@ -6,7 +6,7 @@ import { showToast } from './ui.js';
 import { loadScript, formatBytes } from './utils.js';
 import { t } from './translations.js';
 import { eventBus } from './event-bus.js';
-import { isSftpPath, saveSftpFile } from './sftp.js';
+import { isSftpPath, saveSftpFile } from './sftp.js?v=2.5.75';
 
 /**
  * Save a file

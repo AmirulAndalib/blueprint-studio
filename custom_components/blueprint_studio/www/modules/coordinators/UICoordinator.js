@@ -8,11 +8,11 @@ import { state, elements } from '../state.js';
 import { eventBus } from '../event-bus.js';
 import { triggerUpload, triggerFolderUpload, downloadFolder, downloadFileByPath, handleFileUpload, handleFolderUpload } from '../downloads-uploads.js';
 import { setThemePreset } from '../ui.js';
-import { saveSettings, updateShowHiddenButton } from '../settings.js';
+import { saveSettings, updateShowHiddenButton } from '../settings.js?v=2.5.75';
 import { renderFileTree, debouncedRenderFileTree, cancelPendingSearch, updateExplorerSearchUI, updateExplorerFilterIcon } from '../file-tree.js';
 import { updateSearchHighlights, updateMatchStatus, doReplace, doReplaceAll, doFind, openSearchWidget } from '../search.js';
 import { downloadCurrentFile } from '../downloads-uploads.js';
-import { updateToolbarState } from '../toolbar.js';
+import { setToolbarControlLabel, updateToolbarState } from '../toolbar.js';
 import { copyToClipboard as copyToClipboardUtil, getTruePath as getTruePath, enableLongPressContextMenu } from '../utils.js';
 
 import { validateByFileType } from '../file-operations.js';
@@ -21,11 +21,12 @@ import { t } from '../translations.js';
 
 import { performGlobalSearch, performGlobalReplace, triggerGlobalSearch, initGlobalSearchWindowFunctions } from '../global-search.js';
 import { toggleMarkdownPreview, renderAssetPreview, cleanupMarkdownPreview, handleMarkdownChange } from '../asset-preview.js';
-import { toggleTerminal } from '../terminal.js';
-import { toggleAISidebar, sendAIChatMessage, updateAIVisibility } from '../ai-ui.js';
+import { toggleTerminal } from '../terminal.js?v=2.5.75';
+import { toggleAISidebar, sendAIChatMessage, updateAIVisibility } from '../ai-ui.js?v=2.5.75';
 
 import { updateBreadcrumb, expandFolderInTree } from '../breadcrumb.js';
 import { showUserGuide } from '../user-guide.js';
+import { closeDialog, openDialog } from '../dialog-manager.js';
 // Removed redundant import: import { renderAssetPreview } from '../asset-preview.js';
 
 /**
@@ -499,9 +500,44 @@ export function initUICoordinator(callbacks) {
 
     // Theme toggle
     if (elements.themeToggle) {
-        elements.themeToggle.addEventListener("click", (e) => {
-            e.stopPropagation();
-            elements.themeMenu.classList.toggle("visible");
+        const themeMenuItems = Array.from(document.querySelectorAll(".theme-menu-item"));
+        themeMenuItems.forEach(item => {
+            item.setAttribute("role", "menuitemradio");
+            item.setAttribute("tabindex", "-1");
+        });
+
+        const closeThemeMenu = (restoreFocus = false) => {
+            elements.themeMenu.classList.remove("visible");
+            elements.themeToggle.setAttribute("aria-expanded", "false");
+            if (restoreFocus) elements.themeToggle.focus();
+        };
+        const openThemeMenu = (focusTarget = "active") => {
+            elements.themeMenu.classList.add("visible");
+            elements.themeToggle.setAttribute("aria-expanded", "true");
+            if (focusTarget === "none") return;
+            const target = focusTarget === "last"
+                ? themeMenuItems[themeMenuItems.length - 1]
+                : themeMenuItems.find(item => item.classList.contains("active")) || themeMenuItems[0];
+            target?.focus();
+        };
+        const toggleThemeMenu = (event, focusTarget = "none") => {
+            event?.stopPropagation();
+            if (elements.themeMenu.classList.contains("visible")) closeThemeMenu();
+            else openThemeMenu(focusTarget);
+        };
+        elements.themeToggle.addEventListener("click", toggleThemeMenu);
+        elements.themeToggle.addEventListener("keydown", (event) => {
+            if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                toggleThemeMenu(event, "active");
+            } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+                event.preventDefault();
+                event.stopPropagation();
+                openThemeMenu(event.key === "ArrowUp" ? "last" : "active");
+            } else if (event.key === "Escape") {
+                event.preventDefault();
+                closeThemeMenu(true);
+            }
         });
         // Also handle touchstart so the theme menu opens immediately on mobile.
         // On glass theme, the backdrop-filter composited layer on the status bar
@@ -512,8 +548,36 @@ export function initUICoordinator(callbacks) {
         elements.themeToggle.addEventListener("touchstart", (e) => {
             e.preventDefault();
             e.stopPropagation();
-            elements.themeMenu.classList.toggle("visible");
+            toggleThemeMenu(e);
         }, { passive: false });
+
+        themeMenuItems.forEach((item, index) => {
+            const handleThemeSelect = (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                setThemePreset(item.dataset.theme);
+                closeThemeMenu(true);
+            };
+            item.addEventListener("click", handleThemeSelect);
+            item.addEventListener("touchend", handleThemeSelect);
+            item.addEventListener("keydown", (event) => {
+                let targetIndex = null;
+                if (event.key === "ArrowDown") targetIndex = (index + 1) % themeMenuItems.length;
+                if (event.key === "ArrowUp") targetIndex = (index - 1 + themeMenuItems.length) % themeMenuItems.length;
+                if (event.key === "Home") targetIndex = 0;
+                if (event.key === "End") targetIndex = themeMenuItems.length - 1;
+                if (targetIndex !== null) {
+                    event.preventDefault();
+                    themeMenuItems[targetIndex].focus();
+                } else if (event.key === "Enter" || event.key === " ") {
+                    handleThemeSelect(event);
+                } else if (event.key === "Escape") {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    closeThemeMenu(true);
+                }
+            });
+        });
     }
 
     // Main toolbar buttons
@@ -524,8 +588,15 @@ export function initUICoordinator(callbacks) {
     }
 
     if (elements.btnCloseSidebar) {
-        elements.btnCloseSidebar.addEventListener("click", () => {
+        const hideSidebar = () => {
             if (functions.hideSidebar) functions.hideSidebar();
+        };
+        elements.btnCloseSidebar.addEventListener("click", hideSidebar);
+        elements.btnCloseSidebar.addEventListener("keydown", (event) => {
+            if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                hideSidebar();
+            }
         });
     }
 
@@ -544,23 +615,23 @@ export function initUICoordinator(callbacks) {
     }
 
     // Sidebar activity bar
-    if (elements.activityExplorer) {
-        elements.activityExplorer.addEventListener("click", () => {
-            if (functions.switchSidebarView) functions.switchSidebarView("explorer");
+    const bindActivity = (element, viewName) => {
+        if (!element) return;
+        const activate = () => {
+            if (functions.switchSidebarView) functions.switchSidebarView(viewName);
+        };
+        element.addEventListener("click", activate);
+        element.addEventListener("keydown", (event) => {
+            if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                activate();
+            }
         });
-    }
-
-    if (elements.activitySearch) {
-        elements.activitySearch.addEventListener("click", () => {
-            if (functions.switchSidebarView) functions.switchSidebarView("search");
-        });
-    }
-
-    if (elements.activitySftp) {
-        elements.activitySftp.addEventListener("click", () => {
-            if (functions.switchSidebarView) functions.switchSidebarView("sftp");
-        });
-    }
+    };
+    bindActivity(elements.activityExplorer, "explorer");
+    bindActivity(elements.activitySearch, "search");
+    bindActivity(elements.activitySourceControl, "source-control");
+    bindActivity(elements.activitySftp, "sftp");
 
     if (elements.btnFileTreeCollapse) {
         elements.btnFileTreeCollapse.addEventListener("click", () => {
@@ -573,11 +644,15 @@ export function initUICoordinator(callbacks) {
                 const icon = elements.btnFileTreeCollapse.querySelector(".material-icons");
                 if (icon) icon.textContent = "expand_more";
                 elements.btnFileTreeCollapse.title = "Expand file tree";
+                elements.btnFileTreeCollapse.setAttribute("aria-label", "Expand file tree");
+                elements.btnFileTreeCollapse.setAttribute("aria-expanded", "false");
             } else {
                 if (fileTree) fileTree.style.display = "block";
                 const icon = elements.btnFileTreeCollapse.querySelector(".material-icons");
                 if (icon) icon.textContent = "expand_less";
                 elements.btnFileTreeCollapse.title = "Collapse file tree";
+                elements.btnFileTreeCollapse.setAttribute("aria-label", "Collapse file tree");
+                elements.btnFileTreeCollapse.setAttribute("aria-expanded", "true");
             }
             
             eventBus.emit('settings:save');
@@ -614,9 +689,9 @@ export function initUICoordinator(callbacks) {
         elements.btnOneTabMode.addEventListener("click", () => {
             state.onTabMode = !state.onTabMode;
             elements.btnOneTabMode.classList.toggle("active", state.onTabMode);
-            elements.btnOneTabMode.title = state.onTabMode
+            setToolbarControlLabel(elements.btnOneTabMode, state.onTabMode
                 ? "One Tab Mode: ON — only last opened file is kept (click to disable)"
-                : "One Tab Mode: OFF — click to enable (auto-saves & closes other tabs on open)";
+                : "One Tab Mode: OFF — click to enable (auto-saves & closes other tabs on open)");
             saveSettings();
             eventBus.emit('ui:update-toolbar-state');
             renderFileTree();
@@ -678,23 +753,23 @@ export function initUICoordinator(callbacks) {
 
     if (elements.btnDonate) {
         elements.btnDonate.addEventListener("click", () => {
-            if (elements.modalDonationOverlay) elements.modalDonationOverlay.classList.add("visible");
+            if (elements.modalDonationOverlay) {
+                openDialog(elements.modalDonationOverlay, {
+                    initialFocus: '#btn-close-donation',
+                    returnFocus: elements.btnDonate,
+                    onRequestClose: () => closeDialog(elements.modalDonationOverlay),
+                });
+            }
         });
     }
 
     if (elements.btnCloseDonation) {
         elements.btnCloseDonation.addEventListener("click", () => {
-            if (elements.modalDonationOverlay) elements.modalDonationOverlay.classList.remove("visible");
+            if (elements.modalDonationOverlay) closeDialog(elements.modalDonationOverlay);
         });
     }
 
     if (elements.modalDonationOverlay) {
-        elements.modalDonationOverlay.addEventListener("click", (e) => {
-            if (e.target === elements.modalDonationOverlay) {
-                elements.modalDonationOverlay.classList.remove("visible");
-            }
-        });
-
         elements.modalDonationOverlay.querySelectorAll(".donation-copy-btn").forEach((button) => {
             button.addEventListener("click", async () => {
                 const value = button.dataset.copyValue;
@@ -720,40 +795,50 @@ export function initUICoordinator(callbacks) {
     // Support Modal
     if (elements.btnSupport) {
         elements.btnSupport.addEventListener("click", () => {
-            if (elements.modalSupportOverlay) elements.modalSupportOverlay.classList.add("visible");
+            if (elements.modalSupportOverlay) {
+                openDialog(elements.modalSupportOverlay, {
+                    initialFocus: '#btn-close-support',
+                    returnFocus: elements.btnSupport,
+                    onRequestClose: () => closeDialog(elements.modalSupportOverlay),
+                });
+            }
         });
     }
 
     if (elements.btnCloseSupport) {
         elements.btnCloseSupport.addEventListener("click", () => {
-            if (elements.modalSupportOverlay) elements.modalSupportOverlay.classList.remove("visible");
+            if (elements.modalSupportOverlay) closeDialog(elements.modalSupportOverlay);
         });
     }
 
     if (elements.btnSupportGuide) {
         elements.btnSupportGuide.addEventListener("click", () => {
-            if (elements.modalSupportOverlay) elements.modalSupportOverlay.classList.remove("visible");
-            showUserGuide();
+            const returnFocus = elements.modalSupportOverlay
+                ? closeDialog(elements.modalSupportOverlay, { restoreFocus: false })
+                : null;
+            showUserGuide({ returnFocus });
         });
     }
 
     if (elements.btnSupportShortcuts) {
         elements.btnSupportShortcuts.addEventListener("click", () => {
-            if (elements.modalSupportOverlay) elements.modalSupportOverlay.classList.remove("visible");
-            eventBus.emit('ui:show-shortcuts');
+            const returnFocus = elements.modalSupportOverlay
+                ? closeDialog(elements.modalSupportOverlay, { restoreFocus: false })
+                : null;
+            eventBus.emit('ui:show-shortcuts', { returnFocus });
         });
     }
 
     if (elements.btnSupportFeature) {
         elements.btnSupportFeature.addEventListener("click", () => {
-            if (elements.modalSupportOverlay) elements.modalSupportOverlay.classList.remove("visible");
+            if (elements.modalSupportOverlay) closeDialog(elements.modalSupportOverlay);
             eventBus.emit('ui:request-feature');
         });
     }
 
     if (elements.btnSupportIssue) {
         elements.btnSupportIssue.addEventListener("click", () => {
-            if (elements.modalSupportOverlay) elements.modalSupportOverlay.classList.remove("visible");
+            if (elements.modalSupportOverlay) closeDialog(elements.modalSupportOverlay);
             eventBus.emit('ui:report-issue');
         });
     }
@@ -773,7 +858,7 @@ export function initUICoordinator(callbacks) {
                     const res = await fetchWithAuth(API_BASE, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "github_star" }) });
                     if (res.success) {
                         if (functions.showToast) functions.showToast(t("toast.github_star_success"), "success");
-                        if (elements.modalSupportOverlay) elements.modalSupportOverlay.classList.remove("visible");
+                        if (elements.modalSupportOverlay) closeDialog(elements.modalSupportOverlay);
                     } else {
                         window.open(elements.btnGithubStar.href, '_blank');
                     }
@@ -791,19 +876,11 @@ export function initUICoordinator(callbacks) {
                     const res = await fetchWithAuth(API_BASE, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "github_follow" }) });
                     if (res.success) {
                         if (functions.showToast) functions.showToast(t("toast.github_follow_success"), "success");
-                        if (elements.modalSupportOverlay) elements.modalSupportOverlay.classList.remove("visible");
+                        if (elements.modalSupportOverlay) closeDialog(elements.modalSupportOverlay);
                     } else {
                         window.open(elements.btnGithubFollow.href, '_blank');
                     }
                 } catch (err) { window.open(elements.btnGithubFollow.href, '_blank'); }
-            }
-        });
-    }
-
-    if (elements.modalSupportOverlay) {
-        elements.modalSupportOverlay.addEventListener("click", (e) => {
-            if (e.target === elements.modalSupportOverlay) {
-                elements.modalSupportOverlay.classList.remove("visible");
             }
         });
     }
@@ -959,19 +1036,22 @@ export function initUICoordinator(callbacks) {
     }
 
     // Search Toggle Replace
-    if (elements.searchToggle) {
-        elements.searchToggle.addEventListener("click", () => {
-            const isReplace = !elements.searchWidget.classList.contains("replace-mode");
+    const bindSearchReplaceDisclosure = (toggle, widget) => {
+        if (!toggle || !widget) return;
+        const activate = () => {
+            const isReplace = !widget.classList.contains("replace-mode");
             functions.openSearchWidget(isReplace);
+        };
+        toggle.addEventListener("click", activate);
+        toggle.addEventListener("keydown", (event) => {
+            if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                activate();
+            }
         });
-    }
-
-    if (elements.secondarySearchToggle) {
-        elements.secondarySearchToggle.addEventListener("click", () => {
-            const isReplace = !elements.secondarySearchWidget.classList.contains("replace-mode");
-            functions.openSearchWidget(isReplace);
-        });
-    }
+    };
+    bindSearchReplaceDisclosure(elements.searchToggle, elements.searchWidget);
+    bindSearchReplaceDisclosure(elements.secondarySearchToggle, elements.secondarySearchWidget);
 
     // Search Operations
     if (elements.searchNext) elements.searchNext.addEventListener("click", () => doFind(false));
@@ -1027,26 +1107,37 @@ if (elements.globalSearchExclude) {
     const btn = elements[id];
     if (btn) {
         btn.addEventListener("click", () => {
-            btn.classList.toggle("active");
+            const active = btn.classList.toggle("active");
+            btn.setAttribute("aria-pressed", String(active));
             if (functions.triggerGlobalSearch) functions.triggerGlobalSearch();
         });
     }
 });
 
-if (elements.btnToggleReplaceAll) {
-    elements.btnToggleReplaceAll.addEventListener("click", () => {
-        const isVisible = elements.globalReplaceContainer.style.display === "flex";
-        elements.globalReplaceContainer.style.display = isVisible ? "none" : "flex";
-        elements.btnToggleReplaceAll.classList.toggle("rotated", !isVisible);
+function bindDisclosureControl(control, container, onToggle) {
+    if (!control || !container) return;
+
+    const toggle = () => {
+        const expanded = container.classList.toggle("expanded");
+        control.setAttribute("aria-expanded", String(expanded));
+        if (onToggle) onToggle(expanded);
+    };
+
+    control.addEventListener("click", toggle);
+    control.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            toggle();
+        }
     });
 }
 
-if (elements.btnTogglePatterns) {
-    elements.btnTogglePatterns.addEventListener("click", () => {
-        const isVisible = elements.globalPatternsContainer.style.display === "flex";
-        elements.globalPatternsContainer.style.display = isVisible ? "none" : "flex";
-    });
-}
+bindDisclosureControl(
+    elements.btnToggleReplaceAll,
+    elements.globalReplaceContainer,
+    (expanded) => elements.btnToggleReplaceAll.classList.toggle("rotated", expanded)
+);
+bindDisclosureControl(elements.btnTogglePatterns, elements.globalPatternsContainer);
 
 if (elements.btnGlobalReplaceAll) {
     elements.btnGlobalReplaceAll.addEventListener("click", () => {
@@ -1084,19 +1175,29 @@ if (btnCollapseSearch) {
 }
 
 // Search Mode Tabs
-document.querySelectorAll('.search-mode-tab').forEach(tab => {
-    tab.addEventListener('click', () => {
-        const tabs = document.querySelectorAll('.search-mode-tab');
-        tabs.forEach(t => {
-            t.classList.remove('active');
-            t.style.background = 'transparent';
-            t.style.color = 'var(--text-secondary)';
-        });
-        tab.classList.add('active');
-        tab.style.background = 'var(--bg-tertiary)';
-        tab.style.color = 'var(--accent-color)';
+const searchModeTabs = Array.from(document.querySelectorAll('.search-mode-tab'));
+const activateSearchModeTab = (tab, moveFocus = false) => {
+    searchModeTabs.forEach(item => {
+        const selected = item === tab;
+        item.classList.toggle('active', selected);
+        item.setAttribute('aria-selected', String(selected));
+        item.tabIndex = selected ? 0 : -1;
+    });
+    if (moveFocus) tab.focus();
+    if (functions.triggerGlobalSearch) functions.triggerGlobalSearch();
+};
 
-        if (functions.triggerGlobalSearch) functions.triggerGlobalSearch();
+searchModeTabs.forEach((tab, index) => {
+    tab.addEventListener('click', () => activateSearchModeTab(tab));
+    tab.addEventListener('keydown', (event) => {
+        let targetIndex = null;
+        if (event.key === 'ArrowRight') targetIndex = (index + 1) % searchModeTabs.length;
+        if (event.key === 'ArrowLeft') targetIndex = (index - 1 + searchModeTabs.length) % searchModeTabs.length;
+        if (event.key === 'Home') targetIndex = 0;
+        if (event.key === 'End') targetIndex = searchModeTabs.length - 1;
+        if (targetIndex === null) return;
+        event.preventDefault();
+        activateSearchModeTab(searchModeTabs[targetIndex], true);
     });
 });
 
@@ -1129,24 +1230,11 @@ if (elements.breadcrumbCopy) {
     });
 }
 
-    // Theme menu items
-    document.querySelectorAll(".theme-menu-item").forEach(item => {
-        const handleThemeSelect = (e) => {
-            e.preventDefault(); // Prevent ghost clicks on touch
-            e.stopPropagation();
-            const theme = item.dataset.theme;
-            setThemePreset(theme);
-            elements.themeMenu.classList.remove("visible");
-        };
-
-        item.addEventListener("click", handleThemeSelect);
-        item.addEventListener("touchend", handleThemeSelect);
-    });
-
     // Close theme menu on outside click/touch
     document.addEventListener("click", () => {
         if (elements.themeMenu) {
             elements.themeMenu.classList.remove("visible");
+            elements.themeToggle?.setAttribute("aria-expanded", "false");
         }
     });
     // touchstart counterpart — closes the menu when tapping outside on mobile
@@ -1155,6 +1243,7 @@ if (elements.breadcrumbCopy) {
         if (elements.themeMenu && elements.themeMenu.classList.contains("visible")) {
             if (!elements.themeToggle.contains(e.target) && !elements.themeMenu.contains(e.target)) {
                 elements.themeMenu.classList.remove("visible");
+                elements.themeToggle.setAttribute("aria-expanded", "false");
             }
         }
     });
@@ -1480,33 +1569,27 @@ if (elements.breadcrumbCopy) {
         });
     }
 
-    // Search options toggles
-    if (elements.searchCaseSensitiveBtn) {
-        elements.searchCaseSensitiveBtn.addEventListener("click", () => {
-            state.searchCaseSensitive = !state.searchCaseSensitive;
-            elements.searchCaseSensitiveBtn.classList.toggle("active", state.searchCaseSensitive);
-            const query = elements.searchFindInput.value;
+    const bindEditorSearchModifier = (stateKey, primaryButton, secondaryButton) => {
+        const setPressed = (pressed) => {
+            [primaryButton, secondaryButton].forEach(button => {
+                if (!button) return;
+                button.classList.toggle("active", pressed);
+                button.setAttribute("aria-pressed", String(pressed));
+            });
+        };
+        const toggle = (input) => {
+            state[stateKey] = !state[stateKey];
+            setPressed(state[stateKey]);
+            const query = input?.value;
             if (query) { updateSearchHighlights(query); updateMatchStatus(query); }
-        });
-    }
-
-    if (elements.searchWholeWordBtn) {
-        elements.searchWholeWordBtn.addEventListener("click", () => {
-            state.searchWholeWord = !state.searchWholeWord;
-            elements.searchWholeWordBtn.classList.toggle("active", state.searchWholeWord);
-            const query = elements.searchFindInput.value;
-            if (query) { updateSearchHighlights(query); updateMatchStatus(query); }
-        });
-    }
-
-    if (elements.searchUseRegexBtn) {
-        elements.searchUseRegexBtn.addEventListener("click", () => {
-            state.searchUseRegex = !state.searchUseRegex;
-            elements.searchUseRegexBtn.classList.toggle("active", state.searchUseRegex);
-            const query = elements.searchFindInput.value;
-            if (query) { updateSearchHighlights(query); updateMatchStatus(query); }
-        });
-    }
+        };
+        primaryButton?.addEventListener("click", () => toggle(elements.searchFindInput));
+        secondaryButton?.addEventListener("click", () => toggle(elements.secondarySearchFindInput));
+        setPressed(state[stateKey]);
+    };
+    bindEditorSearchModifier("searchCaseSensitive", elements.searchCaseSensitiveBtn, elements.secondarySearchCaseSensitiveBtn);
+    bindEditorSearchModifier("searchWholeWord", elements.searchWholeWordBtn, elements.secondarySearchWholeWordBtn);
+    bindEditorSearchModifier("searchUseRegex", elements.searchUseRegexBtn, elements.secondarySearchUseRegexBtn);
 
     // Secondary Search Panel Handlers (split-view right pane)
     if (elements.secondarySearchFindInput) {
@@ -1550,36 +1633,6 @@ if (elements.breadcrumbCopy) {
     if (elements.secondarySearchClose) {
         elements.secondarySearchClose.addEventListener("click", () => {
             eventBus.emit('search:close');
-        });
-    }
-
-    if (elements.secondarySearchCaseSensitiveBtn) {
-        elements.secondarySearchCaseSensitiveBtn.addEventListener("click", () => {
-            state.searchCaseSensitive = !state.searchCaseSensitive;
-            elements.secondarySearchCaseSensitiveBtn.classList.toggle("active", state.searchCaseSensitive);
-            if (elements.searchCaseSensitiveBtn) elements.searchCaseSensitiveBtn.classList.toggle("active", state.searchCaseSensitive);
-            const query = elements.secondarySearchFindInput.value;
-            if (query) { updateSearchHighlights(query); updateMatchStatus(query); }
-        });
-    }
-
-    if (elements.secondarySearchWholeWordBtn) {
-        elements.secondarySearchWholeWordBtn.addEventListener("click", () => {
-            state.searchWholeWord = !state.searchWholeWord;
-            elements.secondarySearchWholeWordBtn.classList.toggle("active", state.searchWholeWord);
-            if (elements.searchWholeWordBtn) elements.searchWholeWordBtn.classList.toggle("active", state.searchWholeWord);
-            const query = elements.secondarySearchFindInput.value;
-            if (query) { updateSearchHighlights(query); updateMatchStatus(query); }
-        });
-    }
-
-    if (elements.secondarySearchUseRegexBtn) {
-        elements.secondarySearchUseRegexBtn.addEventListener("click", () => {
-            state.searchUseRegex = !state.searchUseRegex;
-            elements.secondarySearchUseRegexBtn.classList.toggle("active", state.searchUseRegex);
-            if (elements.searchUseRegexBtn) elements.searchUseRegexBtn.classList.toggle("active", state.searchUseRegex);
-            const query = elements.secondarySearchFindInput.value;
-            if (query) { updateSearchHighlights(query); updateMatchStatus(query); }
         });
     }
 

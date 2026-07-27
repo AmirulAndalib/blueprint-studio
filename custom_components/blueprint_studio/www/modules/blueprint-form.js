@@ -316,7 +316,7 @@ async function _renderForm(blueprintContent, bpInfo, preservedValues = {}) {
         <div class="bf-panel">
             <div class="bf-header">
                 <div class="bf-title-area">
-                    <span class="material-icons" style="margin-right:8px;opacity:.7;font-size:1.1em;">architecture</span>
+                    <span class="blueprint-form-heading-icon ui-icon material-icons">architecture</span>
                     <span class="bf-title">Use Blueprint: "${_esc(bpInfo.name)}"</span>
                 </div>
                 <button class="bf-close" title="Close">✕</button>
@@ -343,10 +343,10 @@ async function _renderForm(blueprintContent, bpInfo, preservedValues = {}) {
             </div>
             <div class="bf-footer">
                 <button class="bf-btn bf-btn-secondary" id="bf-btn-validate">
-                    <span class="material-icons">check_circle</span> Validate YAML
+                    <span class="ui-icon material-icons">check_circle</span> Validate YAML
                 </button>
                 <button class="bf-btn bf-btn-primary" id="bf-btn-use">
-                    <span class="material-icons">save</span> Save Automation
+                    <span class="ui-icon material-icons">save</span> Save Automation
                 </button>
             </div>
         </div>`;
@@ -506,7 +506,7 @@ function _sectionHtml(section, devices, areas, entities, labels, floors, themes,
     return `
         <details class="bf-section" open>
             <summary class="bf-section-title">
-                <span class="material-icons bf-chevron">expand_more</span>
+                <span class="ui-icon material-icons bf-chevron">expand_more</span>
                 ${_esc(section.name)}
                 ${section.description ? `<span class="bf-section-desc">${_esc(section.description)}</span>` : ''}
             </summary>
@@ -525,7 +525,7 @@ function _fieldHtml(inp, devices, areas, entities, labels, floors, themes, addon
                 ${_esc(inp.name)}${inp.required ? ' <span class="bf-required" title="Required">*</span>' : ''}
                 ${inp.description ? `
                     <button type="button" class="bf-help-btn" data-help-key="${_esc(inp.key)}" title="Show help">
-                        <span class="material-icons" style="font-size:14px">info_outline</span>
+                        <span class="ui-icon ui-icon--size-xs material-icons">info_outline</span>
                     </button>` : ''}
             </label>
             ${inp.description ? `<div class="bf-helper bf-helper-hidden" id="bf-help-${_esc(inp.key)}">${_esc(inp.description)}</div>` : ''}
@@ -1188,7 +1188,7 @@ async function _showSaveDialog(automationYaml, name, panelEl) {
             <div class="bf-footer">
                 <button class="bf-btn bf-btn-secondary bf-cancel-btn">Cancel</button>
                 <button class="bf-btn bf-btn-primary bf-confirm-btn">
-                    <span class="material-icons">save</span> Save
+                    <span class="ui-icon material-icons">save</span> Save
                 </button>
             </div>
         </div>`;

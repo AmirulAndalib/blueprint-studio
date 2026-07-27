@@ -152,6 +152,14 @@
       font-style: italic;
     }
 
+    .ha-hint-snippet-icon {
+      color: var(--warning-color);
+      font-size: 16px;
+      height: 16px;
+      margin-right: 6px;
+      width: 16px;
+    }
+
     .ha-hint-description {
       opacity: 0.6;
       font-size: 11px;

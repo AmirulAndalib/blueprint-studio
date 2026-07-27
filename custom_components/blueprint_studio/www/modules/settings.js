@@ -4,6 +4,18 @@ import { fetchWithAuth } from './api.js';
 import { eventBus } from './event-bus.js';
 import { API_BASE, STORAGE_KEY } from './constants.js';
 import { trackSettingsSave } from './settings-sync.js';
+import { setToolbarControlLabel } from './toolbar.js';
+import {
+  clamp,
+  SIDEBAR_MIN_WIDTH,
+  SIDEBAR_MAX_WIDTH,
+  AI_SIDEBAR_MIN_WIDTH,
+  AI_SIDEBAR_MAX_WIDTH,
+  TERMINAL_MIN_HEIGHT,
+  TERMINAL_DEFAULT_HEIGHT,
+  SPLIT_MIN_PERCENT,
+  SPLIT_MAX_PERCENT,
+} from './workspace-layout.js';
 
 const SETTINGS_CLIENT_ID_KEY = `${STORAGE_KEY}_client_id`;
 const LOCAL_SETTINGS_RECOVERY_WINDOW_MS = 2 * 60 * 1000;
@@ -143,7 +155,25 @@ export async function loadSettings() {
     state.fontFamily = settings.fontFamily || localSettings.fontFamily || "'SF Mono', 'Menlo', 'Monaco', 'Consolas', monospace";
     state.tabSize = parseInt(settings.tabSize) || 2;
     state.indentWithTabs = settings.indentWithTabs || false;
-    state.sidebarWidth = parseInt(settings.sidebarWidth) || parseInt(localSettings.sidebarWidth) || 320;
+    const workspaceLayout = settings.workspaceLayout || localSettings.workspaceLayout || {};
+    state.sidebarWidth = clamp(
+      workspaceLayout.sidebarWidth ?? settings.sidebarWidth ?? localSettings.sidebarWidth,
+      SIDEBAR_MIN_WIDTH,
+      SIDEBAR_MAX_WIDTH,
+      320
+    );
+    state.aiSidebarWidth = clamp(
+      workspaceLayout.aiSidebarWidth ?? settings.aiSidebarWidth ?? localSettings.aiSidebarWidth,
+      AI_SIDEBAR_MIN_WIDTH,
+      AI_SIDEBAR_MAX_WIDTH,
+      350
+    );
+    state.terminalPanelHeight = clamp(
+      workspaceLayout.terminalPanelHeight ?? settings.terminalPanelHeight ?? localSettings.terminalPanelHeight,
+      TERMINAL_MIN_HEIGHT,
+      Math.max(TERMINAL_MIN_HEIGHT, window.innerHeight),
+      TERMINAL_DEFAULT_HEIGHT
+    );
     state.tabPosition = settings.tabPosition || localSettings.tabPosition || "top";
     state.activeSidebarView = settings.activeSidebarView || "explorer";
     state.wordWrap = settings.wordWrap !== false; // default true
@@ -221,7 +251,12 @@ export async function loadSettings() {
     if (settings.splitView) {
       state.splitView.enabled = settings.splitView.enabled || false;
       state.splitView.orientation = settings.splitView.orientation || 'vertical';
-      state.splitView.primaryPaneSize = settings.splitView.primaryPaneSize || 50;
+      state.splitView.primaryPaneSize = clamp(
+        workspaceLayout.splitPrimaryPercent ?? settings.splitView.primaryPaneSize,
+        SPLIT_MIN_PERCENT,
+        SPLIT_MAX_PERCENT,
+        50
+      );
       state.splitView.primaryTabs = settings.splitView.primaryTabs || [];
       state.splitView.secondaryTabs = settings.splitView.secondaryTabs || [];
       state._savedPrimaryActiveTabPath = settings.splitView.primaryActiveTabPath;
@@ -372,6 +407,14 @@ export async function saveSettings() {
       tabSize: state.tabSize,
       indentWithTabs: state.indentWithTabs,
       sidebarWidth: state.sidebarWidth,
+      aiSidebarWidth: state.aiSidebarWidth,
+      terminalPanelHeight: state.terminalPanelHeight,
+      workspaceLayout: {
+        sidebarWidth: state.sidebarWidth,
+        aiSidebarWidth: state.aiSidebarWidth,
+        terminalPanelHeight: state.terminalPanelHeight,
+        splitPrimaryPercent: state.splitView?.primaryPaneSize || 50,
+      },
       tabPosition: state.tabPosition,
       activeSidebarView: state.activeSidebarView,
       wordWrap: state.wordWrap,
@@ -460,11 +503,11 @@ export function updateShowHiddenButton() {
     const icon = elements.btnShowHidden.querySelector('.material-icons');
     if (state.showHidden) {
       icon.textContent = 'visibility';
-      elements.btnShowHidden.title = 'Hide hidden folders';
+      setToolbarControlLabel(elements.btnShowHidden, 'Hide hidden folders');
       elements.btnShowHidden.classList.add('active');
     } else {
       icon.textContent = 'visibility_off';
-      elements.btnShowHidden.title = 'Show hidden folders';
+      setToolbarControlLabel(elements.btnShowHidden, 'Show hidden folders');
       elements.btnShowHidden.classList.remove('active');
     }
   }

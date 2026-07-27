@@ -6,6 +6,127 @@ import { eventBus } from './event-bus.js';
 import { API_BASE } from './constants.js';
 import { fetchWithAuth } from './api.js';
 import { showToast, showConfirmDialog, showGlobalLoading, hideGlobalLoading } from './ui.js';
+import { closeDialog, openDialog } from './dialog-manager.js';
+
+const TOOLBAR_REQUIREMENTS = {
+  'btn-format': () => state.activeTab ? null : 'Open a file to format it',
+  'btn-search': () => state.activeTab ? null : 'Open a file to search it',
+  'btn-validate': () => state.activeTab ? null : 'Open a YAML file to validate it',
+  'btn-use-blueprint': () => state.activeTab?.content?.includes('blueprint:') ? null : 'Open a Blueprint file to use it',
+  'btn-markdown-preview': () => state.activeTab?.path?.toLowerCase().endsWith('.md') ? null : 'Open a Markdown file to preview it',
+  'btn-split-close': () => state.splitView?.enabled ? null : 'Open Split Editor first',
+  'btn-terminal': () => state.terminalIntegrationEnabled ? null : 'Enable Terminal in Settings',
+  'btn-ai-studio': () => state.aiIntegrationEnabled ? null : 'Enable AI Studio in Settings',
+  'btn-git-pull': () => state.gitIntegrationEnabled ? null : 'Enable GitHub source control in Settings',
+  'btn-git-push': () => state.gitIntegrationEnabled ? null : 'Enable GitHub source control in Settings',
+  'btn-git-status': () => state.gitIntegrationEnabled ? null : 'Enable GitHub source control in Settings',
+  'btn-git-settings': () => state.gitIntegrationEnabled ? null : 'Enable GitHub source control in Settings',
+  'btn-gitea-pull': () => state.giteaIntegrationEnabled ? null : 'Enable Gitea source control in Settings',
+  'btn-gitea-push': () => state.giteaIntegrationEnabled ? null : 'Enable Gitea source control in Settings',
+  'btn-gitea-status': () => state.giteaIntegrationEnabled ? null : 'Enable Gitea source control in Settings',
+  'btn-gitea-settings': () => state.giteaIntegrationEnabled ? null : 'Enable Gitea source control in Settings',
+};
+
+const TOOLBAR_ICON_FALLBACKS = {
+  'btn-git-pull': 'cloud_download',
+  'btn-git-push': 'cloud_upload',
+  'btn-git-status': 'sync',
+  'btn-git-settings': 'settings',
+  'btn-gitea-pull': 'cloud_download',
+  'btn-gitea-push': 'cloud_upload',
+  'btn-gitea-status': 'sync',
+};
+
+function commandLabelParts(label = '') {
+  const suffix = label.match(/\s*\(([^()]*)\)\s*$/);
+  const shortcut = suffix && /(?:Ctrl|Cmd|Alt|Option|Shift|Meta|F\d)/i.test(suffix[1]) ? suffix[1] : '';
+  return {
+    label: shortcut ? label.slice(0, suffix.index).trim() : label.trim(),
+    shortcut,
+  };
+}
+
+function toolbarCommands() {
+  const toolbar = document.querySelector('.toolbar');
+  if (!toolbar) return [];
+  return [...toolbar.querySelectorAll(':scope > .toolbar-group[data-toolbar-priority] > button')]
+    .filter((control) => control.id !== 'btn-toolbar-overflow')
+    .map((control) => {
+      const fullLabel = control.dataset.toolbarLabel
+        || control.getAttribute('aria-label')
+        || control.dataset.tooltip
+        || control.title
+        || control.id;
+      const { label, shortcut } = commandLabelParts(fullLabel);
+      const icon = control.querySelector('.material-icons')?.textContent?.trim()
+        || TOOLBAR_ICON_FALLBACKS[control.id]
+        || 'bolt';
+      const scope = control.closest('[role="group"]')?.getAttribute('aria-label') || 'Workspace';
+      return {
+        id: control.id,
+        label,
+        icon,
+        scope,
+        shortcut,
+        keywords: `${fullLabel} ${control.id}`,
+        availability: () => {
+          const requirement = TOOLBAR_REQUIREMENTS[control.id]?.();
+          const reason = control.dataset.disabledReason || requirement || '';
+          return { enabled: !control.disabled && !reason, reason };
+        },
+        action: () => control.click(),
+      };
+    });
+}
+
+function paletteOnlyCommands() {
+  const activeFile = (reason) => () => ({ enabled: !!state.activeTab, reason: state.activeTab ? '' : reason });
+  const editor = (reason) => () => ({ enabled: !!state.editor && !!state.activeTab, reason: state.editor && state.activeTab ? '' : reason });
+  const git = () => ({ enabled: !!state.gitIntegrationEnabled, reason: state.gitIntegrationEnabled ? '' : 'Enable GitHub source control in Settings' });
+  return [
+    { id: 'new_blueprint', label: 'New Blueprint', icon: 'architecture', scope: 'Blueprint', action: () => eventBus.emit('blueprint:new') },
+    { id: 'convert_to_blueprint', label: 'Convert to Blueprint (or Selection)', icon: 'architecture', scope: 'Blueprint', availability: activeFile('Open a file to convert it'), action: () => eventBus.emit('blueprint:convert') },
+    { id: 'generate_uuid', label: t('palette.cmd_generate_uuid'), icon: 'fingerprint', scope: 'Editor', shortcut: 'Ctrl+Shift+U', availability: editor('Open a file to insert a UUID'), action: () => eventBus.emit('editor:insert-uuid') },
+    { id: 'git_history', label: t('palette.cmd_git_history'), icon: 'history', scope: 'GitHub source control', availability: git, action: () => eventBus.emit('git:show-history') },
+    { id: 'dev_tools_actions', label: 'Developer Tools: Actions', icon: 'construction', scope: 'Home Assistant', action: () => eventBus.emit('ha:dev-tools', { tab: 'actions' }) },
+    { id: 'dev_tools_template', label: 'Developer Tools: Template', icon: 'construction', scope: 'Home Assistant', action: () => eventBus.emit('ha:dev-tools', { tab: 'template' }) },
+    { id: 'dev_tools_states', label: 'Developer Tools: States', icon: 'construction', scope: 'Home Assistant', action: () => eventBus.emit('ha:dev-tools', { tab: 'states' }) },
+    { id: 'dev_tools_config', label: 'Developer Tools: Config', icon: 'construction', scope: 'Home Assistant', action: () => eventBus.emit('ha:dev-tools', { tab: 'config' }) },
+    { id: 'shortcuts', label: t('palette.cmd_shortcuts'), icon: 'keyboard', scope: 'Help', action: () => eventBus.emit('ui:show-shortcuts') },
+    { id: 'report_issue', label: t('palette.cmd_report_issue'), icon: 'bug_report', scope: 'Help', action: () => eventBus.emit('ui:report-issue') },
+    { id: 'request_feature', label: t('palette.cmd_request_feature'), icon: 'lightbulb', scope: 'Help', action: () => eventBus.emit('ui:request-feature') },
+    { id: 'clean_git_locks', label: t('palette.cmd_clean_git_locks'), icon: 'delete_sweep', scope: 'GitHub source control', availability: git, action: async () => {
+      if (!await showConfirmDialog({ title: t('palette.cmd_clean_git_locks'), message: 'Are you sure you want to clean Git lock files? This can fix stuck operations.', confirmText: 'Clean Locks', isDanger: true })) return;
+      try {
+        showGlobalLoading('Cleaning locks...');
+        const res = await fetchWithAuth(API_BASE, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'git_clean_locks' }) });
+        hideGlobalLoading();
+        if (res.success) showToast(res.message, 'success'); else showToast(t('toast.clean_locks_failed', { error: res.message }), 'error');
+      } catch (error) {
+        hideGlobalLoading();
+        showToast(t('toast.generic_error', { error: error.message }), 'error');
+      }
+    }},
+    { id: 'copy_path', label: t('palette.cmd_copy_path'), icon: 'content_copy', scope: 'File', availability: activeFile('Open a file to copy its path'), action: () => copyToClipboard(getTruePath(state.activeTab.path)) },
+    { id: 'toggle_word_wrap', label: t('palette.cmd_toggle_word_wrap'), icon: 'wrap_text', scope: 'Editor', availability: editor('Open a file to change word wrapping'), action: () => {
+      state.wordWrap = !state.wordWrap;
+      state.editor.setOption('lineWrapping', state.wordWrap);
+      eventBus.emit('settings:save');
+      showToast(`Word wrap ${state.wordWrap ? 'enabled' : 'disabled'}`, 'info');
+    }},
+    { id: 'fold_all', label: t('palette.cmd_fold_all'), icon: 'unfold_less', scope: 'Editor', shortcut: 'Ctrl+Alt+[', availability: editor('Open a file to fold it'), action: () => state.editor.execCommand('foldAll') },
+    { id: 'unfold_all', label: t('palette.cmd_unfold_all'), icon: 'unfold_more', scope: 'Editor', shortcut: 'Ctrl+Alt+]', availability: editor('Open a file to unfold it'), action: () => state.editor.execCommand('unfoldAll') },
+    { id: 'close_others', label: t('palette.cmd_close_others'), icon: 'close_fullscreen', scope: 'Tabs', availability: () => ({ enabled: !!state.activeTab && state.openTabs.length > 1, reason: !state.activeTab ? 'Open a file first' : state.openTabs.length > 1 ? '' : 'There are no other open tabs' }), action: () => state.openTabs.filter((tab) => tab !== state.activeTab).forEach((tab) => eventBus.emit('tab:close', { tab })) },
+    { id: 'close_saved', label: t('palette.cmd_close_saved'), icon: 'save', scope: 'Tabs', availability: () => ({ enabled: state.openTabs.some((tab) => !tab.modified && tab !== state.activeTab), reason: state.openTabs.some((tab) => !tab.modified && tab !== state.activeTab) ? '' : 'There are no other saved tabs' }), action: () => state.openTabs.filter((tab) => !tab.modified && tab !== state.activeTab).forEach((tab) => eventBus.emit('tab:close', { tab })) },
+    { id: 'theme_light', label: t('palette.cmd_theme_light'), icon: 'light_mode', scope: 'Appearance', action: () => eventBus.emit('ui:set-theme-preset', { preset: 'light' }) },
+    { id: 'theme_dark', label: t('palette.cmd_theme_dark'), icon: 'dark_mode', scope: 'Appearance', action: () => eventBus.emit('ui:set-theme-preset', { preset: 'dark' }) },
+    { id: 'theme_auto', label: t('palette.cmd_theme_auto'), icon: 'brightness_auto', scope: 'Appearance', action: () => eventBus.emit('ui:set-theme-preset', { preset: 'auto' }) },
+  ].map((command) => ({ availability: () => ({ enabled: true, reason: '' }), shortcut: '', keywords: '', ...command }));
+}
+
+export function getCommandPaletteCommands() {
+  return [...toolbarCommands(), ...paletteOnlyCommands()];
+}
 
 /**
  * Shows the unified command palette
@@ -19,62 +140,7 @@ export function showCommandPalette(initialMode = "") {
   if (!elements.commandPaletteOverlay) return;
   if (elements.commandPaletteOverlay.classList.contains("visible")) return;
 
-  const commands = [
-      { id: "save", label: t("palette.cmd_save"), icon: "save", shortcut: "Ctrl+S", action: () => { if (state.activeTab) eventBus.emit('file:save', { path: state.activeTab.path, content: state.activeTab.content }); } },
-      { id: "save_all", label: t("palette.cmd_save_all"), icon: "save_alt", shortcut: "Ctrl+Shift+S", action: () => eventBus.emit('file:save-all') },
-      { id: "new_file", label: t("palette.cmd_new_file"), icon: "note_add", action: () => eventBus.emit('file:new') },
-      { id: "new_folder", label: t("palette.cmd_new_folder"), icon: "create_new_folder", action: () => eventBus.emit('folder:new') },
-      { id: "new_blueprint", label: "New Blueprint", icon: "architecture", action: () => eventBus.emit('blueprint:new') },
-      { id: "convert_to_blueprint", label: "Convert to Blueprint (or Selection)", icon: "architecture", action: () => { if (state.activeTab) eventBus.emit('blueprint:convert'); } },
-      { id: "use_blueprint", label: "Use Blueprint (Instantiate)", icon: "architecture", action: () => { if (state.activeTab) eventBus.emit('blueprint:use'); } },
-      { id: "generate_uuid", label: t("palette.cmd_generate_uuid"), icon: "fingerprint", shortcut: "Ctrl+Shift+U", action: () => eventBus.emit('editor:insert-uuid') },
-      { id: "git_status", label: t("palette.cmd_git_status"), icon: "sync", action: () => eventBus.emit('git:status-check', { fetch: true }) },
-      { id: "git_push", label: t("palette.cmd_git_push"), icon: "cloud_upload", action: () => eventBus.emit('git:push') },
-      { id: "git_pull", label: t("palette.cmd_git_pull"), icon: "cloud_download", action: () => eventBus.emit('git:pull') },
-      { id: "git_history", label: t("palette.cmd_git_history"), icon: "history", action: () => eventBus.emit('git:show-history') },
-      { id: "validate", label: t("palette.cmd_validate"), icon: "check_circle", action: () => { if (state.activeTab) eventBus.emit('file:validate'); } },
-      { id: "restart_ha", label: t("palette.cmd_restart_ha"), icon: "restart_alt", action: () => eventBus.emit('ha:restart') },
-      { id: "dev_tools_actions", label: "Developer Tools: Actions", icon: "construction", action: () => eventBus.emit('ha:dev-tools', { tab: 'actions' }) },
-      { id: "dev_tools_template", label: "Developer Tools: Template", icon: "construction", action: () => eventBus.emit('ha:dev-tools', { tab: 'template' }) },
-      { id: "dev_tools_states", label: "Developer Tools: States", icon: "construction", action: () => eventBus.emit('ha:dev-tools', { tab: 'states' }) },
-      { id: "dev_tools_config", label: "Developer Tools: Config", icon: "construction", action: () => eventBus.emit('ha:dev-tools', { tab: 'config' }) },
-      { id: "toggle_sidebar", label: t("palette.cmd_toggle_sidebar"), icon: "menu", shortcut: "Ctrl+B", action: () => eventBus.emit('ui:toggle-sidebar') },
-      { id: "shortcuts", label: t("palette.cmd_shortcuts"), icon: "keyboard", action: () => eventBus.emit('ui:show-shortcuts') },
-      { id: "settings", label: t("palette.cmd_settings"), icon: "settings", action: () => eventBus.emit('ui:show-settings') },
-      { id: "report_issue", label: t("palette.cmd_report_issue"), icon: "bug_report", action: () => eventBus.emit('ui:report-issue') },
-      { id: "request_feature", label: t("palette.cmd_request_feature"), icon: "lightbulb", action: () => eventBus.emit('ui:request-feature') },
-      { id: "clean_git_locks", label: t("palette.cmd_clean_git_locks"), icon: "delete_sweep", action: async () => {
-          if (!await showConfirmDialog({ title: t("palette.cmd_clean_git_locks"), message: "Are you sure you want to clean Git lock files? This can fix stuck operations.", confirmText: "Clean Locks", isDanger: true })) return;
-          try {
-              showGlobalLoading("Cleaning locks...");
-              const res = await fetchWithAuth(API_BASE, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "git_clean_locks" }) });
-              hideGlobalLoading();
-              if (res.success) showToast(res.message, "success"); else showToast(t("toast.clean_locks_failed", { error: res.message }), "error");
-          } catch (e) { hideGlobalLoading(); showToast(t("toast.generic_error", { error: e.message }), "error"); }
-      }},
-      { id: "copy_path", label: t("palette.cmd_copy_path"), icon: "content_copy", action: () => {
-          if (state.activeTab) {
-              const path = getTruePath(state.activeTab.path);
-              copyToClipboard(path);
-          }
-      }},
-      { id: "download_file", label: t("palette.cmd_download_file"), icon: "download", action: () => {
-          if (state.activeTab) eventBus.emit('file:download', { path: state.activeTab.path });
-      }},
-      { id: "toggle_word_wrap", label: t("palette.cmd_toggle_word_wrap"), icon: "wrap_text", action: () => {
-          state.wordWrap = !state.wordWrap;
-          if (state.editor) state.editor.setOption('lineWrapping', state.wordWrap);
-          eventBus.emit('settings:save');
-          showToast(`Word wrap ${state.wordWrap ? "enabled" : "disabled"}`, "info");
-      }},
-      { id: "fold_all", label: t("palette.cmd_fold_all"), icon: "unfold_less", action: () => { if (state.editor) state.editor.execCommand("foldAll"); } },
-      { id: "unfold_all", label: t("palette.cmd_unfold_all"), icon: "unfold_more", action: () => { if (state.editor) state.editor.execCommand("unfoldAll"); } },
-      { id: "close_others", label: t("palette.cmd_close_others"), icon: "close_fullscreen", action: () => { if (state.activeTab) { const tabs = state.openTabs.filter(t => t !== state.activeTab); tabs.forEach(t => eventBus.emit('tab:close', { tab: t })); } } },
-      { id: "close_saved", label: t("palette.cmd_close_saved"), icon: "save", action: () => { if (state.activeTab) { const tabs = state.openTabs.filter(t => !t.modified && t !== state.activeTab); tabs.forEach(t => eventBus.emit('tab:close', { tab: t })); } } },
-      { id: "theme_light", label: t("palette.cmd_theme_light"), icon: "light_mode", action: () => eventBus.emit('ui:set-theme-preset', { preset: "light" }) },
-      { id: "theme_dark", label: t("palette.cmd_theme_dark"), icon: "dark_mode", action: () => eventBus.emit('ui:set-theme-preset', { preset: "dark" }) },
-      { id: "theme_auto", label: t("palette.cmd_theme_auto"), icon: "brightness_auto", action: () => eventBus.emit('ui:set-theme-preset', { preset: "auto" }) },
-  ];
+  const commands = getCommandPaletteCommands();
 
   let selectedIndex = 0;
   let filteredItems = [];
@@ -86,7 +152,9 @@ export function showCommandPalette(initialMode = "") {
       if (query.startsWith(">")) {
           currentMode = "command";
           const filter = query.slice(1).toLowerCase().trim();
-          filteredItems = commands.filter(c => c.label.toLowerCase().includes(filter));
+          filteredItems = commands.filter((command) =>
+              `${command.label} ${command.scope} ${command.shortcut} ${command.keywords}`.toLowerCase().includes(filter)
+          );
           elements.commandPaletteInput.placeholder = t("palette.type_command");
       } else if (query.startsWith(":")) {
           currentMode = "goto";
@@ -133,16 +201,46 @@ export function showCommandPalette(initialMode = "") {
       filteredItems.forEach((item, i) => {
           const div = document.createElement("div");
           div.className = `command-item ${i === selectedIndex ? "selected" : ""}`;
+          div.setAttribute("role", "option");
+          div.setAttribute("aria-selected", i === selectedIndex ? "true" : "false");
           
           if (currentMode === "command") {
-              div.innerHTML = `
-                  <div class="command-item-label">
-                      <span class="material-icons command-item-icon">${item.icon}</span>
-                      <span>${item.label}</span>
-                  </div>
-                  ${item.shortcut ? `<span class="command-item-shortcut">${item.shortcut}</span>` : ""}
-              `;
+              const availability = item.availability();
+              div.classList.toggle('is-disabled', !availability.enabled);
+              div.setAttribute('aria-disabled', String(!availability.enabled));
+              div.setAttribute('aria-label', `${item.label}, ${item.scope}${item.shortcut ? `, ${item.shortcut}` : ''}${availability.reason ? `, unavailable: ${availability.reason}` : ''}`);
+
+              const label = document.createElement('div');
+              label.className = 'command-item-label';
+              const icon = document.createElement('span');
+              icon.className = 'ui-icon material-icons command-item-icon';
+              icon.textContent = item.icon;
+              const text = document.createElement('span');
+              text.className = 'command-item-text';
+              const name = document.createElement('span');
+              name.className = 'command-item-name';
+              name.textContent = item.label;
+              const metadata = document.createElement('span');
+              metadata.className = 'command-item-metadata';
+              const scope = document.createElement('span');
+              scope.className = 'command-item-scope';
+              scope.textContent = item.scope;
+              metadata.appendChild(scope);
+              const status = document.createElement('span');
+              status.className = availability.enabled ? 'command-item-status' : 'command-item-disabled-reason';
+              status.textContent = availability.enabled ? 'Available' : `Unavailable: ${availability.reason}`;
+              metadata.appendChild(status);
+              text.append(name, metadata);
+              label.append(icon, text);
+              div.appendChild(label);
+              if (item.shortcut) {
+                  const shortcut = document.createElement('span');
+                  shortcut.className = 'command-item-shortcut';
+                  shortcut.textContent = item.shortcut;
+                  div.appendChild(shortcut);
+              }
               div.onclick = () => {
+                  if (!availability.enabled) return;
                   hide();
                   item.action();
               };
@@ -150,7 +248,7 @@ export function showCommandPalette(initialMode = "") {
               const fileIcon = getFileIcon(item.path);
               div.innerHTML = `
                   <div class="command-item-label">
-                      <span class="material-icons command-item-icon ${fileIcon.class}">${fileIcon.icon}</span>
+                      <span class="ui-icon material-icons command-item-icon ${fileIcon.class}">${fileIcon.icon}</span>
                       <div style="display: flex; flex-direction: column;">
                           <span class="quick-switcher-name">${item.name}</span>
                           <span style="font-size: 10px; opacity: 0.6;">${item.path}</span>
@@ -198,15 +296,15 @@ export function showCommandPalette(initialMode = "") {
 
           const item = filteredItems[selectedIndex];
           if (item) {
-              hide();
               if (currentMode === "command") {
+                  if (!item.availability().enabled) return;
+                  hide();
                   item.action();
               } else {
+                  hide();
                   eventBus.emit('file:open', { path: item.path });
               }
           }
-      } else if (e.key === "Escape") {
-          hide();
       }
   };
 
@@ -215,26 +313,23 @@ export function showCommandPalette(initialMode = "") {
       renderResults();
   };
 
-  const handleOverlayClick = (e) => {
-      if (e.target === elements.commandPaletteOverlay) hide();
-  };
-
   const hide = () => {
-      elements.commandPaletteOverlay.classList.remove("visible");
+      closeDialog(elements.commandPaletteOverlay);
       cleanup();
   };
 
   const cleanup = () => {
       elements.commandPaletteInput.removeEventListener("input", handleInput);
       elements.commandPaletteInput.removeEventListener("keydown", handleKeydown);
-      elements.commandPaletteOverlay.removeEventListener("click", handleOverlayClick);
   };
 
   elements.commandPaletteInput.addEventListener("input", handleInput);
   elements.commandPaletteInput.addEventListener("keydown", handleKeydown);
-  elements.commandPaletteOverlay.addEventListener("click", handleOverlayClick);
-  
-  elements.commandPaletteOverlay.classList.add("visible");
+
+  openDialog(elements.commandPaletteOverlay, {
+      initialFocus: elements.commandPaletteInput,
+      onRequestClose: hide,
+  });
   elements.commandPaletteInput.value = initialMode;
   selectedIndex = 0;
   renderResults();

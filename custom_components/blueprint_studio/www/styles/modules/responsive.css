@@ -205,15 +205,6 @@
         font-size: 18px;
       }
 
-      /* Hide less important toolbar groups on small mobile */
-      #group-split-view,
-      #btn-upload-folder,
-      #btn-download-folder,
-      #btn-one-tab-mode,
-      #btn-toggle-select {
-        display: none;
-      }
-
       /* Make toolbar groups more compact */
       .toolbar-group {
         padding: 0 2px;
@@ -226,6 +217,12 @@
         border-left: 1px solid var(--border-color);
         padding-left: 2px;
         margin-left: 2px;
+      }
+
+      .toolbar-group.toolbar-group--instance {
+        margin: 0 2px;
+        padding: 2px;
+        border: 1px solid color-mix(in srgb, var(--status-warning) 45%, var(--border-subtle));
       }
 
       /* Hide toolbar spacer on mobile to save space */
@@ -257,6 +254,10 @@
         padding-top: env(safe-area-inset-top);
         padding-bottom: env(safe-area-inset-bottom);
         transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+
+      .ai-sidebar-resize-handle {
+        display: none;
       }
 
       .sidebar.visible {
@@ -515,6 +516,11 @@
         margin-right: 12px;
       }
 
+      .context-menu-icon {
+        height: 20px;
+        width: 20px;
+      }
+
       /* Toast notifications mobile */
       .toast-container {
         left: 12px;
@@ -721,7 +727,7 @@
 
       /* Git panel header — compact layout for narrow screens */
       .git-panel-header {
-        flex-wrap: nowrap;
+        flex-wrap: wrap;
         padding: 8px 10px;
         gap: 4px;
       }
@@ -740,6 +746,7 @@
 
       .git-panel-actions {
         flex-shrink: 0;
+        max-width: calc(100% - 4px);
         overflow-x: auto;
         overflow-y: hidden;
         scrollbar-width: none;

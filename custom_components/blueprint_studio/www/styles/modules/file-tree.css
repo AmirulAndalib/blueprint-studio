@@ -3,6 +3,252 @@
       border-bottom: 1px solid var(--border-color);
     }
 
+    #view-search .search-container.global-search-container {
+      border-bottom: 1px solid var(--border-color);
+      padding: 12px;
+    }
+
+    .global-search-results {
+      flex: 1;
+      overflow-y: auto;
+      padding: 0;
+    }
+
+    .search-empty-state {
+      align-items: center;
+      color: var(--text-secondary);
+      display: flex;
+      flex-direction: column;
+      padding: 40px 20px;
+      text-align: center;
+    }
+
+    .global-search-empty-copy {
+      font-size: 14px;
+      margin: 0;
+    }
+
+    .global-search-error-state {
+      color: var(--error-color);
+      padding: 20px;
+      text-align: center;
+    }
+
+    .global-search-file-header {
+      align-items: center;
+      background: var(--bg-tertiary);
+      border-bottom: 1px solid var(--border-color);
+      cursor: pointer;
+      display: flex;
+      padding: 8px 12px;
+    }
+
+    .global-search-file-toggle-icon {
+      font-size: 16px;
+      height: 16px;
+      margin-right: 6px;
+      transition: transform 0.2s;
+      width: 16px;
+    }
+
+    .global-search-file-name {
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .global-search-file-folder {
+      color: var(--text-secondary);
+      font-size: 11px;
+      margin-left: 8px;
+      opacity: 0.7;
+    }
+
+    .global-search-file-actions {
+      align-items: center;
+      display: flex;
+      gap: 8px;
+      margin-left: auto;
+    }
+
+    .global-search-file-action-icon {
+      font-size: 14px;
+      height: 14px;
+      opacity: 0.6;
+      width: 14px;
+    }
+
+    .global-search-file-badge {
+      background: var(--accent-color);
+      border-radius: 10px;
+      color: white;
+      font-size: 10px;
+      padding: 0 6px;
+    }
+
+    .global-search-file-list {
+      display: block;
+    }
+
+    .global-search-match-row {
+      align-items: center;
+      border-bottom: 1px solid var(--border-color);
+      cursor: pointer;
+      display: flex;
+      font-family: monospace;
+      font-size: 12px;
+      padding: 6px 12px 6px 34px;
+      position: relative;
+    }
+
+    .global-search-match-line {
+      color: var(--text-secondary);
+      margin-right: 8px;
+      min-width: 20px;
+    }
+
+    .global-search-match-excerpt {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: pre;
+    }
+
+    .global-search-match-actions {
+      background: var(--bg-primary);
+      display: flex;
+      gap: 4px;
+      opacity: 0;
+      padding-left: 8px;
+      position: absolute;
+      right: 12px;
+    }
+
+    .global-search-match-action-icon {
+      font-size: 14px;
+      height: 14px;
+      opacity: 0.7;
+      width: 14px;
+    }
+
+    .global-search-entity-badge {
+      background: var(--success-color);
+      margin-left: auto;
+    }
+
+    .global-search-entity-row {
+      border-bottom: 1px solid var(--border-color);
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      font-size: 12px;
+      padding: 6px 12px 6px 34px;
+    }
+
+    .global-search-entity-name {
+      color: var(--text-primary);
+      font-weight: 600;
+    }
+
+    .global-search-entity-id {
+      color: var(--text-secondary);
+      font-family: monospace;
+      font-size: 11px;
+    }
+
+    .search-mode-tabs {
+      background: var(--bg-secondary);
+      border: 0;
+      border-radius: 4px;
+      display: flex;
+      margin-bottom: 12px;
+      width: 100%;
+    }
+
+    .search-mode-tab {
+      border-radius: 3px;
+      color: var(--text-secondary);
+      flex: 1;
+      font-size: 11px;
+      font-weight: 600;
+      min-height: auto;
+      padding: 4px;
+      text-align: center;
+    }
+
+    .search-mode-tab.active {
+      background: var(--bg-tertiary);
+      color: var(--accent-color);
+    }
+
+    .global-search-query-row {
+      align-items: center;
+      display: flex;
+      gap: 4px;
+      margin-bottom: 8px;
+      position: relative;
+    }
+
+    .global-search-input-wrap {
+      flex: 1;
+      position: relative;
+    }
+
+    .global-search-input-wrap .search-input.global-search-query-input {
+      padding-right: 30px;
+      width: 100%;
+    }
+
+    .global-search-modifiers {
+      display: flex;
+      gap: 2px;
+    }
+
+    .global-search-disclosure-panel {
+      display: none;
+    }
+
+    .global-search-disclosure-panel.expanded {
+      display: flex;
+    }
+
+    .global-search-replace-row {
+      align-items: center;
+      gap: 4px;
+      margin-bottom: 8px;
+      margin-left: 22px;
+    }
+
+    .global-search-replace-input {
+      flex: 1;
+    }
+
+    .toolbar-btn.global-search-replace-action {
+      height: 32px;
+      width: 32px;
+    }
+
+    .global-search-pattern-toggle-row {
+      margin-bottom: 4px;
+      margin-left: 22px;
+    }
+
+    .global-search-pattern-toggle {
+      color: var(--accent-color);
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .global-search-patterns {
+      flex-direction: column;
+      gap: 4px;
+      margin-left: 22px;
+    }
+
+    .global-search-patterns .search-input.global-search-pattern-input {
+      font-size: 12px;
+      padding: 4px 8px;
+    }
+
     .explorer-search-container {
       display: flex;
     }
@@ -304,6 +550,13 @@
       display: flex;
     }
 
+    .favorite-file-icon,
+    .favorite-unpin-icon,
+    .recent-file-icon {
+      height: 1em;
+      width: 1em;
+    }
+
     .tree-item {
       display: flex;
       align-items: center;
@@ -515,6 +768,11 @@
       line-height: 1;
     }
 
+    .file-tree-collapse-control {
+      flex-shrink: 0;
+      margin-left: auto;
+    }
+
     .breadcrumb {
       display: flex;
       align-items: center;
@@ -534,6 +792,15 @@
       white-space: nowrap;
       color: var(--text-secondary);
       transition: background 0.1s;
+      min-width: 0;
+      max-width: min(220px, 45vw);
+    }
+
+    .breadcrumb-link {
+      overflow: hidden;
+      min-width: 0;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     .breadcrumb-item:hover {
@@ -598,6 +865,8 @@
     .tree-icon.python { color: var(--icon-python); }
     .tree-icon.js { color: var(--icon-js); }
     .tree-icon.default { color: var(--icon-default); }
+
+    .file-pin-icon.is-pinned { color: var(--surface-selected); }
 
     .tree-chevron {
       width: 20px;
@@ -668,3 +937,8 @@
 .search-result-match .material-icons[title*="Dismiss"]:hover {
     color: var(--error-color);
 }
+    .favorites-tree {
+      flex: none;
+      max-height: 200px;
+      min-height: 0;
+    }

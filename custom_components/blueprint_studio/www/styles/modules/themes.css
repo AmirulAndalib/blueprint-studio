@@ -887,6 +887,11 @@
         font-size: 16px;
     }
 
+    body[data-theme-preset="native"] .ai-close-icon {
+        height: 16px;
+        width: 16px;
+    }
+
     body[data-theme-preset="native"] .search-container {
         padding: 6px 10px;
     }
@@ -1126,6 +1131,11 @@
     body[data-theme-preset="native"] .context-menu-item .material-icons {
         font-size: 16px;
         margin-right: 8px;
+    }
+
+    body[data-theme-preset="native"] .context-menu-icon {
+        height: 16px;
+        width: 16px;
     }
 
     body[data-theme-preset="native"] .context-menu-divider {

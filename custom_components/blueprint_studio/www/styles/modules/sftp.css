@@ -1,9 +1,47 @@
     /* ─── SFTP View ─────────────────────────────────────────────────────── */
+    .sftp-connection-selector {
+      align-items: flex-start;
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      min-width: 0;
+      gap: 3px;
+      overflow: hidden;
+    }
+
+    .sftp-connection-context {
+      max-width: 100%;
+    }
+
     .sftp-panel-body {
+      display: flex;
+      flex-direction: column;
+      overflow: auto;
       overflow-y: auto;
       overflow-x: hidden;
       flex: 1;
       -webkit-overflow-scrolling: touch;
+    }
+
+    .sftp-file-tree {
+      flex: 1;
+      overflow: auto;
+    }
+
+    .sftp-view-state {
+      flex: 1;
+    }
+
+    .sftp-view-state.hidden {
+      display: none;
+    }
+
+    .sftp-view-state > span:last-child {
+      max-width: 240px;
+      color: var(--text-secondary);
+      font-size: 12px;
+      line-height: 1.5;
+      text-align: center;
     }
     /* SFTP Header Dropdown */
     .sftp-header-select {
@@ -88,6 +126,14 @@
       gap: 2px;
       flex-wrap: wrap;
       border-bottom: 1px solid var(--border-color);
+      overflow: hidden;
+    }
+    .sftp-crumb {
+      overflow: hidden;
+      min-width: 0;
+      max-width: min(180px, 42vw);
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
     .sftp-crumb:hover { color: var(--accent-color); text-decoration: underline; }
     /* #sftp-file-tree reuses .tree-item / .tree-icon / .tree-name from the local tree */

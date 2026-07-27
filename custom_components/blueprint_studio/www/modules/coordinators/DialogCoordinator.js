@@ -43,26 +43,17 @@ export function initDialogCoordinator(callbacks) {
             if (functions.confirmModal) functions.confirmModal();
         });
     }
-    if (elements.modalOverlay) {
-        elements.modalOverlay.addEventListener("click", (e) => {
-            if (e.target === elements.modalOverlay) {
-                if (functions.hideModal) functions.hideModal();
-            }
-        });
-    }
     if (elements.modalInput) {
         elements.modalInput.addEventListener("keydown", (e) => {
             if (e.key === "Enter") {
                 if (functions.confirmModal) functions.confirmModal();
-            } else if (e.key === "Escape") {
-                if (functions.hideModal) functions.hideModal();
             }
         });
     }
 
     // Help & Support
-    eventBus.on("ui:show-shortcuts", () => {
-        if (functions.showShortcuts) functions.showShortcuts();
+    eventBus.on("ui:show-shortcuts", (data) => {
+        if (functions.showShortcuts) functions.showShortcuts(data || {});
     });
 
     eventBus.on("ui:hide-shortcuts", () => {

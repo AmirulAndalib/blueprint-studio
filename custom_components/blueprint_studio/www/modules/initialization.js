@@ -35,7 +35,8 @@ import {
   applyEditorSettings,
   resetModalToDefault,
   showConfirmDialog,
-  hideModal
+  hideModal,
+  activateSharedModal
 } from './ui.js';
 
 import {
@@ -57,7 +58,7 @@ import {
 
 import {
   initResizeHandle
-} from './resize.js';
+} from './resize.js?v=2.5.75';
 
 import {
   initStatusBarEvents
@@ -84,13 +85,13 @@ import {
   parseSftpPath,
   uploadSftpFile,
   refreshSftp
-} from './sftp.js';
+} from './sftp.js?v=2.5.75';
 
 import {
   loadSettings,
   saveSettings,
   updateShowHiddenButton
-} from './settings.js';
+} from './settings.js?v=2.5.75';
 
 import {
   showAppSettings
@@ -129,23 +130,27 @@ import {
 import {
   giteaStatus,
   giteaCreateRepo
-} from "./gitea-integration.js";
+} from "./gitea-integration.js?v=2.5.75";
 
 import {
   updateSplitViewButtons
-} from './split-view.js';
+} from './split-view.js?v=2.5.75';
 import {
   hideSidebar,
-  showSidebar
+  showSidebar,
+  syncActivityState
 } from './sidebar.js';
 import { initAiDiffListener, enqueueAiDiff } from './git-diff.js';
-import { initializeEventHandlers } from './coordinators/index.js';
+import { initializeEventHandlers } from './coordinators/index.js?v=2.5.75';
 import { 
   isTextFile, 
   copyToClipboard 
 } from './utils.js';
-import { updateToolbarState } from './toolbar.js';
+import { initializeToolbarControls, updateToolbarState } from './toolbar.js';
 import { updateStatusBar } from './status-bar.js';
+import { initTooltips } from './tooltip.js?v=2.5.75';
+import { initToolbarOverflow } from './toolbar-overflow.js';
+import { initActivityRail } from './activity-rail.js';
 
 let isInitializing = false;
 
@@ -162,6 +167,8 @@ export async function init() {
   
   try {
     initElements();
+    initializeToolbarControls();
+    initTooltips();
 
     // Initialize coordinator event handlers (must happen after initElements)
     initializeEventHandlers();
@@ -179,6 +186,8 @@ export async function init() {
     eventBus.emit('ui:refresh-strings');
     eventBus.emit('ui:refresh-visibility');
     eventBus.emit('ui:refresh-layout');
+    initToolbarOverflow();
+    initActivityRail();
 
 
     // Auto-reload settings when user comes back to the app
@@ -306,17 +315,18 @@ export async function init() {
         const icon = btn.querySelector(".material-icons");
         if (icon) icon.textContent = "expand_more";
         btn.title = "Expand file tree";
+        btn.setAttribute("aria-label", "Expand file tree");
+        btn.setAttribute("aria-expanded", "false");
       }
     }
 
     // Restore sidebar view panels (without expanding the sidebar)
     if (state.activeSidebarView) {
       const v = state.activeSidebarView;
-      if (elements.activityExplorer) elements.activityExplorer.classList.toggle("active", v === "explorer");
-      if (elements.activitySearch) elements.activitySearch.classList.toggle("active", v === "search");
-      if (elements.activitySftp) elements.activitySftp.classList.toggle("active", v === "sftp");
+      syncActivityState(v);
       if (elements.viewExplorer) { elements.viewExplorer.style.display = v === "explorer" ? "flex" : "none"; elements.viewExplorer.classList.toggle("hidden", v !== "explorer"); }
       if (elements.viewSearch) { elements.viewSearch.style.display = v === "search" ? "flex" : "none"; elements.viewSearch.classList.toggle("hidden", v !== "search"); }
+      if (elements.viewSourceControl) { elements.viewSourceControl.style.display = v === "source-control" ? "flex" : "none"; elements.viewSourceControl.classList.toggle("hidden", v !== "source-control"); }
       if (elements.viewSftp) { elements.viewSftp.style.display = v === "sftp" ? "flex" : "none"; elements.viewSftp.classList.toggle("hidden", v !== "sftp"); }
     }
 
@@ -426,7 +436,7 @@ export async function startOnboarding() {
                     </button>
                     <button class="btn-secondary onboarding-choice-btn" data-value="gitea" style="padding: 16px; border: 1px solid var(--border-color); border-radius: 8px; text-align: left; background: var(--bg-secondary); cursor: pointer; transition: background 0.2s; width: 100%; color: inherit;">
                         <div style="display: flex; align-items: center; gap: 12px;">
-                            <span class="material-icons" style="font-size: 24px; color: #fa8e14;">emoji_food_beverage</span>
+                            <span class="ui-icon ui-icon--size-lg ui-icon--tone-gitea material-icons">emoji_food_beverage</span>
                             <div>
                                 <div style="font-weight: 600;">Gitea</div>
                                 <div style="font-size: 12px; color: var(--text-secondary);">Connect to self-hosted Gitea</div>
@@ -435,7 +445,7 @@ export async function startOnboarding() {
                     </button>
                     <button class="btn-secondary onboarding-choice-btn" data-value="none" style="padding: 16px; border: 1px solid var(--border-color); border-radius: 8px; text-align: left; background: var(--bg-secondary); cursor: pointer; transition: background 0.2s; width: 100%; color: inherit;">
                         <div style="display: flex; align-items: center; gap: 12px;">
-                            <span class="material-icons" style="font-size: 24px;">block</span>
+                            <span class="ui-icon ui-icon--size-lg material-icons">block</span>
                             <div>
                                 <div style="font-weight: 600;">None</div>
                                 <div style="font-size: 12px; color: var(--text-secondary);">Skip version control</div>
@@ -456,7 +466,7 @@ export async function startOnboarding() {
             });
         });
 
-        document.getElementById('modal-overlay').classList.add("visible");
+        activateSharedModal({ initialFocus: buttons[0] });
     });
 
     const provider = choiceResult;
@@ -475,7 +485,7 @@ export async function startOnboarding() {
             title: "Step 1: Track Your Changes",
             message: `
               <div style="text-align: center;">
-                <span class="material-icons" style="font-size: 48px; color: var(--accent-color);">source</span>
+                <span class="ui-icon ui-icon--size-display ui-icon--tone-accent material-icons">source</span>
                 <p>First, we need to initialize a Git repository to track your file changes.</p>
                 <p style="font-size: 12px; color: var(--text-secondary);">This creates a hidden .git folder in your config directory.</p>
               </div>
@@ -498,7 +508,7 @@ export async function startOnboarding() {
                 title: "Step 2: Ignore Files",
                 message: `
                     <div style="text-align: center;">
-                        <span class="material-icons" style="font-size: 48px; color: var(--text-secondary); margin-bottom: 10px;">visibility_off</span>
+                        <span class="ui-icon ui-icon--size-display ui-icon--tone-secondary ui-icon--space-below-10 material-icons">visibility_off</span>
                         <p style="margin-bottom: 10px;">Configure which files to hide from GitHub (like passwords or temp files).</p>
                         <p style="font-size: 12px; color: var(--text-secondary);">We've already configured safe defaults for you.</p>
                     </div>
@@ -529,7 +539,7 @@ export async function startOnboarding() {
                     title: "Step 3: Login to GitHub",
                     message: `
                         <div style="text-align: center;">
-                            <span class="material-icons" style="font-size: 48px; color: var(--text-secondary);">login</span>
+                            <span class="ui-icon ui-icon--size-display ui-icon--tone-secondary material-icons">login</span>
                             <p>Login to GitHub to sync your configuration to the cloud.</p>
                         </div>
                     `,
@@ -553,7 +563,7 @@ export async function startOnboarding() {
                 title: "Step 4: Create Repository",
                 message: `
                     <div style="text-align: center;">
-                        <span class="material-icons" style="font-size: 48px; color: var(--accent-color);">add_circle_outline</span>
+                        <span class="ui-icon ui-icon--size-display ui-icon--tone-accent material-icons">add_circle_outline</span>
                         <p>Create a new private repository on GitHub to store your backups.</p>
                     </div>
                 `,
@@ -580,7 +590,7 @@ export async function startOnboarding() {
           <p>Explore your files on the left.</p>
           <p>Use the <b>${provider === 'gitea' ? 'Gitea' : 'Git'} Panel</b> to stage, commit, and push changes.</p>
           <br>
-          <p style="font-size: 12px;">Need help? Click the <span class="material-icons" style="font-size: 14px; vertical-align: middle;">help_outline</span> icon in the panel.</p>
+          <p style="font-size: 12px;">Need help? Click the <span class="ui-icon ui-icon--size-xs ui-icon--align-middle material-icons">help_outline</span> icon in the panel.</p>
         </div>
       `
         : `

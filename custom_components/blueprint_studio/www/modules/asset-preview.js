@@ -1,10 +1,10 @@
 /** ASSET-PREVIEW.JS | Purpose: * Handles preview rendering for non-code files including images, PDFs, videos, */
 import { state, elements } from './state.js';
-import { isSftpPath, parseSftpPath, sftpStreamUrl } from './sftp.js';
+import { isSftpPath, parseSftpPath, sftpStreamUrl } from './sftp.js?v=2.5.75';
 import { t } from './translations.js';
 import { eventBus } from './event-bus.js';
 import { copyToClipboard } from './utils.js';
-import { saveSettings } from './settings.js';
+import { saveSettings } from './settings.js?v=2.5.75';
 import { IMAGE_EXTENSIONS, AUDIO_EXTENSIONS } from './constants.js';
 import { urlWithTicket, serveFileUrl } from './api.js';
 
@@ -99,23 +99,23 @@ function renderImagePreview(tab, filename) {
     <div class="image-viewer-container" style="width: 100%; height: 100%; display: flex; flex-direction: column; background: var(--bg-tertiary);">
       <div class="pdf-toolbar" style="padding: 8px 16px; background: var(--bg-secondary); border-bottom: 1px solid var(--borderColor); display: flex; justify-content: space-between; align-items: center; height: 48px; flex-shrink: 0;">
         <div style="display: flex; align-items: center; gap: 8px;">
-          <span class="material-icons" style="color: var(--accent-color);">image</span>
+          <span class="ui-icon ui-icon--tone-accent material-icons">image</span>
           <span style="font-weight: 500; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 200px;">${filename}</span>
           <span style="color: var(--text-secondary); font-size: 12px; margin-left: 8px;">${tab.mimeType}</span>
         </div>
         <div style="display: flex; align-items: center; gap: 12px;">
           <div style="display: flex; align-items: center; gap: 4px;">
             <button id="img-prev" class="toolbar-btn" title="Previous Image" ${!prevImage ? 'disabled style="opacity: 0.5; cursor: default;"' : ''}>
-              <span class="material-icons">chevron_left</span>
+              <span class="ui-icon material-icons">chevron_left</span>
             </button>
             <span style="font-size: 13px; color: var(--text-secondary); min-width: 60px; text-align: center;">${currentIndex + 1} / ${imageFiles.length}</span>
             <button id="img-next" class="toolbar-btn" title="Next Image" ${!nextImage ? 'disabled style="opacity: 0.5; cursor: default;"' : ''}>
-              <span class="material-icons">chevron_right</span>
+              <span class="ui-icon material-icons">chevron_right</span>
             </button>
           </div>
           <div style="width: 1px; height: 24px; background: var(--borderColor);"></div>
           <button id="img-download" class="toolbar-btn" title="Download Image">
-            <span class="material-icons">download</span>
+            <span class="ui-icon material-icons">download</span>
           </button>
         </div>
       </div>
@@ -200,17 +200,17 @@ async function renderPdfPreview(tab, filename) {
     <div class="pdf-container" style="width: 100%; height: 100%; display: flex; flex-direction: column; background: var(--bg-tertiary);">
       <div class="pdf-toolbar" style="padding: 8px 16px; background: var(--bg-secondary); border-bottom: 1px solid var(--borderColor); display: flex; justify-content: space-between; align-items: center; height: 48px; flex-shrink: 0;">
         <div style="display: flex; align-items: center; gap: 8px;">
-          <span class="material-icons" style="color: var(--error-color);">picture_as_pdf</span>
+          <span class="ui-icon ui-icon--tone-error material-icons">picture_as_pdf</span>
           <span style="font-weight: 500; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 200px;">${filename}</span>
         </div>
         <div style="display: flex; align-items: center; gap: 12px;">
           <div style="display: flex; align-items: center; gap: 4px; color: var(--text-secondary); font-size: 13px;">
-            <button id="pdf-prev" class="toolbar-btn" style="min-width: 32px; height: 32px; padding: 0;"><span class="material-icons">chevron_left</span></button>
+            <button id="pdf-prev" class="toolbar-btn" style="min-width: 32px; height: 32px; padding: 0;"><span class="ui-icon material-icons">chevron_left</span></button>
             <span>Page <span id="pdf-page-num">1</span> / <span id="pdf-page-count">-</span></span>
-            <button id="pdf-next" class="toolbar-btn" style="min-width: 32px; height: 32px; padding: 0;"><span class="material-icons">chevron_right</span></button>
+            <button id="pdf-next" class="toolbar-btn" style="min-width: 32px; height: 32px; padding: 0;"><span class="ui-icon material-icons">chevron_right</span></button>
           </div>
           <div style="width: 1px; height: 24px; background: var(--borderColor);"></div>
-          <button id="btn-download-pdf" class="toolbar-btn" title="Download"><span class="material-icons">download</span></button>
+          <button id="btn-download-pdf" class="toolbar-btn" title="Download"><span class="ui-icon material-icons">download</span></button>
         </div>
       </div>
       <div id="pdf-viewer-viewport" style="flex-grow: 1; overflow: auto; display: flex; justify-content: center; align-items: flex-start; padding: 20px; background: var(--bg-primary);">
@@ -322,14 +322,14 @@ async function renderVideoPreview(tab, filename) {
     <div class="video-viewer-container" style="width: 100%; height: 100%; display: flex; flex-direction: column; background: var(--bg-tertiary);">
       <div class="pdf-toolbar" style="padding: 8px 16px; background: var(--bg-secondary); border-bottom: 1px solid var(--borderColor); display: flex; justify-content: space-between; align-items: center; height: 48px; flex-shrink: 0;">
         <div style="display: flex; align-items: center; gap: 8px;">
-          <span class="material-icons" style="color: var(--accent-color);">movie</span>
+          <span class="ui-icon ui-icon--tone-accent material-icons">movie</span>
           <span style="font-weight: 500; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 300px;">${filename}</span>
           <span style="color: var(--text-secondary); font-size: 12px; margin-left: 8px;">${tab.mimeType || ""}</span>
         </div>
         <div style="display: flex; align-items: center; gap: 12px;">
           ${isSftp
-            ? `<button id="video-download" class="toolbar-btn" title="Download Video"><span class="material-icons">download</span></button>`
-            : `<a href="${srcUrl}" download="${filename}" class="toolbar-btn" title="Download Video" style="text-decoration:none;color:inherit;display:flex;align-items:center;"><span class="material-icons">download</span></a>`
+            ? `<button id="video-download" class="toolbar-btn" title="Download Video"><span class="ui-icon material-icons">download</span></button>`
+            : `<a href="${srcUrl}" download="${filename}" class="toolbar-btn" title="Download Video" style="text-decoration:none;color:inherit;display:flex;align-items:center;"><span class="ui-icon material-icons">download</span></a>`
           }
         </div>
       </div>
@@ -382,20 +382,20 @@ async function renderAudioPreview(tab, filename) {
     <div class="audio-viewer-container" style="width: 100%; height: 100%; display: flex; flex-direction: column; background: var(--bg-tertiary);">
       <div class="pdf-toolbar" style="padding: 8px 16px; background: var(--bg-secondary); border-bottom: 1px solid var(--borderColor); display: flex; justify-content: space-between; align-items: center; height: 48px; flex-shrink: 0;">
         <div style="display: flex; align-items: center; gap: 8px;">
-          <span class="material-icons" style="color: var(--accent-color);">audiotrack</span>
+          <span class="ui-icon ui-icon--tone-accent material-icons">audiotrack</span>
           <span style="font-weight: 500; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 300px;">${filename}</span>
           <span style="color: var(--text-secondary); font-size: 12px; margin-left: 8px;">${tab.mimeType || ""}</span>
         </div>
         <div style="display: flex; align-items: center; gap: 12px;">
           ${isSftp
-            ? `<button id="audio-download" class="toolbar-btn" title="Download Audio"><span class="material-icons">download</span></button>`
-            : `<a href="${srcUrl}" download="${filename}" class="toolbar-btn" title="Download Audio" style="text-decoration:none;color:inherit;display:flex;align-items:center;"><span class="material-icons">download</span></a>`
+            ? `<button id="audio-download" class="toolbar-btn" title="Download Audio"><span class="ui-icon material-icons">download</span></button>`
+            : `<a href="${srcUrl}" download="${filename}" class="toolbar-btn" title="Download Audio" style="text-decoration:none;color:inherit;display:flex;align-items:center;"><span class="ui-icon material-icons">download</span></a>`
           }
         </div>
       </div>
       <div style="flex-grow: 1; display: flex; align-items: center; justify-content: center; padding: 40px; background: var(--bg-primary);">
         <div style="width: 100%; max-width: 600px; text-align: center;">
-          <span class="material-icons" style="font-size: 64px; color: var(--text-muted); margin-bottom: 20px; display: block;">audiotrack</span>
+          <span class="asset-preview-empty-icon ui-icon material-icons">audiotrack</span>
           <audio
             controls
             preload="metadata"
@@ -438,7 +438,7 @@ export function addCodeCopyButtons(container) {
     
     const copyBtn = document.createElement('button');
     copyBtn.className = 'code-copy-btn';
-    copyBtn.innerHTML = '<span class="material-icons" style="font-size: 18px;">content_copy</span>';
+    copyBtn.innerHTML = '<span class="ui-icon material-icons code-copy-icon">content_copy</span>';
     copyBtn.title = 'Copy to clipboard';
     copyBtn.style.cssText = `
       position: absolute;

@@ -3,7 +3,16 @@
 import { state, elements, gitState } from './state.js';
 import { fetchWithAuth } from './api.js';
 import { API_BASE } from './constants.js';
-import { showToast, showGlobalLoading, hideGlobalLoading, resetModalToDefault, showConfirmDialog, showModal } from './ui.js';
+import {
+  activateSharedModal,
+  deactivateSharedModal,
+  showToast,
+  showGlobalLoading,
+  hideGlobalLoading,
+  resetModalToDefault,
+  showConfirmDialog,
+  showModal
+} from './ui.js';
 import { buildFileTree } from './file-tree.js';
 import { formatBytes, isTextFile } from './utils.js';
 import { t } from './translations.js';
@@ -270,14 +279,14 @@ export async function showGithubDeviceFlowLogin() {
     const modalBody = document.getElementById("modal-body");
     const modalFooter = document.querySelector(".modal-footer");
 
-    modalTitle.textContent = t("gitea.auth_title");
+    modalTitle.textContent = t("github.auth_title");
 
     modalBody.innerHTML = `
       <div style="text-align: center; padding: 20px;">
         <div style="margin-bottom: 20px;">
-          <span class="material-icons" style="font-size: 48px; color: #4caf50;">verified_user</span>
+          <span class="ui-icon ui-icon--size-display ui-icon--tone-success material-icons">verified_user</span>
         </div>
-        <h3>${t("gitea.auth_title")}</h3>
+        <h3>${t("github.auth_title")}</h3>
         <p>${t("auth.step1")}</p>
         <div style="background: #f5f5f5; padding: 15px; border-radius: 8px; margin: 15px 0;">
           <a href="${flowData.verificationUri}" target="_blank" style="color: #2196f3; font-size: 18px; text-decoration: none;">
@@ -289,17 +298,17 @@ export async function showGithubDeviceFlowLogin() {
           ${flowData.userCode}
         </div>
         <div id="device-flow-status" style="margin-top: 20px; color: #666;">
-          <span class="material-icons" style="animation: spin 1s linear infinite;">sync</span>
+          <span class="integration-sync-icon ui-icon material-icons">sync</span>
           <p>${t("toast.github_waiting")}</p>
         </div>
         <button class="btn-primary" id="btn-check-auth-now" style="width: 100%; padding: 10px; margin-top: 20px; display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 15px;">
-            <span class="material-icons">refresh</span>
+            <span class="ui-icon material-icons">refresh</span>
             ${t("modal.confirm")}
         </button>
       </div>
     `;
 
-    modalOverlay.classList.add("visible");
+    activateSharedModal({ initialFocus: '#btn-check-auth-now' });
     modal.style.maxWidth = "500px";
 
     if (modalFooter) {
@@ -312,7 +321,7 @@ export async function showGithubDeviceFlowLogin() {
         clearTimeout(activePollTimer);
         activePollTimer = null;
       }
-      modalOverlay.classList.remove("visible");
+      deactivateSharedModal();
       resetModalToDefault();
       modalOverlay.removeEventListener("click", overlayClickHandler);
       resolve(result);
@@ -331,7 +340,7 @@ export async function showGithubDeviceFlowLogin() {
         const statusDiv = document.getElementById("device-flow-status");
         if (statusDiv) {
           statusDiv.innerHTML = `
-            <span class="material-icons" style="color: #f44336;">error</span>
+            <span class="ui-icon ui-icon--tone-error material-icons">error</span>
             <p style="color: #f44336;">Login expired. Please try again.</p>
           `;
         }
@@ -346,7 +355,7 @@ export async function showGithubDeviceFlowLogin() {
         const statusDiv = document.getElementById("device-flow-status");
         if (statusDiv) {
           statusDiv.innerHTML = `
-            <span class="material-icons" style="color: #4caf50;">check_circle</span>
+            <span class="ui-icon ui-icon--tone-success material-icons">check_circle</span>
             <p style="color: #4caf50;">${t("toast.git_conn_success")}</p>
           `;
         }
@@ -411,7 +420,7 @@ export async function showGithubDeviceFlowLogin() {
                   const statusDiv = document.getElementById("device-flow-status");
                   if (statusDiv) {
                     statusDiv.innerHTML = `
-                      <span class="material-icons" style="color: #4caf50;">check_circle</span>
+                      <span class="ui-icon ui-icon--tone-success material-icons">check_circle</span>
                       <p style="color: #4caf50;">${t("toast.git_conn_success")}</p>
                     `;
                   }
@@ -557,10 +566,10 @@ export async function showGitExclusions() {
           html += `
             <div class="exclusion-folder-group">
               <div class="exclusion-folder-header" style="display: flex; align-items: center; padding: 8px 12px; padding-left: ${paddingLeft}px; border-bottom: 1px solid var(--border-color); background: var(--bg-tertiary); cursor: pointer;">
-                <span class="material-icons exclusion-chevron" style="margin-right: 4px; font-size: 20px; color: var(--text-secondary); transition: transform 0.2s;">chevron_right</span>
+                <span class="exclusion-chevron ui-icon ui-icon--tone-secondary ui-icon--space-after-4 material-icons">chevron_right</span>
                 <label style="display: flex; align-items: center; flex: 1; cursor: ${isDisabled ? 'not-allowed' : 'pointer'}; pointer-events: none;">
                   <input type="checkbox" class="exclusion-checkbox" data-path="${folderPath}" data-type="folder" ${forcedState} ${isDisabled ? 'disabled' : ''} style="margin-right: 12px; width: 16px; height: 16px; pointer-events: auto;">
-                  <span class="material-icons" style="margin-right: 8px; font-size: 20px; color: var(--icon-folder);">folder</span>
+                  <span class="ui-icon ui-icon--tone-folder ui-icon--space-after-8 material-icons">folder</span>
                   <span style="font-size: 14px; flex: 1;">${folderName}</span>
                   <span style="font-size: 12px; color: var(--text-secondary); margin-right: 8px;">${formatBytes(itemSize)}</span>
                   ${isIgnored ? '<span style="font-size: 10px; padding: 2px 6px; background: var(--bg-secondary); border-radius: 4px; color: var(--text-secondary);">Ignored</span>' : ''}
@@ -587,7 +596,7 @@ export async function showGitExclusions() {
           html += `
             <label style="display: flex; align-items: center; padding: 8px 12px; padding-left: ${paddingLeft}px; border-bottom: 1px solid var(--border-color); cursor: ${isDisabled ? 'not-allowed' : 'pointer'}; background: var(--bg-tertiary);">
               <input type="checkbox" class="exclusion-checkbox" data-path="${file.path}" data-type="file" data-size="${itemSize}" ${forcedState} ${isDisabled ? 'disabled' : ''} style="margin-right: 12px; width: 16px; height: 16px;">
-              <span class="material-icons" style="margin-right: 8px; font-size: 20px; color: var(--text-secondary);">insert_drive_file</span>
+              <span class="ui-icon ui-icon--tone-secondary ui-icon--space-after-8 material-icons">insert_drive_file</span>
               <span style="font-size: 14px; flex: 1; ${isLarge ? 'color: var(--error-color); font-weight: bold;' : ''}">${file.name}</span>
               <span style="font-size: 12px; color: ${isLarge ? 'var(--error-color)' : 'var(--text-secondary)'}; margin-right: 8px;">${formatBytes(itemSize)}</span>
               ${isIgnored ? '<span style="font-size: 10px; padding: 2px 6px; background: var(--bg-secondary); border-radius: 4px; color: var(--text-secondary);">Ignored</span>' : ''}
@@ -607,7 +616,7 @@ export async function showGitExclusions() {
         <div class="git-settings-info" style="margin-bottom: 16px; flex-direction: column;">
           <div style="display: flex; align-items: center; justify-content: space-between;">
             <div style="display: flex; align-items: flex-start; gap: 8px;">
-                <span class="material-icons">info</span>
+                <span class="ui-icon material-icons">info</span>
                 <div>
                     <div style="font-weight: 500;">Check items to PUSH to GitHub</div>
                     <div style="font-size: 12px;">Unchecked items will be added to .gitignore</div>
@@ -659,7 +668,7 @@ export async function showGitExclusions() {
       btnConfirm.textContent = "Save Changes";
       btnConfirm.className = "modal-btn primary";
 
-      modalOverlay.classList.add("visible");
+      activateSharedModal({ initialFocus: btnConfirm });
       // make modal wider
       modal.style.maxWidth = "600px";
 
@@ -894,7 +903,7 @@ export async function showGitExclusions() {
           }
 
           hideGlobalLoading();
-          modalOverlay.classList.remove("visible");
+          deactivateSharedModal();
           await gitStatus();
           cleanup(true);
         } else {
@@ -903,7 +912,7 @@ export async function showGitExclusions() {
       };
 
       const cancelHandler = () => {
-        modalOverlay.classList.remove("visible");
+        deactivateSharedModal();
         cleanup(false);
       };
 
@@ -969,7 +978,7 @@ export async function showGitSettings() {
               <span class="git-remote-url">${url}</span>
           </div>
           <button class="btn-icon-only remove-remote-btn" data-remote-name="${name}" title="Remove Remote" style="background: transparent; border: none; cursor: pointer; color: var(--text-secondary); padding: 4px;">
-              <span class="material-icons" style="font-size: 18px;">delete</span>
+              <span class="ui-icon ui-icon--size-action material-icons">delete</span>
           </button>
         </div>
       `;
@@ -981,11 +990,11 @@ export async function showGitSettings() {
   if (hasCredentials) {
     credentialsStatusHtml = `
       <div class="git-settings-info" style="color: #4caf50; margin-bottom: 12px;">
-        <span class="material-icons">check_circle</span>
+        <span class="ui-icon material-icons">check_circle</span>
         <span>You are logged in as <strong>${savedUsername}</strong></span>
       </div>
       <button id="btn-github-signout" style="width: 100%; padding: 10px; display: flex; align-items: center; justify-content: center; gap: 8px; background: #f44336; color: white; border: none; border-radius: 4px; font-size: 14px; cursor: pointer; transition: background 0.15s;">
-        <span class="material-icons">logout</span>
+        <span class="ui-icon material-icons">logout</span>
         <span>${t("toast.git_signout")}</span>
       </button>
     `;
@@ -998,14 +1007,14 @@ export async function showGitSettings() {
       ${hasCredentials ? `
       <div class="git-settings-section" style="background: var(--primary-background-color); padding: 16px; border-radius: 8px; border: 2px dashed #2196f3;">
         <div class="git-settings-label" style="color: #1976d2; font-weight: 600;">
-          <span class="material-icons" style="vertical-align: middle; margin-right: 4px;">add_circle</span>
+          <span class="ui-icon ui-icon--align-middle ui-icon--space-after-4 material-icons">add_circle</span>
           Quick Start: Create New GitHub Repository
         </div>
         <div class="git-settings-info" style="margin-bottom: 12px; color: #f0f7ff;">
           Create a new repository on GitHub and automatically connect it to Blueprint Studio.
         </div>
         <button class="btn-primary" id="btn-create-github-repo" style="width: 100%; padding: 12px; font-size: 15px;">
-          <span class="material-icons" style="vertical-align: middle; margin-right: 8px;">rocket_launch</span>
+          <span class="ui-icon ui-icon--align-middle ui-icon--space-after-8 material-icons">rocket_launch</span>
           Create New GitHub Repository
         </button>
       </div>
@@ -1041,7 +1050,7 @@ export async function showGitSettings() {
         ${!hasCredentials ? `
           <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 16px; border-radius: 8px; margin-bottom: 16px;">
             <div style="color: white; font-weight: 600; margin-bottom: 8px; display: flex; align-items: center; gap: 8px;">
-              <span class="material-icons">verified_user</span>
+              <span class="ui-icon material-icons">verified_user</span>
               Recommended: OAuth Login
             </div>
             <div style="color: rgba(255,255,255,0.9); font-size: 13px; margin-bottom: 12px;">
@@ -1086,7 +1095,7 @@ export async function showGitSettings() {
         </label>
 
         <div class="git-settings-info" style="margin-bottom: 16px;">
-          <span class="material-icons">info</span>
+          <span class="ui-icon material-icons">info</span>
           <div>
             <div style="font-weight: 500; margin-bottom: 4px;">Create a Personal Access Token:</div>
             <a href="https://github.com/settings/tokens/new" target="_blank" style="color: var(--accent-color); text-decoration: none;">github.com/settings/tokens/new ↗</a>
@@ -1103,18 +1112,18 @@ export async function showGitSettings() {
       <div class="git-settings-section">
         <div class="git-settings-label">Troubleshooting</div>
         <div class="git-settings-info">
-          <span class="material-icons">build</span>
+          <span class="ui-icon material-icons">build</span>
           <span>If Git operations fail with "index.lock" errors, click below to clean lock files.</span>
         </div>
         <button class="btn-secondary" id="btn-clean-git-locks" style="width: 100%;">
-          <span class="material-icons" style="vertical-align: middle; margin-right: 8px;">delete_sweep</span>
+          <span class="ui-icon ui-icon--align-middle ui-icon--space-after-8 material-icons">delete_sweep</span>
           Clean Git Lock Files
         </button>
       </div>
     </div>
   `;
 
-  modalOverlay.classList.add("visible");
+  activateSharedModal({ initialFocus: () => modalBody.querySelector('input, select, button') });
 
   // Set wider modal for Git Settings (responsive on mobile via CSS)
   modal.style.maxWidth = "650px";
@@ -1126,7 +1135,7 @@ export async function showGitSettings() {
 
   // Function to clean up and close the Git Settings modal
   const closeGitSettings = () => {
-    modalOverlay.classList.remove("visible");
+    deactivateSharedModal();
 
     // Reset modal to default state (don't try to restore saved state)
     resetModalToDefault();
@@ -1327,14 +1336,14 @@ export async function showCreateGithubRepoDialog() {
         <div class="git-settings-buttons">
           <button class="btn-secondary" id="btn-cancel-create-repo">${t("modal.cancel_button")}</button>
           <button class="btn-primary" id="btn-confirm-create-repo">
-            <span class="material-icons" style="vertical-align: middle; margin-right: 4px; font-size: 18px;">add</span>
+            <span class="ui-icon ui-icon--size-action ui-icon--align-middle ui-icon--space-after-4 material-icons">add</span>
             ${t("modal.confirm_button")}
           </button>
         </div>
       </div>
     `;
 
-    modalOverlay.classList.add("visible");
+    activateSharedModal({ initialFocus: () => modalBody.querySelector('button, a') });
     modal.style.maxWidth = "500px";
 
     if (modalFooter) {
@@ -1343,7 +1352,7 @@ export async function showCreateGithubRepoDialog() {
 
     // Cleanup function
     const closeDialog = (result) => {
-      modalOverlay.classList.remove("visible");
+      deactivateSharedModal();
       resetModalToDefault();
       modalOverlay.removeEventListener("click", overlayClickHandler);
       resolve(result);

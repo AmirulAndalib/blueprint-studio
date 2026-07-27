@@ -6,6 +6,7 @@
 
 import { state, elements, gitState, giteaState } from '../state.js';
 import { eventBus } from '../event-bus.js';
+import { hasOpenDialog } from '../dialog-manager.js';
 
 import {
   initElements as initElementsImpl,
@@ -65,13 +66,13 @@ import {
   handleTabDragEnd as handleTabDragEndImpl,
   updatePaneActiveState as updatePaneActiveStateImpl,
   updateSplitViewButtons as updateSplitViewButtonsImpl
-} from '../split-view.js';
+} from '../split-view.js?v=2.5.75';
 
 import {
   loadSettings as loadSettingsImpl,
   saveSettings as saveSettingsImpl,
   updateShowHiddenButton as updateShowHiddenButtonImpl
-} from '../settings.js';
+} from '../settings.js?v=2.5.75';
 
 import {
   showAppSettings as showAppSettingsImpl
@@ -183,7 +184,7 @@ import {
   showGiteaSettings as showGiteaSettingsImpl,
   giteaCreateRepo as giteaCreateRepoImpl,
   refreshGiteaPanelStrings as refreshGiteaPanelStringsImpl
-} from '../gitea-integration.js';
+} from '../gitea-integration.js?v=2.5.75';
 
 import {
   refreshAllUIStrings as refreshAllUIStringsImpl
@@ -200,7 +201,7 @@ import {
   commitStagedFiles as commitStagedFilesImpl,
   applyVersionControlVisibility as applyVersionControlVisibilityImpl,
   refreshGitPanelStrings as refreshGitPanelStringsImpl
-} from '../git-ui.js';
+} from '../git-ui.js?v=2.5.75';
 
 import {
   renderTabs as renderTabsImpl,
@@ -236,11 +237,11 @@ import {
   formatAiResponse as formatAiResponseImpl,
   copyCode as copyCodeImpl,
   sendAIChatMessage as sendAIChatMessageImpl
-} from '../ai-ui.js';
+} from '../ai-ui.js?v=2.5.75';
 
 import {
   showCommandPalette as showCommandPaletteImpl
-} from '../command-palette.js';
+} from '../command-palette.js?v=2.5.75';
 
 import {
   reportIssue as reportIssueImpl,
@@ -279,7 +280,7 @@ import {
   closeTerminalTab as closeTerminalTabImpl,
   onTerminalTabClosed as onTerminalTabClosedImpl,
   isTerminalFocused
-} from '../terminal.js';
+} from '../terminal.js?v=2.5.75';
 
 import {
   renderRecentFilesPanel as renderRecentFilesPanelImpl,
@@ -331,7 +332,7 @@ import {
 
 import {
   initResizeHandle as initResizeHandleImpl
-} from '../resize.js';
+} from '../resize.js?v=2.5.75';
 
 import {
   gitStatusPollingInterval as pollingInterval,
@@ -370,7 +371,7 @@ import {
   deleteConnection as deleteConnectionImpl,
   refreshSftp as refreshSftpImpl,
   refreshSftpStrings as refreshSftpStringsImpl
-} from '../sftp.js';
+} from '../sftp.js?v=2.5.75';
 
 import {
   isTextFile,
@@ -713,6 +714,7 @@ export function initializeEventHandlers() {
     // When the terminal has focus, all keystrokes belong to the PTY.
     // Do not intercept anything — let xterm handle it.
     if (isTerminalFocused()) return;
+    if (hasOpenDialog()) return;
 
     // Ctrl + Shift + ] - Next Tab (all platforms, including macOS)
     const isNextTabShortcut =
@@ -898,43 +900,17 @@ export function initializeEventHandlers() {
     if (e.key === "Escape") {
       let handled = false;
 
-      // 1. Shortcuts Overlay
-      if (elements.shortcutsOverlay?.classList.contains("visible")) {
-        eventBus.emit('ui:hide-shortcuts');
-        handled = true;
-      }
-      // 2. Command Palette / Quick Switcher
-      else if (elements.commandPaletteOverlay?.classList.contains("visible")) {
-        // Command palette handles its own escape, but we can ensure it here
-        elements.commandPaletteOverlay.classList.remove("visible");
-        handled = true;
-      }
-      // 3. Generic Modal (Dialogs)
-      else if (elements.modalOverlay?.classList.contains("visible")) {
-        eventBus.emit('ui:hide-modal');
-        handled = true;
-      }
-      // 4. Donation Modal
-      else if (elements.modalDonationOverlay?.classList.contains("visible")) {
-        elements.modalDonationOverlay.classList.remove("visible");
-        handled = true;
-      }
-      // 5. Support Modal
-      else if (elements.modalSupportOverlay?.classList.contains("visible")) {
-        elements.modalSupportOverlay.classList.remove("visible");
-        handled = true;
-      }
-      // 6. Search Widget
-      else if (state.searchWidgetVisible) {
+      // Search Widget
+      if (state.searchWidgetVisible) {
         eventBus.emit('search:close');
         handled = true;
       }
-      // 7. AI Sidebar
+      // AI Sidebar
       else if (state.aiSidebarVisible) {
         eventBus.emit('ui:toggle-ai-sidebar', false);
         handled = true;
       }
-      // 7. Theme Menu
+      // Theme Menu
       else if (elements.themeMenu?.classList.contains("visible")) {
         elements.themeMenu.classList.remove("visible");
         handled = true;
@@ -1054,7 +1030,7 @@ export function initializeEventHandlers() {
     const mobileCmdBtn = document.createElement('button');
     mobileCmdBtn.id = 'mobile-cmd-btn';
     mobileCmdBtn.title = 'Command Palette';
-    mobileCmdBtn.innerHTML = '<span class="material-icons" style="font-size:20px;vertical-align:middle;">bolt</span>';
+    mobileCmdBtn.innerHTML = '<span class="ui-icon material-icons mobile-command-icon">bolt</span>';
 
     const FAB_SIZE = 48;
     const FAB_EDGE_PAD = 16;

@@ -5,12 +5,21 @@ import { t } from './translations.js';
 import { fetchWithAuth, urlWithTicket } from './api.js';
 import { eventBus } from './event-bus.js';
 import { API_BASE, STREAM_BASE } from './constants.js';
+import { copyToClipboard } from './utils.js';
+import { refreshActivityRail } from './activity-rail.js';
 import {
   showToast,
   showGlobalLoading,
   hideGlobalLoading,
   showConfirmDialog
 } from './ui.js';
+
+function setGlobalSearchLoading(visible) {
+  if (!elements.globalSearchLoading) return;
+  elements.globalSearchLoading.classList.toggle("active", visible);
+  elements.globalSearchLoading.setAttribute("aria-hidden", String(!visible));
+  refreshActivityRail();
+}
 
 /**
  * Performs global search across all files
@@ -20,7 +29,7 @@ import {
 export async function performGlobalSearch(query, options = {}) {
   if (!query || query.length < 2) return;
 
-  if (elements.globalSearchLoading) elements.globalSearchLoading.style.display = "block";
+  setGlobalSearchLoading(true);
   if (elements.globalSearchResults) elements.globalSearchResults.innerHTML = "";
 
   const activeTab = document.querySelector('.search-mode-tab.active');
@@ -35,7 +44,7 @@ export async function performGlobalSearch(query, options = {}) {
       : [];
 
   if (mode === 'entities') {
-      if (elements.globalSearchLoading) elements.globalSearchLoading.style.display = "none";
+      setGlobalSearchLoading(false);
       state._lastGlobalSearchResults = [];
       renderGlobalSearchResults([], entityMatches);
       return;
@@ -79,7 +88,7 @@ export async function performGlobalSearch(query, options = {}) {
           }
       }
 
-      if (elements.globalSearchLoading) elements.globalSearchLoading.style.display = "none";
+      setGlobalSearchLoading(false);
       state._lastGlobalSearchResults = fileResults;
       renderGlobalSearchResults(fileResults, entityMatches);
 
@@ -100,14 +109,14 @@ export async function performGlobalSearch(query, options = {}) {
               }),
           });
           const fileResults = Array.isArray(data) ? data : [];
-          if (elements.globalSearchLoading) elements.globalSearchLoading.style.display = "none";
+          setGlobalSearchLoading(false);
           state._lastGlobalSearchResults = fileResults;
           renderGlobalSearchResults(fileResults, entityMatches);
       } catch (e) {
-          if (elements.globalSearchLoading) elements.globalSearchLoading.style.display = "none";
+          setGlobalSearchLoading(false);
           console.error("Search failed", e);
           if (elements.globalSearchResults) {
-              elements.globalSearchResults.innerHTML = `<div style="padding: 20px; text-align: center; color: var(--error-color);">Search failed: ${e.message}</div>`;
+              elements.globalSearchResults.innerHTML = `<div class="global-search-error-state">Search failed: ${escapeHtml(e.message)}</div>`;
           }
       }
   }
@@ -123,9 +132,9 @@ export function triggerGlobalSearch() {
     if (!query || query.length < 2) {
         if (elements.globalSearchResults) {
             elements.globalSearchResults.innerHTML = `
-                <div class="search-empty-state" style="padding: 40px 20px; text-align: center; color: var(--text-secondary); display: flex; flex-direction: column; align-items: center;">
-                    <span class="material-icons" style="font-size: 48px; opacity: 0.3; margin-bottom: 16px;">search</span>
-                    <p style="margin: 0; font-size: 14px;">${t("search.empty_state_text")}</p>
+                <div class="ui-empty-state search-empty-state">
+                    <span class="ui-icon material-icons global-search-empty-icon">search</span>
+                    <p class="global-search-empty-copy">${t("search.empty_state_text")}</p>
                 </div>`;
         }
         return;
@@ -143,29 +152,9 @@ export function triggerGlobalSearch() {
 /**
  * Copies entity ID to clipboard
  */
-export function copyEntityId(entityId) {
-  if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(entityId).then(() => {
-          showToast(`Copied: ${entityId}`, "success");
-      }).catch(() => _copyFallback(entityId));
-  } else {
-      _copyFallback(entityId);
-  }
-}
-
-function _copyFallback(text) {
-    const el = document.createElement('textarea');
-    el.value = text;
-    el.style.cssText = 'position:fixed;top:-999px;left:-999px;';
-    document.body.appendChild(el);
-    el.select();
-    try {
-        document.execCommand('copy');
-        showToast(`Copied: ${text}`, "success");
-    } catch {
-        showToast(`Copy failed`, "error");
-    }
-    document.body.removeChild(el);
+export async function copyEntityId(entityId) {
+  const success = await copyToClipboard(entityId);
+  showToast(success ? `Copied: ${entityId}` : "Copy failed", success ? "success" : "error");
 }
 
 /**
@@ -353,12 +342,12 @@ export async function replaceSingleMatch(path, line, matchId) {
  */
 function _buildMatchHtml(m, matchId) {
     const escapedPath = m.path.replace(/'/g, "\\'");
-    return `<div class="search-result-match" id="${matchId}" onclick="if(event.target.closest('.match-hover-actions')) return; window.blueprintStudio.openFileAndScroll('${escapedPath}', ${m.line})" style="padding: 6px 12px 6px 34px; cursor: pointer; font-family: monospace; font-size: 12px; border-bottom: 1px solid var(--border-color); display: flex; position: relative; align-items: center;">
-        <span style="color: var(--text-secondary); margin-right: 8px; min-width: 20px;">${m.line}:</span>
-        <span style="white-space: pre; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(m.content.trim())}</span>
-        <div class="match-hover-actions" style="display: flex; gap: 4px; position: absolute; right: 12px; background: var(--bg-primary); padding-left: 8px; opacity: 0;">
-            <span class="material-icons" title="Replace this match" onclick="event.stopPropagation(); window.blueprintStudio.replaceSingleMatch('${escapedPath}', ${m.line}, '${matchId}')" style="font-size: 14px; opacity: 0.7;">find_replace</span>
-            <span class="material-icons" title="Dismiss" onclick="event.stopPropagation(); document.getElementById('${matchId}').remove()" style="font-size: 14px; opacity: 0.7;">close</span>
+    return `<div class="search-result-match global-search-match-row" id="${matchId}" onclick="if(event.target.closest('.match-hover-actions')) return; window.blueprintStudio.openFileAndScroll('${escapedPath}', ${m.line})">
+        <span class="global-search-match-line">${m.line}:</span>
+        <span class="global-search-match-excerpt">${escapeHtml(m.content.trim())}</span>
+        <div class="match-hover-actions global-search-match-actions">
+            <span class="ui-icon material-icons global-search-match-action-icon" title="Replace this match" onclick="event.stopPropagation(); window.blueprintStudio.replaceSingleMatch('${escapedPath}', ${m.line}, '${matchId}')">find_replace</span>
+            <span class="ui-icon material-icons global-search-match-action-icon" title="Dismiss" onclick="event.stopPropagation(); document.getElementById('${matchId}').remove()">close</span>
         </div>
     </div>`;
 }
@@ -372,17 +361,17 @@ function _buildFileGroupHtml(path, matches) {
     const safeId = path.replace(/[^a-zA-Z0-9]/g, '-');
     const escapedPath = path.replace(/'/g, "\\'");
     return `<div class="search-result-file" id="group-${safeId}">
-        <div class="search-result-file-header" onclick="if(event.target.closest('.search-action-btn')) return; document.getElementById('results-${safeId}').classList.toggle('hidden'); this.querySelector('.arrow').classList.toggle('rotated');" style="padding: 8px 12px; background: var(--bg-tertiary); cursor: pointer; display: flex; align-items: center; border-bottom: 1px solid var(--border-color);">
-            <span class="material-icons arrow rotated" style="font-size: 16px; margin-right: 6px; transition: transform 0.2s;">chevron_right</span>
-            <span style="font-weight: 600; font-size: 13px;">${filename}</span>
-            <span style="font-size: 11px; color: var(--text-secondary); margin-left: 8px; opacity: 0.7;">${folder}</span>
-            <div class="search-result-actions" style="margin-left: auto; display: flex; gap: 8px; align-items: center;">
-                <span class="material-icons search-action-btn" title="Replace in this file" onclick="event.stopPropagation(); window.blueprintStudio.replaceInFile('${escapedPath}')" style="font-size: 14px; opacity: 0.6;">find_replace</span>
-                <span class="material-icons search-action-btn" title="Dismiss file" onclick="event.stopPropagation(); document.getElementById('group-${safeId}').remove()" style="font-size: 14px; opacity: 0.6;">close</span>
-                <span class="badge" style="background: var(--accent-color); color: white; border-radius: 10px; padding: 0 6px; font-size: 10px;">${matches.length}</span>
+        <div class="search-result-file-header global-search-file-header" onclick="if(event.target.closest('.search-action-btn')) return; document.getElementById('results-${safeId}').classList.toggle('hidden'); this.querySelector('.arrow').classList.toggle('rotated');">
+            <span class="ui-icon material-icons arrow rotated global-search-file-toggle-icon">chevron_right</span>
+            <span class="global-search-file-name">${filename}</span>
+            <span class="global-search-file-folder">${folder}</span>
+            <div class="search-result-actions global-search-file-actions">
+                <span class="ui-icon material-icons search-action-btn global-search-file-action-icon" title="Replace in this file" onclick="event.stopPropagation(); window.blueprintStudio.replaceInFile('${escapedPath}')">find_replace</span>
+                <span class="ui-icon material-icons search-action-btn global-search-file-action-icon" title="Dismiss file" onclick="event.stopPropagation(); document.getElementById('group-${safeId}').remove()">close</span>
+                <span class="badge global-search-file-badge">${matches.length}</span>
             </div>
         </div>
-        <div class="search-result-list" id="results-${safeId}" style="display: block;">
+        <div class="search-result-list global-search-file-list" id="results-${safeId}">
             ${matches.map((m, idx) => _buildMatchHtml(m, `match-${safeId}-${idx}`)).join('')}
         </div>
     </div>`;
@@ -399,18 +388,18 @@ function renderGlobalSearchResults(results, entityResults = []) {
 
   if (elements.globalSearchInput && elements.globalSearchInput.value.length < 2) {
       elements.globalSearchResults.innerHTML = `
-          <div class="search-empty-state" style="padding: 40px 20px; text-align: center; color: var(--text-secondary); display: flex; flex-direction: column; align-items: center;">
-              <span class="material-icons" style="font-size: 48px; opacity: 0.3; margin-bottom: 16px;">search</span>
-              <p style="margin: 0; font-size: 14px;">${t("search.empty_state_text")}</p>
+          <div class="ui-empty-state search-empty-state">
+              <span class="ui-icon material-icons global-search-empty-icon">search</span>
+              <p class="global-search-empty-copy">${t("search.empty_state_text")}</p>
           </div>`;
       return;
   }
 
   if ((!results || results.length === 0) && (!entityResults || entityResults.length === 0)) {
       elements.globalSearchResults.innerHTML = `
-          <div class="search-empty-state" style="padding: 40px 20px; text-align: center; color: var(--text-secondary); display: flex; flex-direction: column; align-items: center;">
-              <span class="material-icons" style="font-size: 48px; opacity: 0.3; margin-bottom: 16px;">search_off</span>
-              <p style="margin: 0; font-size: 14px;">${t("search.no_results")}</p>
+          <div class="ui-empty-state search-empty-state">
+              <span class="ui-icon material-icons global-search-empty-icon">search_off</span>
+              <p class="global-search-empty-copy">${t("search.no_results")}</p>
           </div>`;
       return;
   }
@@ -428,16 +417,16 @@ function renderGlobalSearchResults(results, entityResults = []) {
       let html = "";
       if (entityResults && entityResults.length > 0) {
           html += `<div class="search-result-group">
-              <div class="search-result-file-header" onclick="document.getElementById('results-entities').classList.toggle('hidden'); this.querySelector('.arrow').classList.toggle('rotated');" style="padding: 8px 12px; background: var(--bg-tertiary); cursor: pointer; display: flex; align-items: center; border-bottom: 1px solid var(--border-color);">
-                  <span class="material-icons arrow rotated" style="font-size: 16px; margin-right: 6px; transition: transform 0.2s;">chevron_right</span>
-                  <span style="font-weight: 600; font-size: 13px;">${t("search.entities")}</span>
-                  <span class="badge" style="margin-left: auto; background: var(--success-color); color: white; border-radius: 10px; padding: 0 6px; font-size: 10px;">${entityResults.length}</span>
+              <div class="search-result-file-header global-search-file-header global-search-entity-header" onclick="document.getElementById('results-entities').classList.toggle('hidden'); this.querySelector('.arrow').classList.toggle('rotated');">
+                  <span class="ui-icon material-icons arrow rotated global-search-file-toggle-icon">chevron_right</span>
+                  <span class="global-search-file-name global-search-entity-title">${t("search.entities")}</span>
+                  <span class="badge global-search-file-badge global-search-entity-badge">${entityResults.length}</span>
               </div>
-              <div class="search-result-list" id="results-entities" style="display: block;">
+              <div class="search-result-list global-search-file-list global-search-entity-list" id="results-entities">
                   ${entityResults.map(e => `
-                      <div class="search-result-match" onclick="window.blueprintStudio.copyEntityId('${e.entity_id}')" style="padding: 6px 12px 6px 34px; cursor: pointer; font-size: 12px; border-bottom: 1px solid var(--border-color); display: flex; flex-direction: column;">
-                          <div style="font-weight: 600; color: var(--text-primary);">${e.friendly_name || e.entity_id}</div>
-                          <div style="font-family: monospace; color: var(--text-secondary); font-size: 11px;">${e.entity_id}</div>
+                      <div class="search-result-match global-search-entity-row" onclick="window.blueprintStudio.copyEntityId('${e.entity_id}')">
+                          <div class="global-search-entity-name">${escapeHtml(e.friendly_name || e.entity_id)}</div>
+                          <div class="global-search-entity-id">${escapeHtml(e.entity_id)}</div>
                       </div>
                   `).join('')}
               </div>

@@ -12,30 +12,31 @@ import {
   showConfirmDialog,
   showModal as showInputModal
 } from './ui.js';
-import { updateSshDropdown } from './terminal.js';
+import { updateSshDropdown } from './terminal.js?v=2.5.75';
 import { createZipProgressId, startZipProgress } from './zip-progress.js';
+import { closeDialog, openDialog } from './dialog-manager.js';
+import { refreshActivityRail } from './activity-rail.js';
+import { renderSftpConnectionContext } from './context-indicators.js?v=2.5.75';
+import { setOverflowTooltip } from './tooltip.js?v=2.5.75';
 
 // ─── Visibility ───────────────────────────────────────────────────────────────
 
-/** Show or hide the entire SFTP sidebar icon based on the integration toggle. */
+/** Keep SFTP discoverable and expose its enabled state through the shared rail. */
 export function applySftpVisibility() {
   const enabled = state.sftpIntegrationEnabled;
   const activitySftp = document.getElementById('activity-sftp');
   
   if (activitySftp) {
-    activitySftp.style.display = enabled ? 'flex' : 'none';
-    activitySftp.classList.toggle('hidden', !enabled);
+    activitySftp.style.removeProperty('display');
+    activitySftp.classList.remove('hidden');
   }
   
-  // If disabling while SFTP view is active, switch to explorer
   if (!enabled) {
-    const viewSftp = document.getElementById('view-sftp');
-    if (viewSftp && viewSftp.style.display !== 'none') {
-      eventBus.emit('ui:switch-sidebar-view', 'explorer');
-    }
     state.activeSftp.connectionId = null;
     state.activeSftp.loading = false;
   }
+  renderSftpPanel();
+  refreshActivityRail();
 }
 
 // ─── Path Helpers ─────────────────────────────────────────────────────────────
@@ -213,8 +214,29 @@ export function renderSftpPanel() {
   const breadcrumbEl = document.getElementById('sftp-breadcrumb');
   const treeEl   = document.getElementById('sftp-file-tree');
   const panelBody = document.getElementById('sftp-panel-body');
+  const viewState = document.getElementById('sftp-view-state');
+  const viewStateIcon = document.getElementById('sftp-view-state-icon');
+  const viewStateTitle = document.getElementById('sftp-view-state-title');
+  const viewStateCopy = document.getElementById('sftp-view-state-copy');
 
   if (!selectorContainer) return;
+  refreshActivityRail();
+
+  const showViewState = (icon, title, copy) => {
+    if (!viewState) return;
+    viewState.classList.remove('hidden');
+    if (viewStateIcon) viewStateIcon.textContent = icon;
+    if (viewStateTitle) viewStateTitle.textContent = title;
+    if (viewStateCopy) viewStateCopy.textContent = copy;
+  };
+
+  if (!state.sftpIntegrationEnabled) {
+    showViewState('link_off', 'SFTP is disabled', 'Enable SFTP in Settings to browse remote files.');
+  } else if (!state.activeSftp.connectionId) {
+    showViewState('add_link', 'No SFTP connection selected', 'Add or select a connection to browse remote files.');
+  } else if (viewState) {
+    viewState.classList.add('hidden');
+  }
 
   if (panelBody) {
     panelBody.style.display = 'flex';
@@ -234,7 +256,7 @@ export function renderSftpPanel() {
     // Default option
     const defaultOpt = document.createElement('option');
     defaultOpt.value = "";
-    defaultOpt.textContent = "SFTP";
+    defaultOpt.textContent = t("sidebar.sftp");
     select.appendChild(defaultOpt);
     
     state.sftpConnections.forEach(conn => {
@@ -249,9 +271,20 @@ export function renderSftpPanel() {
       _updateDynamicButtons(e.target.value || null);
       if (e.target.value) connectToServer(e.target.value);
     };
+    const selectedConnection = findConnection(state.activeSftp.connectionId);
+    if (selectedConnection) {
+      select.title = `${selectedConnection.name}: ${selectedConnection.host}:${selectedConnection.port || 22}`;
+    }
     
     selectorContainer.appendChild(select);
   }
+
+  const activeConnection = findConnection(state.activeSftp.connectionId);
+  renderSftpConnectionContext(
+    selectorContainer,
+    activeConnection,
+    state.activeSftp.loading ? 'connecting' : 'connected'
+  );
 
   // Update header actions (Edit/Delete buttons)
   if (headerActions) {
@@ -267,13 +300,13 @@ export function renderSftpPanel() {
     const editBtn = document.createElement('button');
     editBtn.className = 'sidebar-header-btn sftp-dynamic-btn';
     editBtn.title = t("common.edit") || "Edit connection";
-    editBtn.innerHTML = '<span class="material-icons">edit</span>';
+    editBtn.innerHTML = '<span class="ui-icon material-icons">edit</span>';
     editBtn.onclick = () => showEditConnectionDialog(connId);
 
     const deleteBtn = document.createElement('button');
     deleteBtn.className = 'sidebar-header-btn sftp-dynamic-btn';
     deleteBtn.title = t("common.delete") || "Remove connection";
-    deleteBtn.innerHTML = '<span class="material-icons">delete_outline</span>';
+    deleteBtn.innerHTML = '<span class="ui-icon material-icons">delete_outline</span>';
     deleteBtn.onclick = () => deleteConnection(connId);
 
     const refreshBtn = document.getElementById('btn-sftp-refresh');
@@ -299,6 +332,11 @@ export function renderSftpPanel() {
     return;
   }
 
+  // These classes prevent a pre-initialization flash only. Once a connection is
+  // active, the renderer owns visibility for both SFTP browsing modes.
+  breadcrumbEl?.classList.remove('workspace-initially-hidden');
+  treeEl?.classList.remove('workspace-initially-hidden');
+
   // TREE MODE
   if (state.treeCollapsableMode) {
     if (breadcrumbEl) breadcrumbEl.style.display = 'none';
@@ -306,7 +344,7 @@ export function renderSftpPanel() {
     treeEl.style.display = '';
     
     if (loading && state.activeSftp.loadedDirectories.size === 0) {
-      treeEl.innerHTML = '<div class="tree-item" style="--depth:0;color:var(--text-secondary)"><div class="tree-icon default"><span class="material-icons loading-spinner">sync</span></div><span class="tree-name">Loading...</span></div>';
+      treeEl.innerHTML = '<div class="tree-item" style="--depth:0;color:var(--text-secondary)"><div class="tree-icon default"><span class="ui-icon material-icons loading-spinner">sync</span></div><span class="tree-name">Loading...</span></div>';
       return;
     }
     
@@ -314,7 +352,7 @@ export function renderSftpPanel() {
     if (state.activeSftp.loadedDirectories.has('/')) {
       _renderSftpTreeLevel(treeEl, connectionId, '/', 0);
     } else if (state.activeSftp.loading) {
-       treeEl.innerHTML = '<div class="tree-item" style="--depth:0;color:var(--text-secondary)"><div class="tree-icon default"><span class="material-icons loading-spinner">sync</span></div><span class="tree-name">Loading...</span></div>';
+       treeEl.innerHTML = '<div class="tree-item" style="--depth:0;color:var(--text-secondary)"><div class="tree-icon default"><span class="ui-icon material-icons loading-spinner">sync</span></div><span class="tree-name">Loading...</span></div>';
     }
     return;
   }
@@ -328,7 +366,7 @@ export function renderSftpPanel() {
   if (!treeEl) return;
   treeEl.style.display = '';
   if (loading) {
-    treeEl.innerHTML = '<div class="tree-item" style="--depth:0;color:var(--text-secondary)"><div class="tree-icon default"><span class="material-icons loading-spinner">sync</span></div><span class="tree-name">Loading...</span></div>';
+    treeEl.innerHTML = '<div class="tree-item" style="--depth:0;color:var(--text-secondary)"><div class="tree-icon default"><span class="ui-icon material-icons loading-spinner">sync</span></div><span class="tree-name">Loading...</span></div>';
     return;
   }
 
@@ -339,7 +377,7 @@ export function renderSftpPanel() {
     backItem.className = 'tree-item';
     backItem.style.setProperty('--depth', 0);
     backItem.innerHTML = `
-      <div class="tree-icon folder"><span class="material-icons">arrow_back</span></div>
+      <div class="tree-icon folder"><span class="ui-icon material-icons">arrow_back</span></div>
       <span class="tree-name">..</span>`;
     backItem.addEventListener('click', () => {
       const parent = currentPath.replace(/\/[^/]+\/?$/, '') || '/';
@@ -373,13 +411,15 @@ export function renderSftpPanel() {
 
     const icon = document.createElement('div');
     icon.className = 'tree-icon folder';
-    icon.innerHTML = `<span class="material-icons">folder</span>`;
+    icon.innerHTML = `<span class="ui-icon material-icons">folder</span>`;
     el.appendChild(icon);
 
     const label = document.createElement('span');
     label.className = 'tree-name';
     label.textContent = folder.name;
     el.appendChild(label);
+    el.setAttribute('aria-label', folder.path);
+    setOverflowTooltip(el, folder.path, label);
 
     el.addEventListener('click', (e) => {
       if (e.target.closest('.tree-item-checkbox')) return;
@@ -429,13 +469,15 @@ export function renderSftpPanel() {
     const fileIcon = getFileIcon(file.name);
     const iconEl = document.createElement('div');
     iconEl.className = `tree-icon ${fileIcon.class}`;
-    iconEl.innerHTML = `<span class="material-icons">${fileIcon.icon}</span>`;
+    iconEl.innerHTML = `<span class="ui-icon material-icons">${fileIcon.icon}</span>`;
     el.appendChild(iconEl);
 
     const nameEl = document.createElement('span');
     nameEl.className = 'tree-name';
     nameEl.textContent = file.name;
     el.appendChild(nameEl);
+    el.setAttribute('aria-label', file.path);
+    setOverflowTooltip(el, file.path, nameEl);
 
     if (typeof file.size === 'number') {
       const sizeEl = document.createElement('span');
@@ -513,7 +555,17 @@ function _renderBreadcrumb(el, connId, remotePath) {
   const rootCrumb = document.createElement('span');
   rootCrumb.className = 'sftp-crumb';
   rootCrumb.textContent = connName;
+  rootCrumb.tabIndex = 0;
+  rootCrumb.setAttribute('role', 'button');
+  rootCrumb.setAttribute('aria-label', `sftp://${connId}/`);
+  setOverflowTooltip(rootCrumb, `sftp://${connId}/`);
   rootCrumb.onclick = () => navigateSftp(connId, '/');
+  rootCrumb.onkeydown = (event) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      navigateSftp(connId, '/');
+    }
+  };
   _setupItemDropHandler(rootCrumb, connId, '/');
   el.appendChild(rootCrumb);
 
@@ -522,7 +574,7 @@ function _renderBreadcrumb(el, connId, remotePath) {
     built += '/' + part;
     const p = built;
     const sep = document.createElement('span');
-    sep.className = 'material-icons';
+    sep.className = 'ui-icon material-icons';
     sep.style.fontSize = '12px';
     sep.textContent = 'chevron_right';
     el.appendChild(sep);
@@ -530,7 +582,17 @@ function _renderBreadcrumb(el, connId, remotePath) {
     const crumb = document.createElement('span');
     crumb.className = 'sftp-crumb';
     crumb.textContent = part;
+    crumb.tabIndex = 0;
+    crumb.setAttribute('role', 'button');
+    crumb.setAttribute('aria-label', `sftp://${connId}${p}`);
+    setOverflowTooltip(crumb, `sftp://${connId}${p}`);
     crumb.onclick = () => navigateSftp(connId, p);
+    crumb.onkeydown = (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        navigateSftp(connId, p);
+      }
+    };
     _setupItemDropHandler(crumb, connId, p);
     el.appendChild(crumb);
   });
@@ -616,19 +678,21 @@ function _renderSftpTreeLevel(container, connId, path, depth) {
 
     const chevron = document.createElement('div');
     chevron.className = `tree-chevron ${isExpanded ? "expanded" : ""}`;
-    chevron.innerHTML = '<span class="material-icons">chevron_right</span>';
+    chevron.innerHTML = '<span class="ui-icon material-icons">chevron_right</span>';
     chevron.onclick = (e) => { e.stopPropagation(); _toggleSftpFolder(connId, folder.path); };
     el.appendChild(chevron);
 
     const icon = document.createElement('div');
     icon.className = 'tree-icon folder';
-    icon.innerHTML = `<span class="material-icons">${isExpanded ? "folder_open" : "folder"}</span>`;
+    icon.innerHTML = `<span class="ui-icon material-icons">${isExpanded ? "folder_open" : "folder"}</span>`;
     el.appendChild(icon);
 
     const label = document.createElement('span');
     label.className = 'tree-name';
     label.textContent = folder.name;
     el.appendChild(label);
+    el.setAttribute('aria-label', folder.path);
+    setOverflowTooltip(el, folder.path, label);
 
     el.addEventListener('click', (e) => {
       if (e.target.closest('.tree-item-checkbox')) return;
@@ -653,7 +717,7 @@ function _renderSftpTreeLevel(container, connId, path, depth) {
         const loadingItem = document.createElement('div');
         loadingItem.className = 'tree-item loading-item';
         loadingItem.style.setProperty('--depth', depth + 1);
-        loadingItem.innerHTML = `<div class="tree-icon default"><span class="material-icons loading-spinner">sync</span></div><span class="tree-name">Loading...</span>`;
+        loadingItem.innerHTML = `<div class="tree-icon default"><span class="ui-icon material-icons loading-spinner">sync</span></div><span class="tree-name">Loading...</span>`;
         container.appendChild(loadingItem);
       }
     }
@@ -693,13 +757,15 @@ function _renderSftpTreeLevel(container, connId, path, depth) {
     const fileIcon = getFileIcon(file.name);
     const icon = document.createElement('div');
     icon.className = `tree-icon ${fileIcon.class}`;
-    icon.innerHTML = `<span class="material-icons">${fileIcon.icon}</span>`;
+    icon.innerHTML = `<span class="ui-icon material-icons">${fileIcon.icon}</span>`;
     el.appendChild(icon);
 
     const label = document.createElement('span');
     label.className = 'tree-name';
     label.textContent = file.name;
     el.appendChild(label);
+    el.setAttribute('aria-label', file.path);
+    setOverflowTooltip(el, file.path, label);
 
     if (typeof file.size === 'number') {
       const sizeLabel = document.createElement("span");
@@ -974,7 +1040,7 @@ function _makeMenu(items) {
     }
     const el = document.createElement('div');
     el.className = `context-menu-item${item.danger ? ' danger' : ''}`;
-    el.innerHTML = `<span class="material-icons">${item.icon}</span>${_escapeHtml(item.label)}`;
+    el.innerHTML = `<span class="ui-icon material-icons">${item.icon}</span>${_escapeHtml(item.label)}`;
     el.addEventListener('click', () => { _dismissCtxMenu(); item.action(); });
     menu.appendChild(el);
   });
@@ -1159,9 +1225,14 @@ async function _promptDelete(connId, remotePath, isFolder) {
 function _attachDialogEvents(editingConn = null) {
   const overlay = document.getElementById('sftp-dialog-overlay'), authTypeSelect = document.getElementById('sftp-input-auth-type'), passwordSection = document.getElementById('sftp-password-section'), keySection = document.getElementById('sftp-key-section');
   authTypeSelect.addEventListener('change', () => { const v = authTypeSelect.value; passwordSection.style.display = v === 'password' ? '' : 'none'; keySection.style.display = v === 'key' ? '' : 'none'; });
-  document.getElementById('sftp-dialog-close').addEventListener('click', () => overlay.remove());
-  document.getElementById('sftp-dialog-cancel').addEventListener('click', () => overlay.remove());
-  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+  const close = () => closeDialog(overlay, { remove: true });
+  document.getElementById('sftp-dialog-close').addEventListener('click', close);
+  document.getElementById('sftp-dialog-cancel').addEventListener('click', close);
+  openDialog(overlay, {
+    initialFocus: '#sftp-input-name',
+    removeOnClose: true,
+    onRequestClose: close,
+  });
   document.getElementById('sftp-dialog-save').addEventListener('click', async () => {
     const name = document.getElementById('sftp-input-name').value.trim(), host = document.getElementById('sftp-input-host').value.trim(), port = parseInt(document.getElementById('sftp-input-port').value) || 22, username = document.getElementById('sftp-input-username').value.trim(), authType = authTypeSelect.value, password = document.getElementById('sftp-input-password').value, privateKey = document.getElementById('sftp-input-private-key').value.trim(), privateKeyPassphrase = document.getElementById('sftp-input-key-passphrase').value;
     if (!name || !host || !username) { showToast(t("toast.sftp_fill_required"), 'error'); return; }
@@ -1177,7 +1248,7 @@ function _attachDialogEvents(editingConn = null) {
     // Keep sshHosts alias in sync (may have been replaced by filter elsewhere)
     state.sshHosts = state.sftpConnections;
     updateSshDropdown();
-    eventBus.emit("settings:save"); overlay.remove(); renderSftpPanel();
+    eventBus.emit("settings:save"); close(); renderSftpPanel();
   });
 }
 
@@ -1285,8 +1356,10 @@ export function refreshSftpStrings() {
   const viewSftp = document.getElementById('view-sftp');
   if (!viewSftp) return;
 
-  const headerTitle = viewSftp.querySelector('.sidebar-header span');
-  if (headerTitle) headerTitle.textContent = t("sftp.panel_title") || "SFTP Connections";
+  const selectorLabel = viewSftp.querySelector(
+    "#sftp-connection-selector-container > span, #sftp-connection-selector-container option[value='']",
+  );
+  if (selectorLabel) selectorLabel.textContent = t("sidebar.sftp");
 
   const addBtn = document.getElementById('btn-sftp-add');
   if (addBtn) addBtn.title = t("sftp.add_connection") || "Add Connection";
@@ -1412,12 +1485,12 @@ function _buildDialogHtml(conn = {}) {
   const isEdit   = !!conn.id;
   const authType = conn.authType || 'password';
   return `
-    <div class="modal-overlay visible" id="sftp-dialog-overlay">
-      <div class="modal" style="max-width: 500px;">
+    <div class="modal-overlay" id="sftp-dialog-overlay">
+      <div class="modal" style="max-width: 500px;" role="dialog" aria-modal="true" aria-labelledby="sftp-dialog-title">
         <div class="modal-header">
-          <span class="modal-title">${isEdit ? t("sftp.dialog_edit_title") : t("sftp.dialog_add_title")}</span>
-          <button class="modal-close" id="sftp-dialog-close">
-            <span class="material-icons">close</span>
+          <span class="modal-title" id="sftp-dialog-title">${isEdit ? t("sftp.dialog_edit_title") : t("sftp.dialog_add_title")}</span>
+          <button class="modal-close" id="sftp-dialog-close" type="button" aria-label="Close SFTP connection dialog">
+            <span class="ui-icon material-icons">close</span>
           </button>
         </div>
         <div class="modal-body">

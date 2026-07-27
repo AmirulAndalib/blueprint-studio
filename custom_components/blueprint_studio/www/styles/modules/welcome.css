@@ -17,6 +17,11 @@
       margin-bottom: 8px;
     }
 
+    .welcome-main-icon {
+      height: 40px;
+      width: 40px;
+    }
+
     .welcome-screen h2 {
       font-weight: 500;
       font-size: 22px;
@@ -59,6 +64,11 @@
     .welcome-actions .btn-primary .material-icons,
     .welcome-actions .btn-secondary .material-icons {
       font-size: 16px;
+    }
+
+    .welcome-action-icon {
+      height: 16px;
+      width: 16px;
     }
 
     .welcome-actions .btn-primary {

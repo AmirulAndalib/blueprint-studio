@@ -9,7 +9,9 @@ import {
   hideGlobalLoading,
   showToast,
   showModal,
-  resetModalToDefault
+  resetModalToDefault,
+  activateSharedModal,
+  deactivateSharedModal
 } from './ui.js';
 import { getEditorMode, ensureDiffLibrariesLoaded } from './utils.js';
 import { isGitEnabled } from './git-operations.js';
@@ -307,10 +309,10 @@ function _showRejectDiffPrompt(path, oldContent, newContent) {
         <button id="ai-reject-confirm" class="modal-btn danger">Reject File</button>
       `;
     }
-    modalOverlay.classList.add("visible");
+    activateSharedModal({ initialFocus: '#ai-reject-cancel' });
 
     const close = (result) => {
-      modalOverlay.classList.remove("visible");
+      deactivateSharedModal();
       resetModalToDefault();
       modal.style.maxWidth = "";
       modal.style.width = "";
@@ -356,11 +358,11 @@ function _showAiActionBar(path, oldContent, newContent, diffMarkers) {
   bar.innerHTML = `
     <div class="ai-bar-nav">
       <button id="ai-bar-prev" class="ai-bar-nav-btn" title="Previous edit">
-        <span class="material-icons">keyboard_arrow_up</span>
+        <span class="ui-icon material-icons">keyboard_arrow_up</span>
       </button>
       <span id="ai-bar-edit-count" class="ai-bar-edit-label">${editCount} edit${editCount !== 1 ? 's' : ''}</span>
       <button id="ai-bar-next" class="ai-bar-nav-btn" title="Next edit">
-        <span class="material-icons">keyboard_arrow_down</span>
+        <span class="ui-icon material-icons">keyboard_arrow_down</span>
       </button>
     </div>
     <span class="ai-bar-sep"></span>
@@ -374,24 +376,24 @@ function _showAiActionBar(path, oldContent, newContent, diffMarkers) {
     </div>
     <span class="ai-bar-sep"></span>
     <button id="ai-bar-toggle-preview" class="ai-bar-nav-btn" title="Toggle diff preview">
-      <span class="material-icons">unfold_more</span>
+      <span class="ui-icon material-icons">unfold_more</span>
     </button>
     <span class="ai-bar-sep"></span>
     <div class="ai-bar-file-nav">
       <button id="ai-bar-file-prev" class="ai-bar-nav-btn" title="Previous file" ${totalFiles <= 1 ? 'disabled' : ''}>
-        <span class="material-icons">chevron_left</span>
+        <span class="ui-icon material-icons">chevron_left</span>
       </button>
       <span id="ai-bar-file-count" class="ai-bar-file-label">${fileNum} of ${totalFiles} file${totalFiles !== 1 ? 's' : ''}</span>
       <button id="ai-bar-file-next" class="ai-bar-nav-btn" title="Next file" ${totalFiles <= 1 ? 'disabled' : ''}>
-        <span class="material-icons">chevron_right</span>
+        <span class="ui-icon material-icons">chevron_right</span>
       </button>
     </div>
     <span class="ai-bar-sep"></span>
     <button id="ai-bar-undo" class="ai-bar-nav-btn" title="Undo last accepted AI diff">
-      <span class="material-icons">undo</span>
+      <span class="ui-icon material-icons">undo</span>
     </button>
     <button id="ai-bar-history" class="ai-bar-nav-btn" title="AI diff history">
-      <span class="material-icons">history</span>
+      <span class="ui-icon material-icons">history</span>
     </button>
   `;
 
@@ -543,7 +545,7 @@ function _showDiffHistoryPanel() {
   const header = document.createElement('div');
   header.className = 'ai-diff-history-header';
   header.innerHTML = `<span>AI Diff History (${history.length}/${DIFF_HISTORY_MAX})</span>
-    <button class="ai-diff-history-close"><span class="material-icons">close</span></button>`;
+    <button class="ai-diff-history-close"><span class="ui-icon material-icons">close</span></button>`;
   panel.appendChild(header);
 
   const body = document.createElement('div');
@@ -569,8 +571,8 @@ function _showDiffHistoryPanel() {
           <span class="history-time">${day} ${time}</span>
         </div>
         <div class="history-row-actions">
-          <button class="history-view-btn" data-idx="${idx}" title="View diff"><span class="material-icons">visibility</span></button>
-          ${!entry.undone ? `<button class="history-undo-btn" data-idx="${idx}" title="Undo this change"><span class="material-icons">undo</span></button>` : ''}
+          <button class="history-view-btn" data-idx="${idx}" title="View diff"><span class="ui-icon material-icons">visibility</span></button>
+          ${!entry.undone ? `<button class="history-undo-btn" data-idx="${idx}" title="Undo this change"><span class="ui-icon material-icons">undo</span></button>` : ''}
         </div>`;
       body.appendChild(row);
     });
@@ -609,7 +611,7 @@ function _showDiffHistoryPanel() {
       const diffHtml = _buildCompactDiffHtml(entry.oldContent, entry.newContent);
       const viewer = document.createElement('div');
       viewer.className = 'ai-diff-history-viewer';
-      viewer.innerHTML = `<div class="viewer-header"><span>${_escapeHtml(entry.path)}</span><button class="viewer-close"><span class="material-icons">close</span></button></div><div class="viewer-body">${diffHtml}</div>`;
+      viewer.innerHTML = `<div class="viewer-header"><span>${_escapeHtml(entry.path)}</span><button class="viewer-close"><span class="ui-icon material-icons">close</span></button></div><div class="viewer-body">${diffHtml}</div>`;
       panel.appendChild(viewer);
       viewer.querySelector('.viewer-close').onclick = () => viewer.remove();
     };
@@ -910,23 +912,23 @@ export async function showFullDiffModal(path, oldContent, newContent) {
     modalBody.innerHTML = `
       <div class="diff-viewer-toolbar" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-bottom:1px solid var(--border-color);">
         <div class="diff-viewer-summary" style="display:flex;align-items:center;gap:8px;">
-          <span class="material-icons" style="color:var(--accent-color);">difference</span>
+          <span class="ui-icon ui-icon--tone-accent material-icons">difference</span>
           <span id="diff-nav-count">Calculating...</span>
         </div>
         <div style="display:flex;gap:8px;align-items:center;">
           <div class="diff-viewer-actions" style="display:flex;gap:4px;">
             <button id="diff-nav-prev" class="diff-nav-btn" type="button" title="Previous difference">
-              <span class="material-icons">keyboard_arrow_up</span>
+              <span class="ui-icon material-icons">keyboard_arrow_up</span>
             </button>
             <button id="diff-nav-next" class="diff-nav-btn" type="button" title="Next difference">
-              <span class="material-icons">keyboard_arrow_down</span>
+              <span class="ui-icon material-icons">keyboard_arrow_down</span>
             </button>
           </div>
           <button id="ai-diff-reject" type="button" style="display:inline-flex;align-items:center;gap:4px;padding:6px 16px;border-radius:6px;border:1px solid var(--error-color);background:transparent;color:var(--error-color);cursor:pointer;font-size:13px;font-weight:600;">
-            <span class="material-icons" style="font-size:16px;">undo</span> Reject
+            <span class="ui-icon ui-icon--size-sm material-icons">undo</span> Reject
           </button>
           <button id="ai-diff-accept" type="button" style="display:inline-flex;align-items:center;gap:4px;padding:6px 16px;border-radius:6px;border:none;background:var(--success-color);color:#fff;cursor:pointer;font-size:13px;font-weight:600;">
-            <span class="material-icons" style="font-size:16px;">check</span> Accept
+            <span class="ui-icon ui-icon--size-sm material-icons">check</span> Accept
           </button>
         </div>
       </div>
@@ -939,7 +941,7 @@ export async function showFullDiffModal(path, oldContent, newContent) {
     modalBody.style.overflow = "hidden";
     if (modalFooter) modalFooter.style.display = "none";
 
-    modalOverlay.classList.add("visible");
+    activateSharedModal({ initialFocus: '#ai-diff-accept' });
 
     const target = document.getElementById("diff-view");
     const mode = getEditorMode(path);
@@ -966,7 +968,7 @@ export async function showFullDiffModal(path, oldContent, newContent) {
         if (isClosed) return;
         isClosed = true;
         diffNavigation.cleanup();
-        modalOverlay.classList.remove("visible");
+        deactivateSharedModal();
         modalOverlay.removeEventListener("click", overlayClickHandler);
         if (unsubscribeHideModal) unsubscribeHideModal();
         resetModalToDefault();
@@ -1231,15 +1233,15 @@ export async function showDiffModal(path) {
     modalBody.innerHTML = `
       <div class="diff-viewer-toolbar">
         <div class="diff-viewer-summary">
-          <span class="material-icons">difference</span>
+          <span class="ui-icon material-icons">difference</span>
           <span id="diff-nav-count">No differences</span>
         </div>
         <div class="diff-viewer-actions" aria-label="Diff navigation">
           <button id="diff-nav-prev" class="diff-nav-btn" type="button" title="Previous difference" aria-label="Previous difference">
-            <span class="material-icons">keyboard_arrow_up</span>
+            <span class="ui-icon material-icons">keyboard_arrow_up</span>
           </button>
           <button id="diff-nav-next" class="diff-nav-btn" type="button" title="Next difference" aria-label="Next difference">
-            <span class="material-icons">keyboard_arrow_down</span>
+            <span class="ui-icon material-icons">keyboard_arrow_down</span>
           </button>
         </div>
       </div>
@@ -1251,7 +1253,7 @@ export async function showDiffModal(path) {
     modalBody.style.flexDirection = "column";
     modalBody.style.overflow = "hidden"; // Let CodeMirror handle scroll
 
-    modalOverlay.classList.add("visible");
+    activateSharedModal({ initialFocus: '#modal-close' });
 
     // 4. Initialize CodeMirror Merge View
     const target = document.getElementById("diff-view");
@@ -1279,7 +1281,7 @@ export async function showDiffModal(path) {
       if (isClosed) return;
       isClosed = true;
       diffNavigation.cleanup();
-      modalOverlay.classList.remove("visible");
+      deactivateSharedModal();
       modalOverlay.removeEventListener("click", overlayClickHandler);
       if (unsubscribeHideModal) unsubscribeHideModal();
       // Clean up modal styles

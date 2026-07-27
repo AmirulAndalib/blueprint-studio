@@ -136,7 +136,8 @@ class StorageContractTests(unittest.TestCase):
             "openTabs", "activeTabPath", "rememberWorkspace", "splitView",
             "currentNavigationPath", "navigationHistory", "sshHosts",
             "activeSftpConnectionId", "activeSftpPath", "content",
-            "originalContent", "cursor", "scroll",
+            "originalContent", "cursor", "scroll", "workspaceLayout",
+            "terminalPanelHeight", "splitPrimaryPercent",
         }
         for field in required_fields:
             self.assertIn(field, source)

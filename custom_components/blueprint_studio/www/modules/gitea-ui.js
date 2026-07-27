@@ -3,6 +3,8 @@ import { state, elements, giteaState } from './state.js';
 import { t } from './translations.js';
 import { showToast, setButtonLoading } from './ui.js';
 import { isTextFile } from './utils.js';
+import { refreshActivityRail } from './activity-rail.js';
+import { renderRepositoryContext } from './context-indicators.js?v=2.5.75';
 import {
   giteaStage,
   giteaUnstage,
@@ -10,7 +12,7 @@ import {
   giteaForcePush,
   giteaHardReset,
   giteaStatus
-} from './gitea-integration.js';
+} from './gitea-integration.js?v=2.5.75';
 
 /**
  * Updates the Gitea panel UI with current status
@@ -34,23 +36,11 @@ export function updateGiteaPanel() {
   if (!container || !badge || !commitBtn || !actions) return;
 
   if (badge) badge.textContent = giteaState.totalChanges;
+  refreshActivityRail();
 
-  // Branch chip in panel title
-  const titleText = panel.querySelector(".panel-title-text");
-  if (titleText && giteaState.isInitialized && giteaState.currentBranch && giteaState.currentBranch !== "unknown") {
-    const existing = panel.querySelector(".git-branch-chip");
-    if (existing) existing.remove();
-    const chip = document.createElement("span");
-    chip.className = "git-branch-chip";
-    chip.title = `Current branch: ${giteaState.currentBranch}`;
-    chip.style.cssText = "display:inline-flex;align-items:center;gap:3px;font-size:10px;padding:2px 7px;background:var(--bg-tertiary);border:1px solid var(--border-color);border-radius:10px;margin-left:6px;color:var(--text-secondary);cursor:pointer;vertical-align:middle;";
-    chip.innerHTML = `<span class="material-icons" style="font-size:11px;">account_tree</span>${giteaState.currentBranch}`;
-    chip.addEventListener("click", () => { import('./git-operations.js').then(m => m.showBranchManager()); });
-    titleText.after(chip);
-  } else if (titleText && (!giteaState.isInitialized || giteaState.currentBranch === "unknown")) {
-    const existing = panel.querySelector(".git-branch-chip");
-    if (existing) existing.remove();
-  }
+  renderRepositoryContext(panel, 'Gitea', giteaState, () => {
+    import('./git-operations.js').then(module => module.showBranchManager());
+  });
 
   // Sync indicators
   const oldIndicators = actions.querySelectorAll(".git-sync-indicator");
@@ -63,7 +53,7 @@ export function updateGiteaPanel() {
       pushBtn.id = "btn-gitea-push-sync";
       pushBtn.title = `${giteaState.ahead} commits to push`;
       pushBtn.innerHTML = `
-        <span class="material-icons" style="font-size: 18px; color: var(--success-color);">arrow_upward</span>
+        <span class="ui-icon material-icons git-sync-icon git-sync-icon-ahead">arrow_upward</span>
         <span style="font-size: 10px; margin-left: -2px; font-weight: bold; color: var(--success-color);">${giteaState.ahead}</span>
       `;
       actions.insertBefore(pushBtn, actions.firstChild);
@@ -74,7 +64,7 @@ export function updateGiteaPanel() {
       pullBtn.id = "btn-gitea-pull-sync";
       pullBtn.title = `${giteaState.behind} commits to pull`;
       pullBtn.innerHTML = `
-        <span class="material-icons" style="font-size: 18px; color: var(--warning-color);">arrow_downward</span>
+        <span class="ui-icon material-icons git-sync-icon git-sync-icon-behind">arrow_downward</span>
         <span style="font-size: 10px; margin-left: -2px; font-weight: bold; color: var(--warning-color);">${giteaState.behind}</span>
       `;
       actions.insertBefore(pullBtn, actions.firstChild);
@@ -105,7 +95,7 @@ export function updateGiteaPanel() {
     stuckWarningHtml = `
       <div id="conflict-resolution-panel-gitea" style="margin: 8px; padding: 12px; background: rgba(244, 67, 54, 0.1); border: 1px solid var(--error-color); border-radius: 6px; font-size: 12px;">
         <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px; color: var(--error-color); font-weight: 600;">
-          <span class="material-icons" style="font-size: 18px;">error_outline</span>
+          <span class="ui-icon material-icons git-alert-icon">error_outline</span>
           <span>Merge Conflicts</span>
         </div>
         <p style="margin-bottom: 10px; color: var(--text-secondary);">Resolve each conflict by choosing your version (Ours) or the incoming version (Theirs), then commit.</p>
@@ -123,7 +113,7 @@ export function updateGiteaPanel() {
     divergedWarningHtml = `
       <div style="margin: 8px; padding: 12px; background: rgba(156, 39, 176, 0.1); border: 1px solid #9c27b0; border-radius: 6px; font-size: 12px;">
         <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px; color: #9c27b0; font-weight: 600;">
-          <span class="material-icons" style="font-size: 18px;">sync_problem</span>
+          <span class="ui-icon material-icons git-alert-icon">sync_problem</span>
           <span>Gitea Sync Conflict</span>
         </div>
         <p style="margin-bottom: 10px; color: var(--text-secondary);">Your local and Gitea versions have diverged.</p>
@@ -168,10 +158,10 @@ export function updateGiteaPanel() {
   if (!giteaState.isInitialized) {
     container.innerHTML = `
       <div class="git-empty-state">
-        <span class="material-icons" style="font-size: 48px; opacity: 0.5; margin-bottom: 10px; color: #fa8e14;">source</span>
+        <span class="ui-icon material-icons git-empty-state-glyph git-empty-state-glyph-spaced gitea-brand-icon">source</span>
         <p style="margin: 0 0 10px 0; font-weight: 500;">Gitea Not Initialized</p>
         <button class="btn-primary" id="btn-gitea-init-panel" style="padding: 8px 16px; border-radius: 4px; border: none; cursor: pointer; display: flex; align-items: center; gap: 8px; background: #fa8e14; color: white;">
-          <span class="material-icons" style="font-size: 18px;">play_circle</span> Initialize Repo
+          <span class="ui-icon material-icons git-action-icon">play_circle</span> Initialize Repo
         </button>
       </div>
     `;
@@ -183,10 +173,10 @@ export function updateGiteaPanel() {
     if (giteaState.totalChanges === 0) {
       container.innerHTML = `
         <div class="git-empty-state">
-          <span class="material-icons" style="font-size: 48px; opacity: 0.5; margin-bottom: 10px; color: #fa8e14;">link_off</span>
+          <span class="ui-icon material-icons git-empty-state-glyph git-empty-state-glyph-spaced gitea-brand-icon">link_off</span>
           <p style="margin: 0 0 10px 0; font-weight: 500;">No Gitea Remote</p>
           <button class="btn-primary" id="btn-gitea-connect-panel" style="padding: 8px 16px; border-radius: 4px; border: none; cursor: pointer; display: flex; align-items: center; gap: 8px; background: #fa8e14; color: white;">
-            <span class="material-icons">link</span> Connect to Gitea
+            <span class="ui-icon material-icons">link</span> Connect to Gitea
           </button>
         </div>
       `;
@@ -219,14 +209,14 @@ export function updateGiteaPanel() {
   } else {
     container.innerHTML = `
       <div class="git-empty-state">
-        <span class="material-icons" style="color: #fa8e14; font-size: 48px; opacity: 0.5;">check_circle</span>
+        <span class="ui-icon material-icons git-empty-state-glyph gitea-brand-icon">check_circle</span>
         <p>No changes detected</p>
         <div class="git-empty-state-actions" style="display: flex; gap: 8px; margin-top: 12px; justify-content: center;">
           <button class="btn-secondary" id="btn-gitea-pull-empty-state" style="padding: 6px 12px; font-size: 12px; background: transparent; border: 1px solid var(--border-color);">
-            <span class="material-icons" style="font-size: 16px;">cloud_download</span> Pull
+            <span class="ui-icon material-icons git-empty-action-icon">cloud_download</span> Pull
           </button>
           <button class="btn-secondary" id="btn-gitea-refresh-empty-state" style="padding: 6px 12px; font-size: 12px; background: transparent; border: 1px solid var(--border-color);">
-            <span class="material-icons" style="font-size: 16px;">refresh</span> Refresh
+            <span class="ui-icon material-icons git-empty-action-icon">refresh</span> Refresh
           </button>
         </div>
       </div>
@@ -260,10 +250,10 @@ export function renderGiteaFiles(container) {
     html += `
       <div class="git-file-group${collapsedClass}" data-group="${group.key}">
         <div class="git-file-group-header">
-          <span class="git-file-group-icon material-icons ${group.color}" style="font-size: 18px;">${group.icon}</span>
+          <span class="git-file-group-icon git-file-group-icon-prominent ui-icon material-icons ${group.color}">${group.icon}</span>
           <span>${group.title}</span>
           <span class="git-file-group-count">(${group.files.length})</span>
-          <span class="material-icons git-file-group-chevron">chevron_right</span>
+          <span class="ui-icon material-icons git-file-group-chevron">chevron_right</span>
         </div>
         <div class="git-file-list">
     `;
@@ -276,7 +266,7 @@ export function renderGiteaFiles(container) {
       if ((group.key === "modified" || group.key === "staged") && isTextFile && isTextFile(file)) {
         diffButton = `
           <button class="btn-icon-only btn-git-diff" data-path="${file}" title="View Diff" style="background: transparent; border: none; cursor: pointer; color: var(--text-secondary); margin-left: auto; padding: 4px;">
-            <span class="material-icons" style="font-size: 16px;">difference</span>
+            <span class="ui-icon material-icons git-diff-icon">difference</span>
           </button>
         `;
       }
@@ -348,4 +338,3 @@ export async function unstageAllGiteaFiles() {
     await giteaUnstage(giteaState.files.staged);
   }
 }
-

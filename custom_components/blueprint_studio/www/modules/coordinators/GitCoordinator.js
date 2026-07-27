@@ -7,7 +7,7 @@
 import { state, elements } from '../state.js';
 import { eventBus } from '../event-bus.js';
 import { showModal } from '../ui.js';
-import { saveSettings } from '../settings.js';
+import { saveSettings } from '../settings.js?v=2.5.75';
 import { renderFileTree } from '../file-tree.js';
 import {
     gitPull as gitPullImpl,
@@ -34,7 +34,7 @@ import {
     stageAllGiteaFiles as stageAllGiteaFilesImpl,
     unstageAllGiteaFiles as unstageAllGiteaFilesImpl,
     toggleGiteaFileSelection as toggleGiteaFileSelectionImpl
-} from '../gitea-integration.js';
+} from '../gitea-integration.js?v=2.5.75';
 
 // Functions provided via callbacks during initialization to avoid circular dependencies
 let functions = {

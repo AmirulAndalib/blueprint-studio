@@ -127,6 +127,7 @@ export function openSearchWidget(replaceMode = false) {
   const widget = isSecondary ? elements.secondarySearchWidget : elements.searchWidget;
   const replaceRow = isSecondary ? elements.secondarySearchReplaceRow : elements.searchReplaceRow;
   const findInput = isSecondary ? elements.secondarySearchFindInput : elements.searchFindInput;
+  const replaceToggle = isSecondary ? elements.secondarySearchToggle : elements.searchToggle;
 
   if (!widget) return;
   widget.classList.add("visible");
@@ -138,6 +139,7 @@ export function openSearchWidget(replaceMode = false) {
     widget.classList.remove("replace-mode");
     if (replaceRow) replaceRow.style.display = "none";
   }
+  if (replaceToggle) replaceToggle.setAttribute("aria-expanded", String(replaceMode));
 
   if (state.editor) {
     const selection = state.editor.getSelection();
@@ -169,6 +171,8 @@ export function closeSearchWidget() {
   
   if (elements.searchWidget) elements.searchWidget.classList.remove("visible");
   if (elements.secondarySearchWidget) elements.secondarySearchWidget.classList.remove("visible");
+  if (elements.searchToggle) elements.searchToggle.setAttribute("aria-expanded", "false");
+  if (elements.secondarySearchToggle) elements.secondarySearchToggle.setAttribute("aria-expanded", "false");
 
   // Clear highlights
   if (state.editor && state.searchOverlay) {

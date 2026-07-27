@@ -558,11 +558,7 @@ export async function copyToClipboard(text) {
   try {
     const textArea = document.createElement("textarea");
     textArea.value = text;
-    
-    // Ensure textarea is not visible but part of the DOM
-    textArea.style.position = "fixed";
-    textArea.style.left = "-9999px";
-    textArea.style.top = "0";
+    textArea.className = "clipboard-fallback-control";
     document.body.appendChild(textArea);
     
     textArea.focus();
@@ -635,4 +631,3 @@ export function enableLongPressContextMenu(element) {
         }
     }, { passive: true });
 }
-

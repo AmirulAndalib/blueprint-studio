@@ -5,7 +5,22 @@ import {
   navigateSftp, 
   parseSftpPath,
   isSftpPath
-} from './sftp.js';
+} from './sftp.js?v=2.5.75';
+import { setOverflowTooltip } from './tooltip.js?v=2.5.75';
+
+function bindBreadcrumbLink(element, label, action) {
+  element.setAttribute("role", "button");
+  element.setAttribute("tabindex", "0");
+  element.setAttribute("aria-label", label);
+  element.style.cursor = "pointer";
+  element.addEventListener("click", action);
+  element.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      action();
+    }
+  });
+}
 
 /**
  * Updates the breadcrumb navigation with the current file path
@@ -29,8 +44,7 @@ export function updateBreadcrumb(path) {
     const configLink = document.createElement("span");
     configLink.className = "breadcrumb-link";
     configLink.textContent = "config";
-    configLink.style.cursor = "pointer";
-    configLink.addEventListener("click", () => {
+    bindBreadcrumbLink(configLink, "config", () => {
       navigateToFolder("");
     });
     
@@ -60,8 +74,7 @@ export function updateBreadcrumb(path) {
     const connLink = document.createElement("span");
     connLink.className = "breadcrumb-link";
     connLink.textContent = connId;
-    connLink.style.cursor = "pointer";
-    connLink.addEventListener("click", () => {
+    bindBreadcrumbLink(connLink, connId, () => {
       navigateSftp(connId, "/");
     });
     
@@ -96,13 +109,17 @@ export function updateBreadcrumb(path) {
     const link = document.createElement("span");
     link.className = "breadcrumb-link";
     link.textContent = part;
-    link.title = isSftp ? `sftp://${connId}/${currentPath}` : currentPath;
+    const fullPath = isSftp
+      ? `sftp://${connId}/${currentPath}`
+      : isTerminal
+        ? `terminal://${currentPath.replace(/^\/+/, '')}`
+        : `/config${currentPath}`;
+    setOverflowTooltip(link, fullPath);
 
     // Make all parts except the last one clickable to open folder
     if (index < parts.length - 1) {
       const folderPath = currentPath;
-      link.style.cursor = "pointer";
-      link.addEventListener("click", () => {
+      bindBreadcrumbLink(link, part, () => {
         if (isSftp) {
           // SFTP navigation
           navigateSftp(connId, folderPath.startsWith('/') ? folderPath : '/' + folderPath);
@@ -115,6 +132,10 @@ export function updateBreadcrumb(path) {
           }
         }
       });
+    } else {
+      link.setAttribute("tabindex", "0");
+      link.setAttribute("aria-label", fullPath);
+      link.setAttribute("aria-current", "location");
     }
 
     item.appendChild(link);

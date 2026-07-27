@@ -44,7 +44,7 @@ export function renderRecentFilesPanel() {
     item.innerHTML = `
       <div class="tree-chevron hidden"></div>
       <div class="tree-icon ${fileIcon.class}">
-        <span class="material-icons">${fileIcon.icon}</span>
+        <span class="ui-icon material-icons recent-file-icon">${fileIcon.icon}</span>
       </div>
       <span class="tree-name">${fileName}</span>
     `;

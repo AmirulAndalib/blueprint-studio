@@ -2,6 +2,11 @@
 import { state, elements } from './state.js';
 import { isMobile } from './utils.js';
 import { eventBus } from './event-bus.js';
+import {
+  constrainSidebarWidth,
+  getSidebarMaxWidth,
+  SIDEBAR_MIN_WIDTH,
+} from './workspace-layout.js';
 
 /**
  * Initialize the sidebar resize handle
@@ -12,37 +17,61 @@ export function initResizeHandle() {
 
   let isResizing = false;
 
-  elements.resizeHandle.addEventListener("mousedown", (e) => {
+  const applyWidth = (width) => {
+    const nextWidth = constrainSidebarWidth(width);
+    elements.sidebar.style.width = `${nextWidth}px`;
+    elements.resizeHandle.setAttribute('aria-valuemin', String(SIDEBAR_MIN_WIDTH));
+    elements.resizeHandle.setAttribute('aria-valuemax', String(getSidebarMaxWidth()));
+    elements.resizeHandle.setAttribute('aria-valuenow', String(Math.round(nextWidth)));
+    return nextWidth;
+  };
+
+  const saveWidth = () => {
+    state.sidebarWidth = Math.round(elements.sidebar.getBoundingClientRect().width);
+    eventBus.emit('settings:save');
+    state.editor?.refresh();
+  };
+
+  elements.resizeHandle.addEventListener("pointerdown", (e) => {
     isResizing = true;
     elements.resizeHandle.classList.add("active");
     document.body.style.cursor = "col-resize";
     document.body.style.userSelect = "none";
+    elements.resizeHandle.setPointerCapture?.(e.pointerId);
+    e.preventDefault();
   });
 
-  document.addEventListener("mousemove", (e) => {
+  elements.resizeHandle.addEventListener("pointermove", (e) => {
     if (!isResizing) return;
-
-    const newWidth = e.clientX;
-    if (newWidth >= 200 && newWidth <= 500) {
-      elements.sidebar.style.width = `${newWidth}px`;
-    }
+    applyWidth(e.clientX);
   });
 
-  document.addEventListener("mouseup", () => {
+  const finishResize = () => {
     if (isResizing) {
       isResizing = false;
       elements.resizeHandle.classList.remove("active");
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
-
-      // Save sidebar width
-      state.sidebarWidth = parseInt(elements.sidebar.style.width);
-      eventBus.emit('settings:save');
-
-      // Refresh editor after resize
-      if (state.editor) {
-        state.editor.refresh();
-      }
+      saveWidth();
     }
+  };
+
+  elements.resizeHandle.addEventListener("pointerup", finishResize);
+  elements.resizeHandle.addEventListener("pointercancel", finishResize);
+  elements.resizeHandle.addEventListener('keydown', (event) => {
+    const currentWidth = elements.sidebar.getBoundingClientRect().width;
+    const step = event.shiftKey ? 40 : 10;
+    let nextWidth = currentWidth;
+    if (event.key === 'ArrowLeft') nextWidth -= step;
+    else if (event.key === 'ArrowRight') nextWidth += step;
+    else if (event.key === 'Home') nextWidth = SIDEBAR_MIN_WIDTH;
+    else if (event.key === 'End') nextWidth = getSidebarMaxWidth();
+    else return;
+    event.preventDefault();
+    applyWidth(nextWidth);
+    saveWidth();
   });
+
+  window.addEventListener('resize', () => applyWidth(state.sidebarWidth));
+  applyWidth(state.sidebarWidth);
 }

@@ -2,6 +2,7 @@
 import { getAuthToken } from './api.js';
 import { API_BASE } from './constants.js';
 import { formatBytes } from './utils.js';
+import { removeOperationFeedback, updateOperationFeedback } from './feedback-service.js';
 
 function createTransferProgressId(prefix) {
   if (window.crypto?.randomUUID) return window.crypto.randomUUID();
@@ -12,92 +13,38 @@ export function createZipProgressId() {
   return createTransferProgressId("zip");
 }
 
-function ensureProgressStack() {
-  let stack = document.getElementById("transfer-progress-stack");
-  if (!stack) {
-    stack = document.createElement("div");
-    stack.id = "transfer-progress-stack";
-    stack.className = "transfer-progress-stack";
-    document.body.appendChild(stack);
-  }
-  return stack;
-}
-
-function ensureProgressElements(progressId, label = null, icon = "folder_zip") {
-  const cardId = `transfer-progress-${progressId}`;
-  let wrapper = document.getElementById(cardId);
-  if (!wrapper) {
-    const stack = ensureProgressStack();
-    wrapper = document.createElement("div");
-    wrapper.id = cardId;
-    wrapper.className = "zip-download-progress";
-    wrapper.innerHTML = `
-      <div class="zip-progress-header">
-        <span class="material-icons zip-progress-icon"></span>
-        <span class="zip-progress-title"></span>
-      </div>
-      <div class="zip-progress-track"><div class="zip-progress-bar"></div></div>
-      <div class="zip-progress-meta">Preparing...</div>
-      <div class="zip-progress-file"></div>
-    `;
-    stack.appendChild(wrapper);
-  }
-  const iconEl = wrapper.querySelector(".zip-progress-icon");
-  if (iconEl) iconEl.textContent = icon;
-  const title = wrapper.querySelector(".zip-progress-title");
-  if (title && label !== null) title.textContent = label;
-  return wrapper;
-}
-
-function removeProgressElements(progressId) {
-  document.getElementById(`transfer-progress-${progressId}`)?.remove();
-  const stack = document.getElementById("transfer-progress-stack");
-  if (stack && stack.children.length === 0) stack.remove();
-}
-
 function updateProgressUi(progressId, progress, options = {}) {
-  const wrapper = ensureProgressElements(progressId, options.label, options.icon);
-  const meta = wrapper.querySelector(".zip-progress-meta");
-  const file = wrapper.querySelector(".zip-progress-file");
-  const bar = wrapper.querySelector(".zip-progress-bar");
   const filesDone = Number(progress?.files_done || 0);
   const totalFiles = Number(progress?.total_files || 0);
   const bytesDone = Number(progress?.bytes_done || 0);
   const bytesTotal = Number(progress?.bytes_total || 0);
   const percent = Number(progress?.percent);
 
-  if (bar) {
-    if (Number.isFinite(percent)) {
-      bar.classList.add("determinate");
-      bar.style.width = `${Math.max(0, Math.min(100, percent))}%`;
-    } else {
-      bar.classList.remove("determinate");
-      bar.style.width = "";
-    }
-  }
-
-  if (meta) {
-    if (progress?.message) {
-      meta.textContent = progress.message;
+  let message;
+  if (progress?.message) {
+      message = progress.message;
     } else if (progress?.status === "pending") {
-      meta.textContent = "Waiting for download to start...";
+      message = "Waiting for download to start...";
     } else if (progress?.status === "done") {
       const filePart = totalFiles ? `${totalFiles} file${totalFiles === 1 ? "" : "s"}` : `${filesDone} file${filesDone === 1 ? "" : "s"}`;
-      meta.textContent = `Complete: ${filePart}, ${formatBytes(bytesDone)}`;
+      message = `Complete: ${filePart}, ${formatBytes(bytesDone)}`;
     } else if (progress?.status === "uploading") {
       const filePart = totalFiles ? `File ${filesDone} of ${totalFiles}` : "Uploading";
       const bytePart = bytesTotal ? `${formatBytes(bytesDone)} of ${formatBytes(bytesTotal)}` : formatBytes(bytesDone);
-      meta.textContent = `${filePart} - ${bytePart}`;
+      message = `${filePart} - ${bytePart}`;
     } else if (progress?.status === "error") {
-      meta.textContent = "Transfer failed";
+      message = "Transfer failed";
     } else {
-      meta.textContent = `${filesDone} file${filesDone === 1 ? "" : "s"} processed, ${formatBytes(bytesDone)}`;
+      message = `${filesDone} file${filesDone === 1 ? "" : "s"} processed, ${formatBytes(bytesDone)}`;
     }
-  }
-
-  if (file) {
-    file.textContent = progress?.current_file ? progress.current_file : "";
-  }
+  updateOperationFeedback(progressId, {
+    label: options.label,
+    icon: options.icon,
+    status: progress?.status,
+    message,
+    detail: progress?.current_file,
+    percent: Number.isFinite(percent) ? percent : undefined,
+  });
 }
 
 async function fetchProgress(progressId) {
@@ -125,19 +72,18 @@ export function startZipProgress(progressId, label = "Preparing ZIP download..."
   let stopped = false;
   let timeoutId = null;
 
-  ensureProgressElements(progressId, label, "folder_zip");
-  updateProgressUi(progressId, { status: "pending", files_done: 0, bytes_done: 0 }, { icon: "folder_zip" });
+  updateProgressUi(progressId, { status: "pending", files_done: 0, bytes_done: 0 }, { label, icon: "folder_zip" });
 
   async function poll() {
     if (stopped) return;
     try {
       const progress = await fetchProgress(progressId);
       if (!progress) {
-        updateProgressUi(progressId, { status: "pending", files_done: 0, bytes_done: 0 }, { icon: "folder_zip" });
+        updateProgressUi(progressId, { status: "pending", files_done: 0, bytes_done: 0 }, { label, icon: "folder_zip" });
         timeoutId = setTimeout(poll, 800);
         return;
       }
-      updateProgressUi(progressId, progress, { icon: "folder_zip" });
+      updateProgressUi(progressId, progress, { label, icon: "folder_zip" });
       if (progress.status === "done") {
         timeoutId = setTimeout(stop, 1200);
         return;
@@ -147,7 +93,7 @@ export function startZipProgress(progressId, label = "Preparing ZIP download..."
         return;
       }
     } catch (_) {
-      updateProgressUi(progressId, { status: "pending", files_done: 0, bytes_done: 0 }, { icon: "folder_zip" });
+      updateProgressUi(progressId, { status: "pending", files_done: 0, bytes_done: 0 }, { label, icon: "folder_zip" });
     }
     timeoutId = setTimeout(poll, 800);
   }
@@ -155,7 +101,7 @@ export function startZipProgress(progressId, label = "Preparing ZIP download..."
   function stop() {
     stopped = true;
     if (timeoutId) clearTimeout(timeoutId);
-    removeProgressElements(progressId);
+    removeOperationFeedback(progressId);
   }
 
   timeoutId = setTimeout(poll, 500);
@@ -166,7 +112,6 @@ export function startUploadProgress({ label = "Uploading...", totalFiles = 1 } =
   const progressId = createTransferProgressId("upload");
   let timeoutId = null;
 
-  ensureProgressElements(progressId, label, "upload_file");
   updateProgressUi(progressId, {
     status: "pending",
     files_done: 0,
@@ -175,7 +120,7 @@ export function startUploadProgress({ label = "Uploading...", totalFiles = 1 } =
     bytes_total: 0,
     percent: 0,
     message: "Waiting for upload to start...",
-  }, { icon: "upload_file" });
+  }, { label, icon: "upload_file" });
 
   function clearRemoveTimer() {
     if (timeoutId) {
@@ -196,7 +141,7 @@ export function startUploadProgress({ label = "Uploading...", totalFiles = 1 } =
       percent,
       current_file: fileName,
       message,
-    }, { icon: "upload_file" });
+    }, { label, icon: "upload_file" });
   }
 
   function finish(message = "Upload complete") {
@@ -207,8 +152,8 @@ export function startUploadProgress({ label = "Uploading...", totalFiles = 1 } =
       bytes_done: 0,
       percent: 100,
       message,
-    }, { icon: "check_circle" });
-    timeoutId = setTimeout(() => removeProgressElements(progressId), 1400);
+    }, { label, icon: "check_circle" });
+    timeoutId = setTimeout(() => removeOperationFeedback(progressId), 1400);
   }
 
   function fail(message = "Upload failed") {
@@ -218,13 +163,13 @@ export function startUploadProgress({ label = "Uploading...", totalFiles = 1 } =
       total_files: totalFiles,
       bytes_done: 0,
       message,
-    }, { icon: "error" });
-    timeoutId = setTimeout(() => removeProgressElements(progressId), 2200);
+    }, { label, icon: "error" });
+    timeoutId = setTimeout(() => removeOperationFeedback(progressId), 2200);
   }
 
   function remove() {
     clearRemoveTimer();
-    removeProgressElements(progressId);
+    removeOperationFeedback(progressId);
   }
 
   return { update, finish, fail, remove };

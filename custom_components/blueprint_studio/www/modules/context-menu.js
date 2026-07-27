@@ -112,7 +112,7 @@ export function showTabContextMenu(x, y, tab, tabIndex) {
         moveToRight.querySelector('.material-icons').textContent =
           state.splitView.orientation === 'vertical' ? 'arrow_forward' : 'arrow_downward';
         moveToRight.innerHTML = `
-          <span class="material-icons">${state.splitView.orientation === 'vertical' ? 'arrow_forward' : 'arrow_downward'}</span>
+          <span class="ui-icon material-icons context-menu-icon">${state.splitView.orientation === 'vertical' ? 'arrow_forward' : 'arrow_downward'}</span>
           Move to ${state.splitView.orientation === 'vertical' ? 'Right' : 'Bottom'} Pane
         `;
       }
@@ -125,7 +125,7 @@ export function showTabContextMenu(x, y, tab, tabIndex) {
         moveToLeft.querySelector('.material-icons').textContent =
           state.splitView.orientation === 'vertical' ? 'arrow_back' : 'arrow_upward';
         moveToLeft.innerHTML = `
-          <span class="material-icons">${state.splitView.orientation === 'vertical' ? 'arrow_back' : 'arrow_upward'}</span>
+          <span class="ui-icon material-icons context-menu-icon">${state.splitView.orientation === 'vertical' ? 'arrow_back' : 'arrow_upward'}</span>
           Move to ${state.splitView.orientation === 'vertical' ? 'Left' : 'Top'} Pane
         `;
       }

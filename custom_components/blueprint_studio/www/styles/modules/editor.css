@@ -38,6 +38,8 @@
       max-width: 180px;
       flex-shrink: 0;
       transition: background 0.1s;
+      min-width: 0;
+      max-width: 220px;
     }
 
     .tab:hover, .tab:active {
@@ -56,11 +58,23 @@
       flex-shrink: 0;
     }
 
+    .tab-icon.folder { color: var(--icon-folder); }
+    .tab-icon.yaml { color: var(--icon-yaml); }
+    .tab-icon.json { color: var(--icon-json); }
+    .tab-icon.python { color: var(--icon-python); }
+    .tab-icon.js { color: var(--icon-js); }
+    .tab-icon.default { color: var(--icon-default); }
+
+    .tab-terminal-loading-icon {
+      animation: spin 1s linear infinite;
+    }
+
     .tab-name {
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
       flex: 1;
+      min-width: 0;
     }
 
     .tab-modified {
@@ -189,9 +203,15 @@
       z-index: 10;
     }
 
-    .split-resize-handle:hover {
+    .split-resize-handle:hover,
+    .split-resize-handle:focus-visible {
       background: var(--accent-color);
       width: 6px;
+    }
+
+    .split-resize-handle:focus-visible {
+      box-shadow: 0 0 0 2px var(--focus-color);
+      outline: none;
     }
 
     .split-resize-indicator {
@@ -323,11 +343,37 @@
     }
 
 /* ========== Entity Inspect Popup ========== */
+#entity-inspect-popup {
+  background: var(--bg-primary, #1e1e2e);
+  border: 1px solid var(--border-color, #333);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  color: var(--text-primary, #cdd6f4);
+  font-family: var(--font-mono, monospace);
+  font-size: 13px;
+  max-width: 360px;
+  min-width: 260px;
+  padding: 12px;
+  position: fixed;
+  z-index: 99999;
+}
+#entity-inspect-popup .entity-popup-mdi-icon {
+  font-size: 1.2em;
+  margin-right: 6px;
+  vertical-align: middle;
+}
 #entity-inspect-popup .eip-header {
   display: flex;
   align-items: center;
   margin-bottom: 6px;
   gap: 4px;
+}
+#entity-inspect-popup .entity-popup-fallback-icon {
+  color: var(--accent-color);
+  font-size: 14px;
+  height: 14px;
+  margin-right: 6px;
+  width: 14px;
 }
 #entity-inspect-popup .eip-entity-id {
   flex: 1;
@@ -414,3 +460,8 @@
   transition: background 0.15s;
 }
 #entity-inspect-popup .eip-btn:hover { background: var(--bg-hover, #45475a); }
+#entity-inspect-popup .entity-popup-copy-icon {
+  font-size: 14px;
+  height: 14px;
+  width: 14px;
+}

@@ -18,7 +18,7 @@ import {
   refreshSftp,
   sftpStreamUrl,
   getSftpConnectionDetails
-} from './sftp.js';
+} from './sftp.js?v=2.5.75';
 
 function parentPath(path) {
   const clean = String(path || "").replace(/\/+$/g, "");

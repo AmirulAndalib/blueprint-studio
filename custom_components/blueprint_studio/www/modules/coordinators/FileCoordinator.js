@@ -31,7 +31,7 @@ import {
     parseSftpPath as parseSftpPathImpl,
     openSftpFile as openSftpFileImpl,
     saveSftpFile as saveSftpFileImpl
-} from '../sftp.js';
+} from '../sftp.js?v=2.5.75';
 import {
     createFile as createFileImpl,
     createFolder as createFolderImpl,
@@ -195,7 +195,7 @@ export function setFileTreeLoading(isLoading) {
             elements.fileTree.classList.add("loading");
             elements.fileTree.innerHTML = `
                 <div class="loading-item">
-                    <span class="material-icons loading-spinner">sync</span>
+                    <span class="ui-icon material-icons loading-spinner">sync</span>
                     <span class="tree-name">${t("common.loading")}</span>
                 </div>
             `;

@@ -4,7 +4,16 @@ import { state, elements, giteaState } from './state.js';
 import { fetchWithAuth } from './api.js';
 import { eventBus } from './event-bus.js';
 import { API_BASE } from './constants.js';
-import { showToast, showGlobalLoading, hideGlobalLoading, resetModalToDefault, showConfirmDialog, showModal } from './ui.js';
+import {
+  activateSharedModal,
+  deactivateSharedModal,
+  showToast,
+  showGlobalLoading,
+  hideGlobalLoading,
+  resetModalToDefault,
+  showConfirmDialog,
+  showModal
+} from './ui.js';
 import { formatBytes } from './utils.js';
 import { t } from './translations.js';
 import {
@@ -22,7 +31,7 @@ import {
   stageSelectedGiteaFiles as stageSelectedGiteaFilesImpl,
   stageAllGiteaFiles as stageAllGiteaFilesImpl,
   unstageAllGiteaFiles as unstageAllGiteaFilesImpl
-} from './gitea-ui.js';
+} from './gitea-ui.js?v=2.5.75';
 import { setButtonLoading } from './ui.js';
 
 // ============================================
@@ -395,7 +404,7 @@ export async function showGiteaSettings() {
               <span class="git-remote-url">${url}</span>
           </div>
           <button class="btn-icon-only remove-remote-btn" data-remote-name="${name}" title="${t("gitea.remove_remote_title")}" style="background: transparent; border: none; cursor: pointer; color: var(--text-secondary); padding: 4px;">
-              <span class="material-icons" style="font-size: 18px;">delete</span>
+              <span class="ui-icon ui-icon--size-action material-icons">delete</span>
           </button>
         </div>
       `;
@@ -407,11 +416,11 @@ export async function showGiteaSettings() {
   if (hasCredentials) {
     credentialsStatusHtml = `
       <div class="git-settings-info" style="color: #4caf50; margin-bottom: 12px;">
-        <span class="material-icons">check_circle</span>
+        <span class="ui-icon material-icons">check_circle</span>
         <span>${t("gitea.logged_in_as", { username: savedUsername })}</span>
       </div>
       <button id="btn-gitea-signout" style="width: 100%; padding: 10px; display: flex; align-items: center; justify-content: center; gap: 8px; background: #f44336; color: white; border: none; border-radius: 4px; font-size: 14px; cursor: pointer; transition: background 0.15s;">
-        <span class="material-icons">logout</span>
+        <span class="ui-icon material-icons">logout</span>
         <span>${t("toast.git_signout")}</span>
       </button>
     `;
@@ -434,7 +443,7 @@ export async function showGiteaSettings() {
 
       <div class="git-settings-section">
         <div class="git-settings-label">
-          <span class="material-icons" style="vertical-align: middle; margin-right: 8px; color: #fa8e14;">emoji_food_beverage</span>
+          <span class="ui-icon ui-icon--tone-gitea ui-icon--align-middle ui-icon--space-after-8 material-icons">emoji_food_beverage</span>
           ${t("gitea.auth_title")}
         </div>
 
@@ -458,7 +467,7 @@ export async function showGiteaSettings() {
 
       <div class="git-settings-section">
         <div class="git-settings-label">
-          <span class="material-icons" style="vertical-align: middle; margin-right: 8px; color: #fa8e14;">add_box</span>
+          <span class="ui-icon ui-icon--tone-gitea ui-icon--align-middle ui-icon--space-after-8 material-icons">add_box</span>
           ${t("modal.new_folder_title")}
         </div>
         <input type="text" class="git-settings-input" id="gitea-new-repo-name"
@@ -479,7 +488,7 @@ export async function showGiteaSettings() {
           <label for="gitea-repo-private">${t("gitea.private_repo")}</label>
         </div>
         <button class="btn-primary" id="btn-create-gitea-repo" style="width: 100%;">
-          <span class="material-icons" style="vertical-align: middle; margin-right: 8px;">add</span>
+          <span class="ui-icon ui-icon--align-middle ui-icon--space-after-8 material-icons">add</span>
           ${t("modal.confirm_button")}
         </button>
       </div>
@@ -487,14 +496,14 @@ export async function showGiteaSettings() {
       <div class="git-settings-section">
         <div class="git-settings-label">${t("settings.advanced.experimental")}</div>
         <button class="btn-secondary" id="btn-clean-git-locks" style="width: 100%;">
-          <span class="material-icons" style="vertical-align: middle; margin-right: 8px;">delete_sweep</span>
+          <span class="ui-icon ui-icon--align-middle ui-icon--space-after-8 material-icons">delete_sweep</span>
           ${t("gitea.clean_locks")}
         </button>
       </div>
     </div>
   `;
 
-  modalOverlay.classList.add("visible");
+  activateSharedModal({ initialFocus: () => modalBody.querySelector('input, select, button') });
 
   // Set wider modal for Gitea Settings (responsive on mobile via CSS)
   modal.style.maxWidth = "650px";
@@ -506,7 +515,7 @@ export async function showGiteaSettings() {
 
   // Function to clean up and close the Gitea Settings modal
   const closeGiteaSettings = () => {
-    modalOverlay.classList.remove("visible");
+    deactivateSharedModal();
     resetModalToDefault();
     modalOverlay.removeEventListener("click", overlayClickHandler);
   };
@@ -831,4 +840,3 @@ export function refreshGiteaPanelStrings() {
   const btnCommit = document.getElementById("btn-gitea-commit-staged");
   if (btnCommit) btnCommit.textContent = t("sidebar.commit");
 }
-

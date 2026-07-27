@@ -3,7 +3,7 @@ import { t } from './translations.js';
 import { state, elements, gitState, giteaState } from './state.js';
 import { API_BASE } from './constants.js';
 import { fetchWithAuth } from './api.js';
-import { showToast, showGlobalLoading, hideGlobalLoading, showModal } from './ui.js';
+import { showToast, showGlobalLoading, hideGlobalLoading, showModal, showConfirmDialog } from './ui.js';
 import { formatBytes, ensureDiffLibrariesLoaded, isMobile } from './utils.js';
 
 export function isGitEnabled() {
@@ -163,7 +163,7 @@ export async function gitUnstage(files) {
 }
 
 export async function gitReset(files) {
-    if (!confirm(`Are you sure you want to discard changes to ${files.length} file(s)? This cannot be undone.`)) return;
+    if (!await showConfirmDialog({ title: 'Discard Changes', message: `Are you sure you want to discard changes to ${files.length} file(s)? This cannot be undone.`, confirmText: 'Discard', isDanger: true })) return;
     try {
         await fetchWithAuth(API_BASE, {
             method: "POST",
@@ -320,7 +320,7 @@ export function updateGitPanel() {
             pushBtn.className = "git-panel-btn git-sync-indicator";
             pushBtn.id = "btn-git-push-sync";
             pushBtn.title = `${gitState.ahead} commits to push`;
-            pushBtn.innerHTML = `<span class="material-icons" style="font-size: 18px; color: var(--success-color);">arrow_upward</span><span style="font-size: 10px; margin-left: -2px; font-weight: bold; color: var(--success-color);">${gitState.ahead}</span>`;
+            pushBtn.innerHTML = `<span class="ui-icon ui-icon--size-action ui-icon--tone-success material-icons">arrow_upward</span><span style="font-size: 10px; margin-left: -2px; font-weight: bold; color: var(--success-color);">${gitState.ahead}</span>`;
             actions.insertBefore(pushBtn, actions.firstChild);
         }
         if (gitState.behind > 0) {
@@ -328,7 +328,7 @@ export function updateGitPanel() {
             pullBtn.className = "git-panel-btn git-sync-indicator";
             pullBtn.id = "btn-git-pull-sync";
             pullBtn.title = `${gitState.behind} commits to pull`;
-            pullBtn.innerHTML = `<span class="material-icons" style="font-size: 18px; color: var(--warning-color);">arrow_downward</span><span style="font-size: 10px; margin-left: -2px; font-weight: bold; color: var(--warning-color);">${gitState.behind}</span>`;
+            pullBtn.innerHTML = `<span class="ui-icon ui-icon--size-action ui-icon--tone-warning material-icons">arrow_downward</span><span style="font-size: 10px; margin-left: -2px; font-weight: bold; color: var(--warning-color);">${gitState.behind}</span>`;
             actions.insertBefore(pullBtn, actions.firstChild);
         }
     }
@@ -346,7 +346,7 @@ export function updateGitPanel() {
     if (gitState.totalChanges > 0) {
         renderGitFilesList(container, gitState, "git");
     } else {
-        container.innerHTML = `<div class="git-empty-state"><span class="material-icons">check_circle</span><p>No changes detected</p></div>`;
+        container.innerHTML = `<div class="git-empty-state"><span class="ui-icon material-icons">check_circle</span><p>No changes detected</p></div>`;
     }
 
     commitBtn.disabled = gitState.files.staged.length === 0;

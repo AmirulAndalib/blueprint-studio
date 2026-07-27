@@ -24,7 +24,9 @@
     .git-panel-header {
       display: flex;
       align-items: center;
+      flex-wrap: wrap;
       justify-content: space-between;
+      gap: 6px;
       padding: 10px 12px;
       font-size: 11px;
       font-weight: 600;
@@ -37,7 +39,22 @@
     .git-panel-title {
       display: flex;
       align-items: center;
+      flex: 1;
       gap: 6px;
+      min-width: 0;
+    }
+
+    .panel-title-text {
+      overflow: hidden;
+      min-width: 0;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .repository-context {
+      flex: 0 0 calc(100% - 24px);
+      margin-left: 24px;
+      overflow: hidden;
     }
 
     .git-panel-badge {
@@ -51,6 +68,7 @@
 
     .git-panel-actions {
       display: flex;
+      flex-shrink: 0;
       gap: 4px;
     }
 
@@ -58,8 +76,11 @@
       display: flex;
       align-items: center;
       justify-content: center;
+      min-height: 28px;
+      min-width: 28px;
       width: 28px;
       height: 28px;
+      padding: 0;
       background: transparent;
       border: none;
       border-radius: 4px;
@@ -67,6 +88,78 @@
       cursor: pointer;
       touch-action: manipulation;
       -webkit-tap-highlight-color: transparent;
+    }
+
+    .git-panel-btn .ui-icon {
+      font-size: 18px;
+      height: 18px;
+      width: 18px;
+    }
+
+    .git-panel-btn .git-panel-collapse-icon {
+      font-size: 24px;
+      height: 24px;
+      width: 24px;
+    }
+
+    .git-branch-icon {
+      font-size: 11px;
+      height: 11px;
+      width: 11px;
+    }
+
+    .git-sync-icon,
+    .git-alert-icon,
+    .git-action-icon {
+      font-size: 18px;
+      height: 18px;
+      width: 18px;
+    }
+
+    .git-sync-icon-ahead {
+      color: var(--success-color);
+    }
+
+    .git-sync-icon-behind {
+      color: var(--warning-color);
+    }
+
+    .git-empty-state-glyph {
+      font-size: 48px;
+      height: 48px;
+      opacity: 0.5;
+      width: 48px;
+    }
+
+    .git-empty-state-glyph-spaced {
+      margin-bottom: 10px;
+    }
+
+    .gitea-brand-icon {
+      color: #fa8e14;
+    }
+
+    .git-empty-action-icon,
+    .git-diff-icon {
+      font-size: 16px;
+      height: 16px;
+      width: 16px;
+    }
+
+    .git-branch-state-icon {
+      color: var(--content-secondary);
+    }
+
+    .git-branch-state-icon.is-current {
+      color: var(--status-success);
+    }
+
+    .integration-sync-icon {
+      animation: spin 1s linear infinite;
+    }
+
+    .exclusion-chevron {
+      transition: transform 0.2s;
     }
 
     .git-panel-btn:hover {
@@ -167,6 +260,20 @@
       color: #fa8e14;
     }
 
+    .gitea-panel-title-icon {
+      font-size: 18px;
+      height: 18px;
+      margin-right: 6px;
+      width: 18px;
+    }
+
+    #gitea-panel .gitea-empty-state-icon {
+      font-size: 48px;
+      height: 48px;
+      opacity: 0.5;
+      width: 48px;
+    }
+
     .git-files-container {
       flex: 1;
       overflow-y: auto;
@@ -209,6 +316,12 @@
     .git-file-group-icon {
       margin-right: 6px;
       font-size: 16px;
+    }
+
+    .git-file-group-icon-prominent {
+      font-size: 18px;
+      height: 18px;
+      width: 18px;
     }
 
     .git-file-group-count {
@@ -376,6 +489,16 @@
     .git-empty-state .material-icons {
       font-size: 48px;
       opacity: 0.3;
+    }
+
+    .git-empty-state .git-empty-state-glyph {
+      opacity: 0.5;
+    }
+
+    .git-empty-state .git-action-icon {
+      font-size: 18px;
+      height: 18px;
+      width: 18px;
     }
 
     .git-empty-state p {
@@ -582,4 +705,15 @@
 
     .toggle-switch input:checked + .toggle-slider:before {
       transform: translateX(22px);
+    }
+    .git-panel-github-icon {
+      margin-right: 6px;
+    }
+
+    .git-empty-state-icon {
+      fill: var(--success-color);
+    }
+
+    .gitea-panel-badge {
+      background: #fa8e14;
     }

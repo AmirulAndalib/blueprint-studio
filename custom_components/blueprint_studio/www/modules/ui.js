@@ -5,6 +5,14 @@ import { lightenColor } from './utils.js';
 import { t } from './translations.js';
 import { eventBus } from './event-bus.js';
 import { applyMinimapState } from './minimap.js';
+import { closeDialog, openDialog } from './dialog-manager.js';
+import { constrainSidebarWidth } from './workspace-layout.js';
+import {
+  hideGlobalPending,
+  notify,
+  setControlPending,
+  showGlobalPending,
+} from './feedback-service.js';
 
 const HA_VAR_MAPPING = {
     '--bg-primary': '--primary-background-color',
@@ -231,89 +239,20 @@ function updateThemeToggleDisplay() {
       const isActive = (state.themePreset === 'auto' && itemTheme === 'auto') || 
                        (state.themePreset !== 'auto' && itemTheme === state.themePreset);
       item.classList.toggle("active", isActive);
+      item.setAttribute("aria-checked", String(isActive));
     });
 }
 
 export function showGlobalLoading(message = "Loading...") {
-  if (elements.loadingOverlay) {
-    elements.loadingText.textContent = message;
-    elements.loadingOverlay.classList.add("visible");
-  }
+  showGlobalPending(message);
 }
 
 export function hideGlobalLoading() {
-  if (elements.loadingOverlay) {
-    elements.loadingOverlay.classList.remove("visible");
-  }
-}
-
-const activeToastKeys = new Set();
-
-function compactToastMessage(message) {
-  const text = String(message || "").replace(/\s+/g, " ").trim();
-  if (text.length <= 64) return text;
-  return `${text.slice(0, 61)}…`;
+  hideGlobalPending();
 }
 
 export function showToast(message, type = "success", duration = 3000, action = null) {
-  if (!state.showToasts && type !== "error" && !action) return;
-
-  if (type === "error" && duration === 3000) duration = 0;
-  const compactMessage = compactToastMessage(message);
-  const toastKey = `${type}:${compactMessage}`;
-  if (activeToastKeys.has(toastKey)) return;
-  activeToastKeys.add(toastKey);
-
-  const toast = document.createElement("div");
-  toast.className = `toast ${type}`;
-  toast.dataset.toastKey = toastKey;
-
-  const iconMap = { success: "done", error: "error_outline", warning: "warning_amber", info: "info" };
-
-  let actionButtonHtml = '';
-  if (action && action.text && action.callback) {
-    actionButtonHtml = `<button class="toast-action-btn">${action.text}</button>`;
-  }
-  const closeButtonHtml = duration === 0
-    ? '<button class="toast-close-btn" aria-label="Dismiss"><span class="material-icons">close</span></button>'
-    : '';
-
-  toast.innerHTML = `
-    <span class="material-icons">${iconMap[type] || 'info'}</span>
-    <span class="toast-message">${compactMessage}</span>
-    ${actionButtonHtml}
-    ${closeButtonHtml}
-  `;
-
-  elements.toastContainer.appendChild(toast);
-
-  const removeToast = () => {
-    activeToastKeys.delete(toastKey);
-    toast.remove();
-  };
-
-  if (action && action.callback) {
-    const actionBtn = toast.querySelector('.toast-action-btn');
-    if (actionBtn) {
-      actionBtn.addEventListener('click', () => {
-        action.callback();
-        removeToast();
-      });
-    }
-  }
-
-  const closeBtn = toast.querySelector('.toast-close-btn');
-  if (closeBtn) {
-    closeBtn.addEventListener('click', removeToast);
-  }
-
-  if (duration > 0) {
-    setTimeout(() => {
-      toast.style.opacity = "0";
-      toast.style.transform = "translateX(100%)";
-      setTimeout(removeToast, 180);
-    }, duration);
-  }
+  return notify(message, { type, duration, action });
 }
 
 // ============================================
@@ -321,31 +260,20 @@ export function showToast(message, type = "success", duration = 3000, action = n
 // ============================================
 
 export let modalCallback = null;
-let modalReturnFocus = null;
 
-function rememberModalFocus() {
-  const activeElement = document.activeElement;
-  modalReturnFocus = activeElement instanceof HTMLElement ? activeElement : null;
+export function activateSharedModal(options = {}) {
+  return openDialog(elements.modalOverlay, options);
 }
 
-function restoreModalFocus() {
-  const returnTarget = modalReturnFocus;
-  modalReturnFocus = null;
-  if (returnTarget?.isConnected) {
-    returnTarget.focus();
-  }
+export function deactivateSharedModal(options = {}) {
+  return closeDialog(elements.modalOverlay, options);
 }
 
-function focusModalControl(preferInput = false) {
-  setTimeout(() => {
-    if (!elements.modalOverlay?.classList.contains("visible")) return;
-    const target = preferInput && elements.modalInput?.style.display !== "none"
-      ? elements.modalInput
-      : elements.modalCancel?.style.display !== "none"
-        ? elements.modalCancel
-        : elements.modalConfirm;
-    target?.focus();
-  }, 0);
+function preferredModalControl(preferInput = false) {
+  if (preferInput && elements.modalInput?.style.display !== "none") return elements.modalInput;
+  return elements.modalCancel?.style.display !== "none"
+    ? elements.modalCancel
+    : elements.modalConfirm;
 }
 
 export const DEFAULT_MODAL_BODY_HTML = `
@@ -372,8 +300,6 @@ export function resetModalToDefault() {
         elements.modalInput.addEventListener("keydown", (e) => {
           if (e.key === "Enter") {
             confirmModal();
-          } else if (e.key === "Escape") {
-            hideModal();
           }
         });
       }
@@ -400,7 +326,6 @@ export function resetModalToDefault() {
 }
 
 export function showModal(options) {
-    rememberModalFocus();
     // Support both the previous positional-style call and new object-style
     const { 
         title, 
@@ -462,18 +387,18 @@ export function showModal(options) {
         elements.modalInput.value = useValue;
         elements.modalHint.textContent = hint || "";
         
-        setTimeout(() => {
-            if (!elements.modalOverlay?.classList.contains("visible")) return;
-            elements.modalInput.focus();
-            if (elements.modalInput.value) {
-                const len = elements.modalInput.value.length;
-                elements.modalInput.setSelectionRange(len, len);
-            }
-        }, 100);
     }
 
-    elements.modalOverlay.classList.add("visible");
-    if (message || image) focusModalControl(false);
+    openDialog(elements.modalOverlay, {
+      initialFocus: () => preferredModalControl(!message && !image),
+      onRequestClose: hideModal,
+    });
+    if (!message && !image && elements.modalInput.value) {
+      queueMicrotask(() => {
+        const len = elements.modalInput.value.length;
+        elements.modalInput.setSelectionRange(len, len);
+      });
+    }
 
     return new Promise((resolve) => {
       modalCallback = resolve;
@@ -481,89 +406,26 @@ export function showModal(options) {
 }
 
 export function showConfirmDialog(options) {
-    rememberModalFocus();
     const { title, message, confirmText = t("modal.confirm_button"), cancelText = t("modal.cancel_button"), isDanger = false } = options;
-
-    resetModalToDefault();
-
-    elements.modalTitle.textContent = title;
-    elements.modalInput.style.display = "none";
-    elements.modalHint.innerHTML = message;
-    elements.modalHint.style.fontSize = "14px";
-    elements.modalHint.style.color = "var(--text-primary)";
-    elements.modalConfirm.textContent = confirmText;
-    elements.modalCancel.textContent = cancelText;
-    elements.modalConfirm.className = isDanger ? "modal-btn danger" : "modal-btn primary";
-    elements.modalCancel.className = "modal-btn secondary";
-
-    elements.modalOverlay.classList.add("visible");
-    focusModalControl(false);
-
-    return new Promise((resolve) => {
-      let settled = false;
-
-      const settle = (value) => {
-        if (settled) return;
-        settled = true;
-        elements.modalOverlay.classList.remove("visible");
-        restoreModalFocus();
-        resolve(value);
-        cleanup();
-      };
-
-      const confirmHandler = () => {
-        settle(true);
-      };
-
-      const cancelHandler = () => {
-        settle(false);
-      };
-
-      const overlayHandler = (event) => {
-        if (event.target === elements.modalOverlay) {
-          settle(false);
-        }
-      };
-
-      const keyHandler = (event) => {
-        if (event.key === "Escape") {
-          settle(false);
-        }
-      };
-
-      const cleanup = () => {
-        elements.modalConfirm.removeEventListener("click", confirmHandler);
-        elements.modalCancel.removeEventListener("click", cancelHandler);
-        elements.modalClose.removeEventListener("click", cancelHandler);
-        elements.modalOverlay.removeEventListener("click", overlayHandler);
-        document.removeEventListener("keydown", keyHandler);
-      };
-
-      elements.modalConfirm.addEventListener("click", confirmHandler, { once: true });
-      elements.modalCancel.addEventListener("click", cancelHandler, { once: true });
-      elements.modalClose.addEventListener("click", cancelHandler, { once: true });
-      elements.modalOverlay.addEventListener("click", overlayHandler);
-      document.addEventListener("keydown", keyHandler);
-    });
+    return showModal({ title, message, confirmText, cancelText, isDanger });
 }
 
 export function hideModal() {
-    elements.modalOverlay.classList.remove("visible");
+    closeDialog(elements.modalOverlay);
     if (modalCallback) {
       modalCallback(null);
       modalCallback = null;
     }
-    restoreModalFocus();
 }
 
 export function confirmModal() {
-    const value = elements.modalInput ? elements.modalInput.value.trim() : true;
-    elements.modalOverlay.classList.remove("visible");
+    const inputVisible = elements.modalInput && getComputedStyle(elements.modalInput).display !== "none";
+    const value = inputVisible ? elements.modalInput.value.trim() : true;
+    closeDialog(elements.modalOverlay);
     if (modalCallback) {
       modalCallback(value);
       modalCallback = null;
     }
-    restoreModalFocus();
 }
 
 export function initElements() {
@@ -591,10 +453,20 @@ export function initElements() {
     elements.sidebarOverlay = document.getElementById("sidebar-overlay");
     elements.activityExplorer = document.getElementById("activity-explorer");
     elements.activitySearch = document.getElementById("activity-search");
+    elements.activitySourceControl = document.getElementById("activity-source-control");
     elements.activitySftp = document.getElementById("activity-sftp");
     elements.viewExplorer = document.getElementById("view-explorer");
     elements.viewSearch = document.getElementById("view-search");
+    elements.viewSourceControl = document.getElementById("view-source-control");
     elements.viewSftp = document.getElementById("view-sftp");
+    elements.sourceControlPanels = document.getElementById("source-control-panels");
+    elements.sourceControlUnavailable = document.getElementById("source-control-unavailable");
+    if (elements.sourceControlPanels) {
+      for (const panelId of ["git-panel", "gitea-panel"]) {
+        const panel = document.getElementById(panelId);
+        if (panel) elements.sourceControlPanels.appendChild(panel);
+      }
+    }
     elements.globalSearchInput = document.getElementById("global-search-input");
     elements.globalReplaceInput = document.getElementById("global-replace-input");
     elements.globalSearchInclude = document.getElementById("global-search-include");
@@ -819,7 +691,7 @@ export function applyEditorSettings() {
 
 export function applyLayoutSettings() {
     if (elements.sidebar) {
-      elements.sidebar.style.width = state.sidebarWidth + 'px';
+      elements.sidebar.style.width = `${constrainSidebarWidth(state.sidebarWidth)}px`;
     }
     
     document.body.setAttribute('data-tab-position', state.tabPosition);
@@ -862,15 +734,7 @@ export function setTheme(theme) {
 }
 
 export function setButtonLoading(button, isLoading) {
-    if (!button) return;
-
-    if (isLoading) {
-        button.classList.add("loading");
-        button.disabled = true;
-    } else {
-        button.classList.remove("loading");
-        button.disabled = false;
-    }
+    setControlPending(button, isLoading);
 }
 
 export function setFileTreeLoading(isLoading) {
@@ -879,11 +743,11 @@ export function setFileTreeLoading(isLoading) {
             elements.fileTree.classList.add("loading");
             // Show skeletons
             elements.fileTree.innerHTML = `
-                <div class="skeleton file-skeleton"></div>
-                <div class="skeleton file-skeleton" style="width: 70%;"></div>
-                <div class="skeleton file-skeleton" style="width: 85%;"></div>
-                <div class="skeleton file-skeleton" style="width: 60%;"></div>
-                <div class="skeleton file-skeleton" style="width: 90%;"></div>
+                <div class="ui-skeleton skeleton file-skeleton"></div>
+                <div class="ui-skeleton skeleton file-skeleton" style="width: 70%;"></div>
+                <div class="ui-skeleton skeleton file-skeleton" style="width: 85%;"></div>
+                <div class="ui-skeleton skeleton file-skeleton" style="width: 60%;"></div>
+                <div class="ui-skeleton skeleton file-skeleton" style="width: 90%;"></div>
             `;
         } else {
             elements.fileTree.classList.remove("loading");

@@ -1,11 +1,18 @@
 /** TRANSLATIONS.JS | Purpose: No purpose defined. */
 
 import { state, elements } from './state.js';
+import { setToolbarControlLabel } from './toolbar.js';
 
 // Cache the loaded languages to avoid re-fetching
 const loadedLanguages = {};
 let currentBundle = {};
 let currentLang = 'en';
+
+function localeUrl(lang) {
+  const url = new URL(`../locales/${lang}.json`, import.meta.url);
+  url.searchParams.set('v', window.__BS_VERSION__ || '0');
+  return url.href;
+}
 
 /**
  * Gets a translated string for the given key and current language.
@@ -34,13 +41,10 @@ export async function initTranslations(lang) {
   // Try to use the passed lang, or state language, or default to en
   currentLang = lang || (window.state && window.state.language) || "en";
   
-  // Resolve locales path relative to this module
-  const localesBasePath = new URL('../locales/', import.meta.url).pathname;
-  
   // Make sure English is always loaded as a fallback
   if (!loadedLanguages['en']) {
     try {
-      const response = await fetch(`${localesBasePath}en.json`);
+      const response = await fetch(localeUrl('en'));
       if (response.ok) {
         loadedLanguages['en'] = await response.json();
       } else {
@@ -56,7 +60,7 @@ export async function initTranslations(lang) {
   // Load the target language
   if (currentLang !== 'en' && !loadedLanguages[currentLang]) {
     try {
-      const response = await fetch(`${localesBasePath}${currentLang}.json`);
+      const response = await fetch(localeUrl(currentLang));
       if (response.ok) {
         loadedLanguages[currentLang] = await response.json();
       } else {
@@ -82,25 +86,25 @@ export async function initTranslations(lang) {
  */
 export function refreshAllUIStrings() {
   // Toolbar
-  if (elements.btnMenu) elements.btnMenu.title = t("toolbar.toggle_files");
-  if (elements.btnSave) elements.btnSave.title = t("toolbar.save");
-  if (elements.btnSaveAll) elements.btnSaveAll.title = t("toolbar.save_all");
-  if (elements.btnUndo) elements.btnUndo.title = t("toolbar.undo");
-  if (elements.btnRedo) elements.btnRedo.title = t("toolbar.redo");
-  if (elements.btnFormat) elements.btnFormat.title = t("toolbar.format");
-  if (elements.btnSearch) elements.btnSearch.title = t("toolbar.search");
+  setToolbarControlLabel(elements.btnMenu, t("toolbar.toggle_files"));
+  setToolbarControlLabel(elements.btnSave, t("toolbar.save"));
+  setToolbarControlLabel(elements.btnSaveAll, t("toolbar.save_all"));
+  setToolbarControlLabel(elements.btnUndo, t("toolbar.undo"));
+  setToolbarControlLabel(elements.btnRedo, t("toolbar.redo"));
+  setToolbarControlLabel(elements.btnFormat, t("toolbar.format"));
+  setToolbarControlLabel(elements.btnSearch, t("toolbar.search"));
   
   const btnSplitVertical = document.getElementById("btn-split-vertical");
-  if (btnSplitVertical) btnSplitVertical.title = t("toolbar.split_vertical");
+  setToolbarControlLabel(btnSplitVertical, t("toolbar.split_vertical"));
   
   const btnSplitClose = document.getElementById("btn-split-close");
-  if (btnSplitClose) btnSplitClose.title = t("toolbar.split_close");
+  setToolbarControlLabel(btnSplitClose, t("toolbar.split_close"));
 
-  if (elements.btnNewFile) elements.btnNewFile.title = t("toolbar.new_file");
-  if (elements.btnNewFolder) elements.btnNewFolder.title = t("toolbar.new_folder");
+  setToolbarControlLabel(elements.btnNewFile, t("toolbar.new_file"));
+  setToolbarControlLabel(elements.btnNewFolder, t("toolbar.new_folder"));
   
   if (elements.btnShowHidden) {
-    elements.btnShowHidden.title = state.showHidden ? t("toolbar.hide_hidden") : t("toolbar.show_hidden");
+    setToolbarControlLabel(elements.btnShowHidden, state.showHidden ? t("toolbar.hide_hidden") : t("toolbar.show_hidden"));
   }
 
   if (elements.fileFilter) {
@@ -120,32 +124,31 @@ export function refreshAllUIStrings() {
     });
   }
   
-  if (elements.btnToggleSelect) elements.btnToggleSelect.title = t("toolbar.select_files");
-  if (elements.btnCollapseAllFolders) elements.btnCollapseAllFolders.title = t("toolbar.collapse_all");
-  if (elements.btnOneTabMode) elements.btnOneTabMode.title = t("toolbar.one_tab_mode");
+  setToolbarControlLabel(elements.btnToggleSelect, t("toolbar.select_files"));
+  setToolbarControlLabel(elements.btnCollapseAllFolders, t("toolbar.collapse_all"));
+  setToolbarControlLabel(elements.btnOneTabMode, t("toolbar.one_tab_mode"));
   
-  if (elements.btnUpload) elements.btnUpload.title = t("toolbar.upload");
-  if (elements.btnDownload) elements.btnDownload.title = t("toolbar.download");
-  if (elements.btnUploadFolder) elements.btnUploadFolder.title = t("toolbar.upload_folder");
-  if (elements.btnDownloadFolder) elements.btnDownloadFolder.title = t("toolbar.download_folder");
+  setToolbarControlLabel(elements.btnUpload, t("toolbar.upload"));
+  setToolbarControlLabel(elements.btnDownload, t("toolbar.download"));
+  setToolbarControlLabel(elements.btnUploadFolder, t("toolbar.upload_folder"));
+  setToolbarControlLabel(elements.btnDownloadFolder, t("toolbar.download_folder"));
   
-  if (elements.btnValidate) elements.btnValidate.title = t("toolbar.validate");
-  if (elements.btnGitPull) elements.btnGitPull.title = t("toolbar.git_pull");
-  if (elements.btnGitPush) elements.btnGitPush.title = t("toolbar.git_push");
-  if (elements.btnGitStatus) elements.btnGitStatus.title = t("toolbar.git_status");
-  if (elements.btnGitSettings) elements.btnGitSettings.title = t("toolbar.git_settings");
+  setToolbarControlLabel(elements.btnValidate, t("toolbar.validate"));
+  setToolbarControlLabel(elements.btnGitPull, t("toolbar.git_pull"));
+  setToolbarControlLabel(elements.btnGitPush, t("toolbar.git_push"));
+  setToolbarControlLabel(elements.btnGitStatus, t("toolbar.git_status"));
+  setToolbarControlLabel(elements.btnGitSettings, t("toolbar.git_settings"));
   
   if (elements.btnDonate) {
     const donateTitle = t("toolbar.donate");
-    elements.btnDonate.title = donateTitle;
-    elements.btnDonate.setAttribute("aria-label", donateTitle);
+    setToolbarControlLabel(elements.btnDonate, donateTitle);
   }
-  if (elements.btnSupport) elements.btnSupport.title = t("toolbar.help");
-  if (elements.btnTerminal) elements.btnTerminal.title = t("toolbar.terminal");
-  if (elements.btnAiStudio) elements.btnAiStudio.title = t("toolbar.ai_studio");
-  if (elements.btnRestartHa) elements.btnRestartHa.title = t("toolbar.restart_ha");
-  if (elements.btnAppSettings) elements.btnAppSettings.title = t("toolbar.settings");
-  if (elements.btnRefresh) elements.btnRefresh.title = t("toolbar.refresh");
+  setToolbarControlLabel(elements.btnSupport, t("toolbar.help"));
+  setToolbarControlLabel(elements.btnTerminal, t("toolbar.terminal"));
+  setToolbarControlLabel(elements.btnAiStudio, t("toolbar.ai_studio"));
+  setToolbarControlLabel(elements.btnRestartHa, t("toolbar.restart_ha"));
+  setToolbarControlLabel(elements.btnAppSettings, t("toolbar.settings"));
+  setToolbarControlLabel(elements.btnRefresh, t("toolbar.refresh"));
 
   // Support Modal
   const supportTitle = document.querySelector("#modal-support-overlay .modal-title");
@@ -190,16 +193,44 @@ export function refreshAllUIStrings() {
   }
 
   // Sidebar
-  if (elements.activityExplorer) elements.activityExplorer.title = t("sidebar.explorer");
-  if (elements.activitySearch) elements.activitySearch.title = t("sidebar.search");
+  for (const [activity, key, fallback] of [
+    [elements.activityExplorer, "sidebar.explorer", "Explorer"],
+    [elements.activitySearch, "sidebar.search", "Search"],
+    [elements.activitySourceControl, "sidebar.source_control", "Source Control"],
+    [elements.activitySftp, "sidebar.sftp", "SFTP"],
+  ]) {
+    if (!activity) continue;
+    const translatedLabel = t(key);
+    const label = translatedLabel === key ? fallback : translatedLabel;
+    activity.title = label;
+    activity.dataset.baseLabel = label;
+    activity.setAttribute("aria-label", label);
+  }
+
+  const sourceControlHeader = document.querySelector("#view-source-control .sidebar-header span:first-child");
+  if (sourceControlHeader) sourceControlHeader.textContent = t("sidebar.source_control");
+
+  const sftpHeader = document.querySelector(
+    "#sftp-connection-selector-container > span, #sftp-connection-selector-container option[value='']",
+  );
+  if (sftpHeader) sftpHeader.textContent = t("sidebar.sftp");
   
   const btnCloseSidebar = document.getElementById("btn-close-sidebar");
-  if (btnCloseSidebar) btnCloseSidebar.title = t("sidebar.close");
+  if (btnCloseSidebar) {
+    btnCloseSidebar.title = t("sidebar.close");
+    btnCloseSidebar.setAttribute("aria-label", t("sidebar.close"));
+  }
   
   if (elements.fileSearch) elements.fileSearch.placeholder = t("sidebar.search_files");
   if (elements.fileSearchClear) elements.fileSearchClear.title = t("sidebar.clear_search");
-  if (elements.btnFilenameSearch) elements.btnFilenameSearch.title = t("sidebar.filename_search");
-  if (elements.btnContentSearch) elements.btnContentSearch.title = t("sidebar.content_search");
+  if (elements.btnFilenameSearch) {
+    elements.btnFilenameSearch.title = t("sidebar.filename_search");
+    elements.btnFilenameSearch.setAttribute("aria-label", t("sidebar.filename_search"));
+  }
+  if (elements.btnContentSearch) {
+    elements.btnContentSearch.title = t("sidebar.content_search");
+    elements.btnContentSearch.setAttribute("aria-label", t("sidebar.content_search"));
+  }
   
   const favHeader = document.querySelector("#favorites-panel .favorites-header");
   if (favHeader) favHeader.textContent = t("sidebar.favorites");
@@ -210,7 +241,10 @@ export function refreshAllUIStrings() {
   const breadcrumbHome = document.querySelector(".breadcrumb-home .breadcrumb-text");
   if (breadcrumbHome) breadcrumbHome.textContent = t("sidebar.home");
   
-  if (elements.btnFileTreeCollapse) elements.btnFileTreeCollapse.title = t("sidebar.collapse_tree");
+  if (elements.btnFileTreeCollapse) {
+    elements.btnFileTreeCollapse.title = t("sidebar.collapse_tree");
+    elements.btnFileTreeCollapse.setAttribute("aria-label", t("sidebar.collapse_tree"));
+  }
 
   // Search View
   const viewSearchHeader = document.querySelector("#view-search .sidebar-header span:first-child");

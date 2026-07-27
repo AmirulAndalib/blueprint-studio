@@ -12,8 +12,10 @@ import {
   showConfirmDialog
 } from './ui.js';
 import { getFileIcon, formatBytes, isMobile, isTouchDevice } from './utils.js';
-import { saveSettings } from './settings.js';
+import { saveSettings } from './settings.js?v=2.5.75';
+import { setOverflowTooltip } from './tooltip.js?v=2.5.75';
 import { isItemSelected } from './selection.js';
+import { refreshActivityRail } from './activity-rail.js';
 
 // Timer for debounced rendering
 export let fileTreeRenderTimer = null;
@@ -56,6 +58,7 @@ export function updateExplorerSearchUI(count = null) {
   }
 
   updateExplorerFilterIcon();
+  refreshActivityRail();
 
   if (!elements.fileSearchCount) return;
 
@@ -442,7 +445,7 @@ export function renderFileTree() {
       const errorItem = document.createElement("div");
       errorItem.className = "loading-item";
       errorItem.innerHTML = `
-        <span class="material-icons" style="color: var(--error-color);">error_outline</span>
+        <span class="ui-icon ui-icon--tone-error material-icons">error_outline</span>
         <span class="tree-name">${t("toast.load_folder_error", { error: "Unable to load folder" })}</span>
       `;
       elements.fileTree.appendChild(errorItem);
@@ -456,7 +459,7 @@ export function renderFileTree() {
     const loadingItem = document.createElement("div");
     loadingItem.className = "loading-item";
     loadingItem.innerHTML = `
-      <span class="material-icons loading-spinner">sync</span>
+      <span class="ui-icon material-icons loading-spinner">sync</span>
       <span class="tree-name">${t("common.loading")}</span>
     `;
     elements.fileTree.appendChild(loadingItem);
@@ -706,7 +709,7 @@ export function renderTreeLevel(tree, container, depth) {
       loadingItem.className = "tree-item loading-item";
       loadingItem.style.setProperty('--depth', depth + 1);
       loadingItem.innerHTML = `
-        <span class="material-icons loading-spinner">sync</span>
+        <span class="ui-icon material-icons loading-spinner">sync</span>
         <span class="tree-name">${t("common.loading")}</span>
       `;
       fragment.appendChild(loadingItem);
@@ -934,9 +937,9 @@ export function createTreeItem(name, depth, isFolder, isExpanded, itemPath = nul
     chevron.className = `tree-chevron ${isExpanded ? "expanded" : ""}`;
     if (isLoading) {
       // Show spinning loader icon while loading
-      chevron.innerHTML = '<span class="material-icons loading-spinner">sync</span>';
+      chevron.innerHTML = '<span class="ui-icon material-icons loading-spinner">sync</span>';
     } else {
-      chevron.innerHTML = '<span class="material-icons">chevron_right</span>';
+      chevron.innerHTML = '<span class="ui-icon material-icons">chevron_right</span>';
     }
     item.appendChild(chevron);
   } else if (state.treeCollapsableMode) {
@@ -949,7 +952,7 @@ export function createTreeItem(name, depth, isFolder, isExpanded, itemPath = nul
   const fileIcon = getFileIcon(itemPath || name);
   const icon = document.createElement("div");
   icon.className = `tree-icon ${isFolder ? "folder" : fileIcon.class}`;
-  icon.innerHTML = `<span class="material-icons">${
+  icon.innerHTML = `<span class="ui-icon material-icons">${
     isFolder ? (isExpanded ? "folder_open" : "folder") : fileIcon.icon
   }</span>`;
   item.appendChild(icon);
@@ -962,13 +965,17 @@ export function createTreeItem(name, depth, isFolder, isExpanded, itemPath = nul
   } else {
     applySearchHighlight(label, name);
     item.appendChild(label);
+    if (itemPath) {
+      item.setAttribute('aria-label', itemPath);
+      setOverflowTooltip(item, itemPath, label);
+    }
   }
 
   // Check if this is a symlink (passed directly from renderFileTree)
   // Symlink indicator
   if (symlinkTarget !== null) {
     const symlinkIcon = document.createElement("span");
-    symlinkIcon.className = "material-icons tree-symlink-badge";
+    symlinkIcon.className = "ui-icon material-icons tree-symlink-badge";
     symlinkIcon.textContent = "link";
     symlinkIcon.style.fontSize = "14px";
     symlinkIcon.style.marginLeft = "4px";
@@ -1028,7 +1035,7 @@ export function createTreeItem(name, depth, isFolder, isExpanded, itemPath = nul
     const pinBtn = document.createElement("button");
     pinBtn.className = "tree-action-btn";
     pinBtn.title = isPinned ? "Unpin" : "Pin to top";
-    pinBtn.innerHTML = `<span class="material-icons" style="font-size: 16px; ${isPinned ? 'color: var(--accent-color);' : ''}">push_pin</span>`;
+    pinBtn.innerHTML = `<span class="file-pin-icon ui-icon ui-icon--size-sm ${isPinned ? 'is-pinned' : ''} material-icons">push_pin</span>`;
     pinBtn.addEventListener("click", (e) => {
       e.stopPropagation();
       eventBus.emit('file:toggle-favorite', { path: itemPath });
@@ -1041,7 +1048,7 @@ export function createTreeItem(name, depth, isFolder, isExpanded, itemPath = nul
     const diffBtn = document.createElement("button");
     diffBtn.className = "tree-action-btn";
     diffBtn.title = "View Diff";
-    diffBtn.innerHTML = '<span class="material-icons" style="font-size: 16px; color: var(--warning-color);">difference</span>';
+    diffBtn.innerHTML = '<span class="ui-icon ui-icon--size-sm ui-icon--tone-warning material-icons">difference</span>';
 
     diffBtn.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -1115,7 +1122,7 @@ function createInlineExplorerEditItem(edit, depth) {
 
   const icon = document.createElement("div");
   icon.className = `tree-icon ${edit.type === "folder" ? "folder" : "file-yaml"}`;
-  icon.innerHTML = `<span class="material-icons">${edit.type === "folder" ? "create_new_folder" : "note_add"}</span>`;
+  icon.innerHTML = `<span class="ui-icon material-icons">${edit.type === "folder" ? "create_new_folder" : "note_add"}</span>`;
   item.appendChild(icon);
   item.appendChild(createInlineExplorerInput(edit));
 
@@ -1145,7 +1152,7 @@ function createInlineExplorerInput(edit) {
   const confirmBtn = document.createElement("button");
   confirmBtn.className = "inline-edit-btn";
   confirmBtn.title = t("modal.confirm_button");
-  confirmBtn.innerHTML = '<span class="material-icons">check</span>';
+  confirmBtn.innerHTML = '<span class="ui-icon material-icons">check</span>';
   confirmBtn.addEventListener("click", (e) => {
     e.stopPropagation();
     submitInlineExplorerEdit();
@@ -1155,7 +1162,7 @@ function createInlineExplorerInput(edit) {
   const cancelBtn = document.createElement("button");
   cancelBtn.className = "inline-edit-btn";
   cancelBtn.title = t("modal.cancel_button");
-  cancelBtn.innerHTML = '<span class="material-icons">close</span>';
+  cancelBtn.innerHTML = '<span class="ui-icon material-icons">close</span>';
   cancelBtn.addEventListener("click", (e) => {
     e.stopPropagation();
     cancelInlineExplorerEdit();
@@ -1254,7 +1261,7 @@ function renderExplorerSearchEmptyState(count) {
   const emptyItem = document.createElement("div");
   emptyItem.className = "explorer-search-empty";
   emptyItem.innerHTML = `
-    <span class="material-icons">search_off</span>
+    <span class="ui-icon material-icons">search_off</span>
     <span>${t("sidebar.search_no_results")}</span>
   `;
   elements.fileTree.appendChild(emptyItem);
@@ -1568,6 +1575,19 @@ export async function navigateBack() {
   eventBus.emit("settings:save");
 }
 
+function bindBreadcrumbButton(element, label, action) {
+  element.setAttribute("role", "button");
+  element.setAttribute("tabindex", "0");
+  element.setAttribute("aria-label", label);
+  element.addEventListener("click", action);
+  element.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      action();
+    }
+  });
+}
+
 /**
  * Update folder navigation breadcrumb
  */
@@ -1582,10 +1602,11 @@ export function updateFolderNavigationBreadcrumb() {
   homeItem.className = `breadcrumb-item breadcrumb-home ${state.currentNavigationPath === "" ? "active" : ""}`;
   homeItem.dataset.path = "";
   homeItem.innerHTML = `
-    <span class="material-icons">home</span>
+    <span class="ui-icon material-icons">home</span>
     <span class="breadcrumb-text">${t("sidebar.home")}</span>
   `;
-  homeItem.addEventListener("click", () => navigateToFolder(""));
+  const navigateHome = () => navigateToFolder("");
+  bindBreadcrumbButton(homeItem, t("sidebar.home"), navigateHome);
   
   // Drag and drop for breadcrumb home
   homeItem.addEventListener("dragover", (e) => {
@@ -1626,9 +1647,7 @@ export function updateFolderNavigationBreadcrumb() {
       item.dataset.path = itemPath;
       item.textContent = part;
 
-      item.addEventListener("click", () => {
-        navigateToFolder(itemPath);
-      });
+      bindBreadcrumbButton(item, part, () => navigateToFolder(itemPath));
 
       // Drag and drop for breadcrumb parts
       item.addEventListener("dragover", (e) => {

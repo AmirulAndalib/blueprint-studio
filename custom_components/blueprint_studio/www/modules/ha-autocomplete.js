@@ -90,7 +90,7 @@ function appendHintContent(elem, { iconClass, iconText, text, type, description 
 
   if (iconClass || iconText) {
     const icon = document.createElement("span");
-    icon.className = iconClass || "material-icons";
+    icon.className = iconClass || "ui-icon material-icons";
     icon.textContent = iconText || "";
     icon.style.marginRight = "6px";
     row.appendChild(icon);
@@ -378,7 +378,7 @@ export function homeAssistantHint(editor, options) {
           render: (elem, self, data) => {
             elem.innerHTML = `
               <div style="display: flex; align-items: center; width: 100%;">
-                  <span class="material-icons" style="font-size: 16px; margin-right: 6px; color: var(--warning-color);">auto_fix_high</span>
+                  <span class="ui-icon material-icons ha-hint-snippet-icon">auto_fix_high</span>
                   <span>${data.displayText}</span>
                   <span class="ha-hint-type" style="margin-left: auto;">${item.type}</span>
               </div>

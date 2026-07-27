@@ -9,7 +9,7 @@ import {
   hideGlobalLoading, 
   showConfirmDialog 
 } from './ui.js';
-import { saveSettings } from './settings.js';
+import { saveSettings } from './settings.js?v=2.5.75';
 
 // Import PWA auth - will be available after main.js loads it
 let pwaAuth = null;

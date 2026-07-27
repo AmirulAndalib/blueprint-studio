@@ -2,6 +2,7 @@
 
 import { state, elements } from './state.js';
 import { t } from './translations.js';
+import { closeDialog, openDialog } from './dialog-manager.js';
 
 const guideContent = [
     {
@@ -14,7 +15,7 @@ const guideContent = [
             <p>Blueprint Studio is a modern, professional-grade IDE for Home Assistant. Edit local configuration files, remote SFTP files, blueprints, scripts, and assets directly in your browser, with deep HA integration.</p>
 
             <div class="user-guide-tip">
-                <div class="user-guide-tip-title"><span class="material-icons">security</span> Admin Only</div>
+                <div class="user-guide-tip-title"><span class="ui-icon material-icons">security</span> Admin Only</div>
                 Blueprint Studio is <strong>admin-only</strong>. Only Home Assistant users with administrator privileges can access it.
             </div>
 
@@ -39,32 +40,32 @@ const guideContent = [
 
             <div class="feature-grid">
                 <div class="feature-card">
-                    <div class="feature-card-icon"><span class="material-icons">folder</span></div>
+                    <div class="feature-card-icon"><span class="ui-icon material-icons">folder</span></div>
                     <div class="feature-card-title">File Explorer</div>
                     <div class="feature-card-desc">Navigate, create, rename, and organize your configuration files. Right-click for all file operations.</div>
                 </div>
                 <div class="feature-card">
-                    <div class="feature-card-icon"><span class="material-icons">psychology</span></div>
+                    <div class="feature-card-icon"><span class="ui-icon material-icons">psychology</span></div>
                     <div class="feature-card-title">AI Copilot</div>
                     <div class="feature-card-desc">Get intelligent help writing automations, debugging YAML errors, and understanding HA concepts.</div>
                 </div>
                 <div class="feature-card">
-                    <div class="feature-card-icon"><span class="material-icons">construction</span></div>
+                    <div class="feature-card-icon"><span class="ui-icon material-icons">construction</span></div>
                     <div class="feature-card-title">Developer Tools</div>
                     <div class="feature-card-desc">Test actions, render templates, explore entity states — all without leaving your editor.</div>
                 </div>
                 <div class="feature-card">
-                    <div class="feature-card-icon"><span class="material-icons">account_tree</span></div>
+                    <div class="feature-card-icon"><span class="ui-icon material-icons">account_tree</span></div>
                     <div class="feature-card-title">Git Integration</div>
                     <div class="feature-card-desc">Version control your config with GitHub or Gitea. Visual diffs, staging, commits, and push/pull.</div>
                 </div>
                 <div class="feature-card">
-                    <div class="feature-card-icon"><span class="material-icons">cloud_sync</span></div>
+                    <div class="feature-card-icon"><span class="ui-icon material-icons">cloud_sync</span></div>
                     <div class="feature-card-title">SFTP Remote Files</div>
                     <div class="feature-card-desc">Browse remote servers, edit files, preview media, and transfer folders through shared SSH/SFTP hosts.</div>
                 </div>
                 <div class="feature-card">
-                    <div class="feature-card-icon"><span class="material-icons">terminal</span></div>
+                    <div class="feature-card-icon"><span class="ui-icon material-icons">terminal</span></div>
                     <div class="feature-card-title">Embedded Terminal</div>
                     <div class="feature-card-desc">Run local commands or connect to saved SSH hosts from a resizable terminal panel or editor tab.</div>
                 </div>
@@ -103,7 +104,7 @@ const guideContent = [
             <p>Press <code>Shift+Alt+F</code> or click the Format button to clean up indentation and structure. The formatter respects your tab size setting (2 spaces by default — the HA standard). Works on the full file or a selected region.</p>
 
             <h2>Code Folding</h2>
-            <p>Click the chevron (<span class="material-icons" style="font-size:14px;vertical-align:middle;">chevron_right</span>) icon in the gutter next to any block to collapse it. This is especially useful for long automation files — fold sections you're not actively editing.</p>
+            <p>Click the chevron (<span class="ui-icon ui-icon--size-xs ui-icon--align-middle material-icons">chevron_right</span>) icon in the gutter next to any block to collapse it. This is especially useful for long automation files — fold sections you're not actively editing.</p>
 
             <h2>Block Scope Highlighting</h2>
             <p>When your cursor is inside a YAML block, a subtle vertical line and background tint shows you the full scope of that block — like bracket matching in VS Code.</p>
@@ -121,7 +122,7 @@ const guideContent = [
             <p>When a <code>.md</code> file is active, a preview toggle appears in the toolbar. Click it to render the Markdown as formatted HTML alongside the source.</p>
 
             <div class="user-guide-tip">
-                <div class="user-guide-tip-title"><span class="material-icons">tips_and_updates</span> UUID Insertion</div>
+                <div class="user-guide-tip-title"><span class="ui-icon material-icons">tips_and_updates</span> UUID Insertion</div>
                 Press <strong>Ctrl+Shift+U</strong> to instantly insert a new random UUID at the cursor. Perfect for automation IDs.
             </div>
         `
@@ -186,7 +187,7 @@ const guideContent = [
             </table>
 
             <div class="user-guide-tip">
-                <div class="user-guide-tip-title"><span class="material-icons">bolt</span> Command Palette</div>
+                <div class="user-guide-tip-title"><span class="ui-icon material-icons">bolt</span> Command Palette</div>
                 Press <strong>Ctrl+K</strong> to open the Command Palette. It's the fastest way to run any command — convert to Blueprint, change themes, open Developer Tools, manage Git, or navigate to any feature without touching your mouse.
             </div>
         `
@@ -231,7 +232,7 @@ const guideContent = [
             </ol>
 
             <div class="user-guide-tip">
-                <div class="user-guide-tip-title"><span class="material-icons">tips_and_updates</span> Regex Power</div>
+                <div class="user-guide-tip-title"><span class="ui-icon material-icons">tips_and_updates</span> Regex Power</div>
                 Use regex in Global Search to do powerful refactors — e.g., rename all occurrences of <code>sensor.temp_\\w+</code> to a new naming scheme. Enable Regex mode and type your capture-group pattern.
             </div>
         `
@@ -295,7 +296,7 @@ const guideContent = [
             <p>Large folder downloads and multi-file downloads are streamed as ZIP files with progress feedback. The progress indicator is shared by local and SFTP downloads, so long transfers do not block the editor.</p>
 
             <div class="user-guide-tip">
-                <div class="user-guide-tip-title"><span class="material-icons">folder_zip</span> Bulk Import</div>
+                <div class="user-guide-tip-title"><span class="ui-icon material-icons">folder_zip</span> Bulk Import</div>
                 To migrate a large configuration from another machine, zip the config folder, upload the ZIP via "Upload Folder", and choose how to handle conflicts (merge or overwrite).
             </div>
         `
@@ -360,7 +361,7 @@ const guideContent = [
             <p>When browsing deeply nested directories (common with SFTP), each folder level is indented by 24 px, making it easy to see which level a file belongs to at a glance. Empty folders show an italic <em>(empty)</em> label when expanded.</p>
 
             <div class="user-guide-tip">
-                <div class="user-guide-tip-title"><span class="material-icons">info</span> Use Cases</div>
+                <div class="user-guide-tip-title"><span class="ui-icon material-icons">info</span> Use Cases</div>
                 Great for editing config files on a secondary HA instance, a Pi-hole, a NAS, or any remote Linux server — without leaving Blueprint Studio.
             </div>
         `
@@ -415,7 +416,7 @@ const guideContent = [
             </ul>
 
             <div class="user-guide-tip">
-                <div class="user-guide-tip-title"><span class="material-icons">lock</span> API Key Security</div>
+                <div class="user-guide-tip-title"><span class="ui-icon material-icons">lock</span> API Key Security</div>
                 Your API keys are stored locally within your Home Assistant instance. They are never transmitted to Blueprint Studio's servers. If you use Local AI, no data ever leaves your network at all.
             </div>
         `
@@ -467,7 +468,7 @@ const guideContent = [
             </ul>
 
             <div class="user-guide-tip">
-                <div class="user-guide-tip-title"><span class="material-icons">drag_indicator</span> Floating &amp; Dockable</div>
+                <div class="user-guide-tip-title"><span class="ui-icon material-icons">drag_indicator</span> Floating &amp; Dockable</div>
                 The Developer Tools panel floats over your editor. Drag it by the header bar to any corner of the screen. Its position is remembered across sessions.
             </div>
         `
@@ -492,11 +493,11 @@ const guideContent = [
 
             <h2>The Standard Workflow</h2>
             <ol>
-                <li><strong>Pull</strong> (<span class="material-icons" style="font-size:14px;vertical-align:middle;">download</span>): Fetch the latest changes from GitHub or Gitea to make sure you're up to date.</li>
+                <li><strong>Pull</strong> (<span class="ui-icon ui-icon--size-xs ui-icon--align-middle material-icons">download</span>): Fetch the latest changes from GitHub or Gitea to make sure you're up to date.</li>
                 <li><strong>Edit:</strong> Make your changes in the editor. Modified files appear highlighted in the Git or Gitea panel.</li>
                 <li><strong>Stage (+):</strong> Click the <code>+</code> icon next to changed files to stage them for the next commit.</li>
                 <li><strong>Commit:</strong> Write a short commit message (e.g., "Add motion light automation") and click Commit to save a snapshot.</li>
-                <li><strong>Push</strong> (<span class="material-icons" style="font-size:14px;vertical-align:middle;">upload</span>): Upload your local commits to the remote.</li>
+                <li><strong>Push</strong> (<span class="ui-icon ui-icon--size-xs ui-icon--align-middle material-icons">upload</span>): Upload your local commits to the remote.</li>
             </ol>
 
             <h2>Visual Diff</h2>
@@ -523,12 +524,12 @@ const guideContent = [
             </ul>
             <p>Files matching any exclusion pattern will appear greyed-out in the Git panel and will never be staged or committed — even if you accidentally modify them.</p>
             <div class="user-guide-tip">
-                <div class="user-guide-tip-title"><span class="material-icons">warning</span> Always Exclude</div>
+                <div class="user-guide-tip-title"><span class="ui-icon material-icons">warning</span> Always Exclude</div>
                 Add <code>secrets.yaml</code> to your exclusions before your very first commit. If a secret is ever committed and pushed to a public repo, rotate the key immediately — git history is permanent.
             </div>
 
             <div class="user-guide-tip">
-                <div class="user-guide-tip-title"><span class="material-icons">history</span> Rollback</div>
+                <div class="user-guide-tip-title"><span class="ui-icon material-icons">history</span> Rollback</div>
                 Made a breaking change? Run <code>git log</code> in the terminal to find the last good commit, then use <code>git checkout &lt;hash&gt; -- configuration.yaml</code> to restore just that file from history.
             </div>
         `
@@ -567,7 +568,7 @@ const guideContent = [
             </ul>
 
             <div class="user-guide-tip">
-                <div class="user-guide-tip-title"><span class="material-icons">share</span> Sharing Blueprints</div>
+                <div class="user-guide-tip-title"><span class="ui-icon material-icons">share</span> Sharing Blueprints</div>
                 Once your blueprint is in <code>blueprints/automation/</code>, push it to a public GitHub repo. Anyone can import it using the HA blueprint import URL from that raw file link.
             </div>
         `
@@ -606,7 +607,7 @@ const guideContent = [
             <p>Click the Validate button to run a structural YAML check on the current file. Errors are listed with line numbers in a panel below. Inline red gutter markers and underlines show errors in real-time as you type.</p>
 
             <div class="user-guide-tip">
-                <div class="user-guide-tip-title"><span class="material-icons">tips_and_updates</span> Workflow Tip</div>
+                <div class="user-guide-tip-title"><span class="ui-icon material-icons">tips_and_updates</span> Workflow Tip</div>
                 Instead of restarting HA every time you change automations, use <strong>Developer Tools → Config → Reload Automations</strong>. It's instant and applies your changes in seconds.
             </div>
         `
@@ -631,7 +632,7 @@ const guideContent = [
             </ul>
 
             <div class="user-guide-tip">
-                <div class="user-guide-tip-title"><span class="material-icons">lan</span> Offline Support</div>
+                <div class="user-guide-tip-title"><span class="ui-icon material-icons">lan</span> Offline Support</div>
                 Blueprint Studio works perfectly in completely offline environments or air-gapped local networks. Not a single resource is fetched from the internet during normal use.
             </div>
 
@@ -685,7 +686,7 @@ const guideContent = [
                 <li><strong>Boot and state:</strong> <code>main.js</code>, <code>initialization.js</code>, <code>app.js</code>, <code>state.js</code>, <code>event-bus.js</code>.</li>
                 <li><strong>Editor:</strong> <code>editor.js</code>, <code>tabs.js</code>, <code>split-view.js</code>, <code>minimap.js</code>, <code>search.js</code>, <code>ha-autocomplete.js</code>.</li>
                 <li><strong>File UI:</strong> <code>file-tree.js</code>, <code>file-operations.js</code>, <code>downloads-uploads.js</code>, <code>asset-preview.js</code>, <code>favorites.js</code>, <code>recent-files.js</code>, <code>zip-progress.js</code>.</li>
-                <li><strong>Integrations:</strong> <code>git-operations.js</code>, <code>git-ui.js</code>, <code>github-integration.js</code>, <code>gitea-integration.js</code>, <code>sftp.js</code>, <code>terminal.js</code>, <code>ai.js</code>, <code>dev-tools.js</code>.</li>
+                <li><strong>Integrations:</strong> <code>git-operations.js</code>, <code>git-ui.js</code>, <code>github-integration.js</code>, <code>gitea-integration.js</code>, <code>sftp.js</code>, <code>terminal.js</code>, <code>ai-ui.js</code>, <code>dev-tools.js</code>.</li>
                 <li><strong>Coordinators:</strong> File, Git, SFTP, terminal, settings, dialog, and UI coordinators wire events to module functions.</li>
             </ul>
 
@@ -697,7 +698,7 @@ const guideContent = [
             </ul>
 
             <div class="user-guide-tip">
-                <div class="user-guide-tip-title"><span class="material-icons">security</span> Security Boundary</div>
+                <div class="user-guide-tip-title"><span class="ui-icon material-icons">security</span> Security Boundary</div>
                 The UI and API are admin-only. Local file paths are constrained to the Home Assistant config root, while remote access happens only through explicitly saved SFTP/SSH host profiles.
             </div>
         `
@@ -770,7 +771,7 @@ const guideContent = [
             </ul>
 
             <div class="user-guide-tip">
-                <div class="user-guide-tip-title"><span class="material-icons">tips_and_updates</span> Settings Sync</div>
+                <div class="user-guide-tip-title"><span class="ui-icon material-icons">tips_and_updates</span> Settings Sync</div>
                 Use <strong>Export Settings</strong> to back up your configuration (theme, fonts, AI keys, git settings) and <strong>Import Settings</strong> to restore them — or apply them to a new Blueprint Studio installation.
             </div>
         `
@@ -780,14 +781,18 @@ const guideContent = [
 /**
  * Shows the User Guide modal
  */
-export function showUserGuide() {
+export function showUserGuide(options = {}) {
     let modalOverlay = document.getElementById('modal-user-guide-overlay');
 
     if (!modalOverlay) {
         modalOverlay = createUserGuideModal();
     }
 
-    modalOverlay.classList.add('visible');
+    openDialog(modalOverlay, {
+        initialFocus: '#user-guide-search-input',
+        returnFocus: options.returnFocus,
+        onRequestClose: () => closeDialog(modalOverlay),
+    });
 
     // Select first item by default
     const firstItem = modalOverlay.querySelector('.user-guide-nav-item');
@@ -803,11 +808,11 @@ function createUserGuideModal() {
     overlay.className = 'modal-overlay';
 
     overlay.innerHTML = `
-        <div class="modal user-guide-modal">
+        <div class="modal user-guide-modal" role="dialog" aria-modal="true" aria-labelledby="user-guide-title">
             <div class="modal-header">
-                <div class="modal-title">Blueprint Studio User Guide</div>
-                <button class="modal-close" id="btn-close-user-guide">
-                    <span class="material-icons">close</span>
+                <div class="modal-title" id="user-guide-title">Blueprint Studio User Guide</div>
+                <button class="modal-close" id="btn-close-user-guide" type="button" aria-label="Close user guide">
+                    <span class="ui-icon material-icons">close</span>
                 </button>
             </div>
             <div class="user-guide-container">
@@ -830,11 +835,7 @@ function createUserGuideModal() {
 
     // Add event listeners
     overlay.querySelector('#btn-close-user-guide').addEventListener('click', () => {
-        overlay.classList.remove('visible');
-    });
-
-    overlay.addEventListener('click', (e) => {
-        if (e.target === overlay) overlay.classList.remove('visible');
+        closeDialog(overlay);
     });
 
     const navContainer = overlay.querySelector('#user-guide-nav');
@@ -875,7 +876,7 @@ function renderNav(container, filter = '') {
         const navItem = document.createElement('div');
         navItem.className = 'user-guide-nav-item';
         navItem.innerHTML = `
-            <span class="material-icons" style="font-size: 18px;">${item.icon}</span>
+            <span class="ui-icon ui-icon--size-action material-icons">${item.icon}</span>
             <span>${item.title}</span>
         `;
 

@@ -13,6 +13,7 @@ import asyncio
 import json
 import logging
 import os
+import sys
 import tempfile
 from pathlib import Path
 
@@ -626,8 +627,10 @@ class BlueprintStudioUploadView(HomeAssistantView):
         hass = request.app["hass"]
         self.file.hass = hass
 
-        # Bypass HA's 16MB client_max_size for this endpoint.
-        request._client_max_size = 0  # 0 = no limit
+        # Bypass HA's 16MB client_max_size for this endpoint. MultipartReader
+        # treats zero as a literal zero-byte part limit, so use the largest
+        # supported integer for an effectively unlimited request instead.
+        request._client_max_size = sys.maxsize
 
         try:
             reader = await request.multipart()

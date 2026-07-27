@@ -4,13 +4,10 @@ const _v = window.__BS_VERSION__ || '0';
 
 async function initApp() {
   try {
-    const [appMod, stateMod] = await Promise.all([
-      import('./app.js?v=' + _v),
-      import('./state.js?v=' + _v),
-    ]);
+    const appMod = await import('./app.js?v=' + _v);
     window.app = appMod;
-    window.state = stateMod.state;
-    window.elements = stateMod.elements;
+    window.state = appMod.state;
+    window.elements = appMod.elements;
 
     const { pwaAuth } = await import('./pwa-auth.js?v=' + _v);
     window.pwaAuth = pwaAuth;

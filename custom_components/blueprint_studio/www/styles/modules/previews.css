@@ -16,7 +16,16 @@
     }
 
     .asset-preview.visible {
-        display: flex;
+      display: flex;
+    }
+
+    .asset-preview-empty-icon {
+      color: var(--content-disabled);
+      display: block;
+      font-size: 64px;
+      height: 64px;
+      margin-bottom: 20px;
+      width: 64px;
     }
 
     .asset-preview img {
@@ -188,6 +197,11 @@
     /* Code blocks with language labels */
     .markdown-body pre.code-block {
         position: relative;
+    }
+    .code-copy-icon {
+        font-size: 18px;
+        height: 18px;
+        width: 18px;
     }
     .markdown-body pre.code-block::before {
         content: attr(data-language);

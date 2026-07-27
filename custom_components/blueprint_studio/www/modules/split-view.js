@@ -2,6 +2,11 @@
 import { state, elements } from './state.js';
 import { rafThrottle, getEditorMode } from './utils.js';
 import { eventBus } from './event-bus.js';
+import {
+  constrainSplitPercent,
+  SPLIT_MAX_PERCENT,
+  SPLIT_MIN_PERCENT,
+} from './workspace-layout.js';
 
 // Drag-and-drop state
 let draggedTabIndex = null;
@@ -414,17 +419,25 @@ export function getActivePaneEditor() {
  * Updates pane sizes
  */
 export function updatePaneSizes(primaryPercent) {
-  state.splitView.primaryPaneSize = primaryPercent;
-  const secondaryPercent = 100 - primaryPercent;
+  const nextPrimaryPercent = constrainSplitPercent(primaryPercent);
+  state.splitView.primaryPaneSize = nextPrimaryPercent;
+  const secondaryPercent = 100 - nextPrimaryPercent;
 
   const primaryPane = document.getElementById('primary-pane');
   const secondaryPane = document.getElementById('secondary-pane');
 
   if (primaryPane) {
-    primaryPane.style.flex = `0 0 ${primaryPercent}%`;
+    primaryPane.style.flex = `0 0 ${nextPrimaryPercent}%`;
   }
   if (secondaryPane) {
     secondaryPane.style.flex = `0 0 ${secondaryPercent}%`;
+  }
+
+  const handle = document.getElementById('split-resize-handle');
+  if (handle) {
+    handle.setAttribute('aria-valuemin', String(SPLIT_MIN_PERCENT));
+    handle.setAttribute('aria-valuemax', String(SPLIT_MAX_PERCENT));
+    handle.setAttribute('aria-valuenow', String(Math.round(nextPrimaryPercent)));
   }
 
   // Refit terminal if it's open
@@ -437,7 +450,8 @@ export function updatePaneSizes(primaryPercent) {
  */
 export function initSplitResize() {
   const handle = document.getElementById('split-resize-handle');
-  if (!handle) return;
+  if (!handle || handle.dataset.resizeInitialized === 'true') return;
+  handle.dataset.resizeInitialized = 'true';
 
   let isResizing = false;
   let startPos = 0;
@@ -466,7 +480,7 @@ export function initSplitResize() {
     const containerRect = container.getBoundingClientRect();
     const delta = e.clientX - startPos;
     const deltaPercent = (delta / containerRect.width) * 100;
-    const newSize = Math.max(20, Math.min(80, startPrimarySize + deltaPercent));
+    const newSize = constrainSplitPercent(startPrimarySize + deltaPercent);
 
     // Use throttled update for smooth performance
     throttledUpdatePaneSizes(newSize);
@@ -487,15 +501,27 @@ export function initSplitResize() {
     if (state.secondaryEditor) state.secondaryEditor.refresh();
   };
 
-  // Remove existing listeners
-  handle.removeEventListener('mousedown', handleMouseDown);
-  document.removeEventListener('mousemove', handleMouseMove);
-  document.removeEventListener('mouseup', handleMouseUp);
+  const handleKeyDown = (event) => {
+    const step = event.shiftKey ? 10 : 2;
+    let nextSize = state.splitView.primaryPaneSize;
+    if (event.key === 'ArrowLeft') nextSize -= step;
+    else if (event.key === 'ArrowRight') nextSize += step;
+    else if (event.key === 'Home') nextSize = SPLIT_MIN_PERCENT;
+    else if (event.key === 'End') nextSize = SPLIT_MAX_PERCENT;
+    else return;
+    event.preventDefault();
+    updatePaneSizes(nextSize);
+    eventBus.emit('settings:save');
+    state.primaryEditor?.refresh();
+    state.secondaryEditor?.refresh();
+  };
 
   // Add new listeners
   handle.addEventListener('mousedown', handleMouseDown);
+  handle.addEventListener('keydown', handleKeyDown);
   document.addEventListener('mousemove', handleMouseMove);
   document.addEventListener('mouseup', handleMouseUp);
+  updatePaneSizes(state.splitView.primaryPaneSize);
 }
 
 /**

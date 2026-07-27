@@ -6,27 +6,127 @@ import { eventBus } from './event-bus.js';
 import { fetchWithAuth } from './api.js';
 import { API_BASE } from './constants.js';
 import { t } from './translations.js';
-import { saveSettings } from './settings.js';
+import { saveSettings } from './settings.js?v=2.5.75';
+import {
+  AI_SIDEBAR_MIN_WIDTH,
+  constrainAiSidebarWidth,
+  getAiSidebarMaxWidth,
+} from './workspace-layout.js';
+
+const AI_SIDEBAR_DESKTOP_QUERY = '(min-width: 769px)';
+let aiSidebarInitialized = false;
+
+function applyAiSidebarWidth(width = state.aiSidebarWidth) {
+  const sidebar = document.getElementById('ai-sidebar');
+  const handle = document.getElementById('ai-sidebar-resize-handle');
+  if (!sidebar || !handle) return;
+
+  if (!window.matchMedia(AI_SIDEBAR_DESKTOP_QUERY).matches) {
+    sidebar.style.removeProperty('width');
+    return;
+  }
+
+  const maxWidth = getAiSidebarMaxWidth();
+  const nextWidth = constrainAiSidebarWidth(width);
+  sidebar.style.width = `${nextWidth}px`;
+  handle.setAttribute('aria-valuemin', String(AI_SIDEBAR_MIN_WIDTH));
+  handle.setAttribute('aria-valuemax', String(maxWidth));
+  handle.setAttribute('aria-valuenow', String(Math.round(nextWidth)));
+}
+
+function initAiSidebar() {
+  if (aiSidebarInitialized) return;
+  const sidebar = document.getElementById('ai-sidebar');
+  const handle = document.getElementById('ai-sidebar-resize-handle');
+  if (!sidebar || !handle) return;
+  aiSidebarInitialized = true;
+
+  let resizing = false;
+
+  const setWidthFromPointer = (clientX) => {
+    const workspaceRight = document.querySelector('.main-content')?.getBoundingClientRect().right || window.innerWidth;
+    applyAiSidebarWidth(workspaceRight - clientX);
+  };
+
+  handle.addEventListener('pointerdown', (event) => {
+    if (!window.matchMedia(AI_SIDEBAR_DESKTOP_QUERY).matches) return;
+    resizing = true;
+    handle.classList.add('active');
+    document.body.classList.add('ai-sidebar-resizing');
+    handle.setPointerCapture?.(event.pointerId);
+    event.preventDefault();
+  });
+
+  handle.addEventListener('pointermove', (event) => {
+    if (resizing) setWidthFromPointer(event.clientX);
+  });
+
+  const finishResize = () => {
+    if (!resizing) return;
+    resizing = false;
+    handle.classList.remove('active');
+    document.body.classList.remove('ai-sidebar-resizing');
+    state.aiSidebarWidth = Math.round(sidebar.getBoundingClientRect().width);
+    saveSettings();
+    state.editor?.refresh();
+  };
+
+  handle.addEventListener('pointerup', finishResize);
+  handle.addEventListener('pointercancel', finishResize);
+  handle.addEventListener('keydown', (event) => {
+    const maxWidth = getAiSidebarMaxWidth();
+    const currentWidth = sidebar.getBoundingClientRect().width;
+    const step = event.shiftKey ? 40 : 10;
+    let nextWidth = currentWidth;
+    if (event.key === 'ArrowLeft') nextWidth += step;
+    else if (event.key === 'ArrowRight') nextWidth -= step;
+    else if (event.key === 'Home') nextWidth = AI_SIDEBAR_MIN_WIDTH;
+    else if (event.key === 'End') nextWidth = maxWidth;
+    else return;
+
+    event.preventDefault();
+    applyAiSidebarWidth(nextWidth);
+    state.aiSidebarWidth = Math.round(sidebar.getBoundingClientRect().width);
+    saveSettings();
+    state.editor?.refresh();
+  });
+
+  window.addEventListener('resize', () => applyAiSidebarWidth());
+  applyAiSidebarWidth();
+}
+
+function setAiSidebarVisibility(visible, { restoreFocus = false } = {}) {
+  const sidebar = document.getElementById('ai-sidebar');
+  const button = document.getElementById('btn-ai-studio');
+  if (!sidebar) return;
+
+  const show = Boolean(visible && state.aiIntegrationEnabled);
+  sidebar.classList.toggle('hidden', !show);
+  sidebar.classList.toggle('visible', show);
+  sidebar.setAttribute('aria-hidden', String(!show));
+  button?.setAttribute('aria-expanded', String(show));
+  state.aiSidebarVisible = show;
+
+  if (show) {
+    applyAiSidebarWidth();
+    renderAiChatHistory();
+    document.getElementById('ai-chat-input')?.focus();
+  } else if (restoreFocus && button && !button.classList.contains('hidden')) {
+    button.focus();
+  }
+}
 
 /**
  * Updates visibility of AI integration button based on settings
  */
 export function updateAIVisibility() {
+  initAiSidebar();
   const btnAI = document.getElementById("btn-ai-studio");
   if (btnAI) {
-    btnAI.style.display = state.aiIntegrationEnabled ? "flex" : "none";
+    btnAI.classList.toggle("hidden", !state.aiIntegrationEnabled);
+    btnAI.setAttribute('aria-controls', 'ai-sidebar');
   }
-  const aiSidebar = document.getElementById("ai-sidebar");
-  if (aiSidebar) {
-    if (!state.aiIntegrationEnabled) {
-      aiSidebar.classList.add("hidden");
-    } else if (state.aiSidebarVisible) {
-      aiSidebar.classList.remove("hidden");
-      renderAiChatHistory();
-    } else {
-      aiSidebar.classList.add("hidden");
-    }
-  }
+  setAiSidebarVisibility(state.aiSidebarVisible);
 }
 
 /**
@@ -79,21 +179,15 @@ function escapeHtml(text) {
 /**
  * Toggles the AI sidebar open/closed
  */
-export function toggleAISidebar() {
+export function toggleAISidebar(forceVisible) {
+  initAiSidebar();
   const aiSidebar = document.getElementById("ai-sidebar");
   if (!aiSidebar) return;
 
-  const isHidden = aiSidebar.classList.contains("hidden");
-  if (isHidden) {
-    aiSidebar.classList.remove("hidden");
-    state.aiSidebarVisible = true;
-    document.getElementById("ai-chat-input")?.focus();
-    renderAiChatHistory();
-  } else {
-    aiSidebar.classList.add("hidden");
-    state.aiSidebarVisible = false;
-  }
-  
+  const visible = typeof forceVisible === 'boolean'
+    ? forceVisible
+    : !state.aiSidebarVisible;
+  setAiSidebarVisibility(visible, { restoreFocus: !visible });
   saveSettings();
 }
 
@@ -104,7 +198,7 @@ export function toggleAISidebar() {
  */
 export function formatAiResponse(text) {
   if (!text) return "";
-  return `<div class="markdown-body" style="padding: 0; background: transparent; max-width: 100%; border: none; margin: 0;">${renderMarkdown(text)}</div>`;
+  return `<div class="markdown-body ai-response-markdown">${renderMarkdown(text)}</div>`;
 }
 
 /**
@@ -180,7 +274,7 @@ export async function sendAIChatMessage() {
     } else {
       const errorMsg = "Error: " + (result.message || "Failed to get response from AI");
       loadingMsg.textContent = errorMsg;
-      loadingMsg.style.color = "var(--error-color)";
+      loadingMsg.classList.add("ai-message-error");
       state.aiChatHistory.push({ role: 'assistant', text: errorMsg });
       saveSettings();
     }
@@ -188,7 +282,7 @@ export async function sendAIChatMessage() {
     console.error("AI Copilot Error:", e);
     const errorMsg = "Error connecting to AI service: " + e.message;
     loadingMsg.textContent = errorMsg;
-    loadingMsg.style.color = "var(--error-color)";
+    loadingMsg.classList.add("ai-message-error");
     state.aiChatHistory.push({ role: 'assistant', text: errorMsg });
     saveSettings();
   }

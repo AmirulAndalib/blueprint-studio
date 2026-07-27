@@ -24,20 +24,20 @@ function showTabSizePicker(event) {
   picker.innerHTML = `
     <div class="picker-header">Select Indentation</div>
     <div class="picker-option" data-size="2">
-      <span class="material-icons">${state.tabSize === 2 ? 'check' : ''}</span>
+      <span class="ui-icon material-icons tab-size-picker-icon">${state.tabSize === 2 ? 'check' : ''}</span>
       <span>2 Spaces</span>
     </div>
     <div class="picker-option" data-size="4">
-      <span class="material-icons">${state.tabSize === 4 ? 'check' : ''}</span>
+      <span class="ui-icon material-icons tab-size-picker-icon">${state.tabSize === 4 ? 'check' : ''}</span>
       <span>4 Spaces</span>
     </div>
     <div class="picker-option" data-size="8">
-      <span class="material-icons">${state.tabSize === 8 ? 'check' : ''}</span>
+      <span class="ui-icon material-icons tab-size-picker-icon">${state.tabSize === 8 ? 'check' : ''}</span>
       <span>8 Spaces</span>
     </div>
     <div class="picker-divider"></div>
     <div class="picker-option picker-toggle" data-action="toggle-tabs">
-      <span class="material-icons">${state.indentWithTabs ? 'check' : ''}</span>
+      <span class="ui-icon material-icons tab-size-picker-icon">${state.indentWithTabs ? 'check' : ''}</span>
       <span>Indent with Tabs</span>
     </div>
   `;

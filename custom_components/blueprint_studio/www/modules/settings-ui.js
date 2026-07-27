@@ -1,13 +1,19 @@
 /** SETTINGS-UI.JS | Purpose: * Provides the settings panel UI for configuring all Blueprint Studio options. */
 import { state, elements } from './state.js';
-import { saveSettings } from './settings.js';
+import { saveSettings } from './settings.js?v=2.5.75';
 import { fetchWithAuth } from './api.js';
 import { eventBus } from './event-bus.js';
 import { API_BASE, THEME_PRESETS, ACCENT_COLORS, SYNTAX_THEMES } from './constants.js';
-import { showToast, showConfirmDialog, setButtonLoading } from './ui.js';
+import {
+  activateSharedModal,
+  deactivateSharedModal,
+  showToast,
+  showConfirmDialog,
+  setButtonLoading
+} from './ui.js';
 import { updateStatusBar } from './status-bar.js';
 import { t, initTranslations } from './translations.js';
-import { showAddConnectionDialog, showEditConnectionDialog, deleteConnection } from './sftp.js';
+import { showAddConnectionDialog, showEditConnectionDialog, deleteConnection } from './sftp.js?v=2.5.75';
 
 const CUSTOM_MODEL_OPTION_VALUE = "__custom__";
 
@@ -657,7 +663,7 @@ export async function showAppSettings() {
                 <div style="font-size: 12px; color: var(--text-secondary);">Open in a new window to install Blueprint Studio as a PWA on your device</div>
               </div>
               <button id="btn-pwa-install" style="padding: 8px 16px; background: var(--accent-color); color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 500; margin-left: 16px; display: flex; align-items: center; gap: 6px;" title="Open in new window">
-                <span class="material-icons" style="font-size: 20px;">open_in_new</span>
+                <span class="ui-icon material-icons settings-pwa-icon">open_in_new</span>
               </button>
             </div>
           </div>
@@ -1009,17 +1015,17 @@ export async function showAppSettings() {
                   ? `<div style="padding: 12px; text-align: center; color: var(--text-secondary); border: 1px solid var(--border-color); border-radius: 4px; font-size: 12px;">No hosts saved yet</div>`
                   : (state.sshHosts || []).map((host, i) => `
                   <div style="display: flex; align-items: center; padding: 8px 10px; border: 1px solid var(--border-color); border-radius: 4px; gap: 8px;">
-                    <span class="material-icons" style="font-size: 16px; color: var(--text-secondary); flex-shrink: 0;">dns</span>
+                    <span class="ui-icon material-icons settings-host-icon">dns</span>
                     <div style="flex: 1; min-width: 0;">
                       <div style="font-weight: 500; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${host.name || host.host}</div>
                       <div style="font-size: 11px; color: var(--text-secondary);">${host.username}@${host.host}:${host.port || 22} &nbsp;·&nbsp; ${host.authType === 'key' ? '🔑 Key' : '🔐 Password'}</div>
                     </div>
-                    <button class="icon-btn settings-host-edit" data-id="${host.id}" style="color: var(--accent-color); padding: 4px;"><span class="material-icons" style="font-size: 16px;">edit</span></button>
-                    <button class="icon-btn settings-host-delete" data-id="${host.id}" style="color: var(--error-color); padding: 4px;"><span class="material-icons" style="font-size: 16px;">delete</span></button>
+                    <button class="icon-btn settings-host-edit" data-id="${host.id}" style="color: var(--accent-color); padding: 4px;"><span class="ui-icon material-icons settings-host-action-icon">edit</span></button>
+                    <button class="icon-btn settings-host-delete" data-id="${host.id}" style="color: var(--error-color); padding: 4px;"><span class="ui-icon material-icons settings-host-action-icon">delete</span></button>
                   </div>`).join('')}
               </div>
               <button id="btn-settings-add-host" class="btn-secondary" style="width: 100%; padding: 8px; font-size: 13px; display: flex; align-items: center; justify-content: center; gap: 6px;">
-                <span class="material-icons" style="font-size: 16px;">add</span> Add Host
+                <span class="ui-icon material-icons settings-host-action-icon">add</span> Add Host
               </button>
             </div>
 
@@ -1076,7 +1082,7 @@ export async function showAppSettings() {
 
               <!-- Rule-based Info -->
               <div id="rule-based-info" style="display: ${state.aiType === 'rule-based' ? 'block' : 'none'}; padding: 12px; background: var(--bg-secondary); border-radius: 6px; font-size: 12px; color: var(--text-secondary);">
-                <span class="material-icons" style="font-size: 16px; vertical-align: middle; color: var(--info-color);">info</span>
+                <span class="ui-icon material-icons settings-info-icon">info</span>
                 <span style="margin-left: 8px;">Rule-based AI uses built-in patterns and templates. No additional configuration needed.</span>
               </div>
 
@@ -1156,7 +1162,7 @@ export async function showAppSettings() {
                   <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
                     <div style="font-size: 12px;">Gemini API Key</div>
                     <a href="https://aistudio.google.com/app/apikey" target="_blank" style="font-size: 11px; color: var(--accent-color); text-decoration: none; display: flex; align-items: center;">
-                      Get Key <span class="material-icons" style="font-size: 12px; margin-left: 2px;">open_in_new</span>
+                      Get Key <span class="ui-icon material-icons settings-external-link-icon">open_in_new</span>
                     </a>
                   </div>
                   <input type="password" id="gemini-api-key" class="git-settings-input" style="width: 100%;" value="${state.geminiApiKey || ''}" placeholder="Enter Gemini API Key">
@@ -1169,7 +1175,7 @@ export async function showAppSettings() {
                   <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
                     <div style="font-size: 12px;">OpenAI API Key</div>
                     <a href="https://platform.openai.com/api-keys" target="_blank" style="font-size: 11px; color: var(--accent-color); text-decoration: none; display: flex; align-items: center;">
-                      Get Key <span class="material-icons" style="font-size: 12px; margin-left: 2px;">open_in_new</span>
+                      Get Key <span class="ui-icon material-icons settings-external-link-icon">open_in_new</span>
                     </a>
                   </div>
                   <input type="password" id="openai-api-key" class="git-settings-input" style="width: 100%;" value="${state.openaiApiKey || ''}" placeholder="Enter OpenAI API Key">
@@ -1179,7 +1185,7 @@ export async function showAppSettings() {
                   <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
                     <div style="font-size: 12px;">Claude API Key</div>
                     <a href="https://console.anthropic.com/settings/keys" target="_blank" style="font-size: 11px; color: var(--accent-color); text-decoration: none; display: flex; align-items: center;">
-                      Get Key <span class="material-icons" style="font-size: 12px; margin-left: 2px;">open_in_new</span>
+                      Get Key <span class="ui-icon material-icons settings-external-link-icon">open_in_new</span>
                     </a>
                   </div>
                   <input type="password" id="claude-api-key" class="git-settings-input" style="width: 100%;" value="${state.claudeApiKey || ''}" placeholder="Enter Claude API Key">
@@ -1194,7 +1200,7 @@ export async function showAppSettings() {
                   ${(state.hassAgents || []).map(a => `<option value="${a.id}" ${state.hassAgentId === a.id ? 'selected' : ''}>${a.name} (${a.platform})</option>`).join('')}
                 </select>
                 <button id="btn-refresh-hass-agents" type="button" class="git-settings-input" style="width: 100%; margin-bottom: 8px; cursor: pointer; padding: 6px; text-align: center;">
-                  <span class="material-icons" style="font-size: 14px; vertical-align: middle;">refresh</span> Refresh Agents
+                  <span class="ui-icon material-icons settings-refresh-icon">refresh</span> Refresh Agents
                 </button>
                 <div style="font-size: 11px; color: var(--text-secondary); padding: 8px; background: var(--bg-secondary); border-radius: 4px;">
                   Route queries through a Home Assistant conversation agent (e.g. Claw Assistant). The agent can read and edit files directly — changes are shown as diffs for you to accept or reject.
@@ -1261,7 +1267,7 @@ export async function showAppSettings() {
             </div>
 
             <div style="padding: 12px; background: var(--bg-secondary); border-radius: 6px; font-size: 12px; color: var(--text-secondary); margin-top: 8px;">
-              <span class="material-icons" style="font-size: 16px; vertical-align: middle; color: var(--info-color);">info</span>
+              <span class="ui-icon material-icons settings-info-icon">info</span>
               <span style="margin-left: 8px;">${t("settings.info_applied")}</span>
             </div>
 
@@ -1308,12 +1314,12 @@ export async function showAppSettings() {
       </div>
 
       <div style="margin-top: 16px; padding: 12px; background: var(--bg-tertiary); border-radius: 8px; font-size: 13px;">
-        <span class="material-icons" style="font-size: 16px; vertical-align: middle; color: var(--info-color, #2196f3);">info</span>
+        <span class="ui-icon material-icons settings-info-icon">info</span>
         <span style="margin-left: 8px;">${t("settings.info_applied")}</span>
       </div>
     `;
 
-    modalOverlay.classList.add("visible");
+    activateSharedModal({ initialFocus: () => modalBody.querySelector('input, select, button') });
     modal.style.maxWidth = "600px";
     modal.style.maxHeight = "85vh";
 
@@ -1324,7 +1330,7 @@ export async function showAppSettings() {
 
     // Function to clean up and close the Settings modal
     const closeSettings = () => {
-      modalOverlay.classList.remove("visible");
+      deactivateSharedModal();
 
       // Reset modal to default state
       eventBus.emit('ui:modal-reset');
@@ -2540,10 +2546,10 @@ async function showConfirmDialogWithItems(title, message, items, note, showCance
       </div>
     `;
 
-    modalOverlay.classList.add("visible");
+    activateSharedModal({ initialFocus: elements.modalCancel });
 
     const handleConfirm = () => {
-      modalOverlay.classList.remove("visible");
+      deactivateSharedModal();
       elements.modalConfirm.removeEventListener("click", handleConfirm);
       if (showCancel) {
         elements.modalCancel.removeEventListener("click", handleCancel);
@@ -2552,7 +2558,7 @@ async function showConfirmDialogWithItems(title, message, items, note, showCance
     };
 
     const handleCancel = () => {
-      modalOverlay.classList.remove("visible");
+      deactivateSharedModal();
       elements.modalConfirm.removeEventListener("click", handleConfirm);
       if (showCancel) {
         elements.modalCancel.removeEventListener("click", handleCancel);

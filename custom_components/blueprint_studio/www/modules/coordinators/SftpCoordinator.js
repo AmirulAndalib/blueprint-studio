@@ -7,7 +7,7 @@
 import { state } from '../state.js';
 import { eventBus } from '../event-bus.js';
 
-import { initSftpPanelButtons, renderSftpPanel } from '../sftp.js';
+import { initSftpPanelButtons, renderSftpPanel } from '../sftp.js?v=2.5.75';
 
 // Functions provided via callbacks during initialization
 let functions = {
