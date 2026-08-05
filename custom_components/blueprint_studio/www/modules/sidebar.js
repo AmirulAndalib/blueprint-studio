@@ -2,31 +2,41 @@
 import { state, elements } from './state.js';
 import { eventBus } from './event-bus.js';
 import { refreshActivityRail } from './activity-rail.js';
+import { isWorkspaceDrawerMode } from './workspace-layout.js?v=2.5.188';
+import { preserveEditorViewports } from './editor-viewport.js?v=2.5.188';
 
 /**
  * Shows the sidebar
  */
 export function showSidebar() {
-  state.sidebarVisible = true;
-  // Always apply both class sets so rotating between portrait/landscape
-  // never leaves the sidebar in a mixed state.
-  elements.sidebar.classList.remove("hidden");
-  elements.sidebar.classList.add("visible");
-  if (state.isMobile) {
-    elements.sidebarOverlay.classList.add("visible");
-  } else {
-    elements.sidebarOverlay.classList.remove("visible");
-  }
+  const applyVisibility = () => {
+    if (isWorkspaceDrawerMode() && state.aiSidebarVisible) {
+      eventBus.emit('ui:toggle-ai-sidebar', false);
+    }
+    state.sidebarVisible = true;
+    // Always apply both class sets so rotating between portrait/landscape
+    // never leaves the sidebar in a mixed state.
+    elements.sidebar.classList.remove("hidden");
+    elements.sidebar.classList.add("visible");
+    if (isWorkspaceDrawerMode()) {
+      elements.sidebarOverlay.classList.add("visible");
+    } else {
+      elements.sidebarOverlay.classList.remove("visible");
+    }
+  };
+  preserveEditorViewports(applyVisibility);
 }
 
 /**
  * Hides the sidebar
  */
 export function hideSidebar() {
-  state.sidebarVisible = false;
-  elements.sidebar.classList.remove("visible");
-  elements.sidebar.classList.add("hidden");
-  elements.sidebarOverlay.classList.remove("visible");
+  preserveEditorViewports(() => {
+    state.sidebarVisible = false;
+    elements.sidebar.classList.remove("visible");
+    elements.sidebar.classList.add("hidden");
+    elements.sidebarOverlay.classList.remove("visible");
+  });
 }
 
 export function syncActivityState(viewName) {
@@ -50,6 +60,7 @@ export function syncActivityState(viewName) {
  */
 export function switchSidebarView(viewName) {
   state.activeSidebarView = viewName;
+  eventBus.emit('ui:sidebar-view-changed', viewName);
   eventBus.emit('settings:save');
 
   if (!state.sidebarVisible) {

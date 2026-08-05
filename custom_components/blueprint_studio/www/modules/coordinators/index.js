@@ -66,13 +66,13 @@ import {
   handleTabDragEnd as handleTabDragEndImpl,
   updatePaneActiveState as updatePaneActiveStateImpl,
   updateSplitViewButtons as updateSplitViewButtonsImpl
-} from '../split-view.js?v=2.5.75';
+} from '../split-view.js?v=2.5.188';
 
 import {
   loadSettings as loadSettingsImpl,
   saveSettings as saveSettingsImpl,
   updateShowHiddenButton as updateShowHiddenButtonImpl
-} from '../settings.js?v=2.5.75';
+} from '../settings.js?v=2.5.188';
 
 import {
   showAppSettings as showAppSettingsImpl
@@ -184,7 +184,7 @@ import {
   showGiteaSettings as showGiteaSettingsImpl,
   giteaCreateRepo as giteaCreateRepoImpl,
   refreshGiteaPanelStrings as refreshGiteaPanelStringsImpl
-} from '../gitea-integration.js?v=2.5.75';
+} from '../gitea-integration.js?v=2.5.188';
 
 import {
   refreshAllUIStrings as refreshAllUIStringsImpl
@@ -201,7 +201,7 @@ import {
   commitStagedFiles as commitStagedFilesImpl,
   applyVersionControlVisibility as applyVersionControlVisibilityImpl,
   refreshGitPanelStrings as refreshGitPanelStringsImpl
-} from '../git-ui.js?v=2.5.75';
+} from '../git-ui.js?v=2.5.188';
 
 import {
   renderTabs as renderTabsImpl,
@@ -237,11 +237,11 @@ import {
   formatAiResponse as formatAiResponseImpl,
   copyCode as copyCodeImpl,
   sendAIChatMessage as sendAIChatMessageImpl
-} from '../ai-ui.js?v=2.5.75';
+} from '../ai-ui.js?v=2.5.188';
 
 import {
   showCommandPalette as showCommandPaletteImpl
-} from '../command-palette.js?v=2.5.75';
+} from '../command-palette.js?v=2.5.188';
 
 import {
   reportIssue as reportIssueImpl,
@@ -280,7 +280,7 @@ import {
   closeTerminalTab as closeTerminalTabImpl,
   onTerminalTabClosed as onTerminalTabClosedImpl,
   isTerminalFocused
-} from '../terminal.js?v=2.5.75';
+} from '../terminal.js?v=2.5.188';
 
 import {
   renderRecentFilesPanel as renderRecentFilesPanelImpl,
@@ -332,7 +332,7 @@ import {
 
 import {
   initResizeHandle as initResizeHandleImpl
-} from '../resize.js?v=2.5.75';
+} from '../resize.js?v=2.5.188';
 
 import {
   gitStatusPollingInterval as pollingInterval,
@@ -371,7 +371,7 @@ import {
   deleteConnection as deleteConnectionImpl,
   refreshSftp as refreshSftpImpl,
   refreshSftpStrings as refreshSftpStringsImpl
-} from '../sftp.js?v=2.5.75';
+} from '../sftp.js?v=2.5.188';
 
 import {
   isTextFile,
@@ -635,7 +635,12 @@ export function initializeEventHandlers() {
     showEditConnectionDialog: showEditConnectionDialogImpl,
     deleteConnection: deleteConnectionImpl,
     refreshSftp: refreshSftpImpl,
-    saveSftpFile: saveSftpFileImpl,
+    saveSftpFile: (connectionId, path, content) => {
+      const remotePath = String(path || '/').startsWith('/') ? String(path || '/') : `/${path}`;
+      const virtualPath = `sftp://${connectionId}${remotePath}`;
+      const tab = state.openTabs.find(candidate => candidate.path === virtualPath);
+      return tab ? saveSftpFileImpl(tab, content) : false;
+    },
     applySftpVisibility: applySftpVisibilityImpl,
     refreshSftpStrings: refreshSftpStringsImpl
   });
@@ -926,19 +931,8 @@ export function initializeEventHandlers() {
     }
   });
 
-  // Window resize
+  // Window resize. Workspace mode is container-driven by workspace-layout.js.
   window.addEventListener("resize", () => {
-    const wasMobile = state.isMobile;
-    state.isMobile = isMobile();
-
-    if (wasMobile !== state.isMobile) {
-      if (state.isMobile) {
-        hideSidebarImpl();
-      } else {
-        showSidebarImpl();
-      }
-    }
-
     // Refresh editor
     if (state.editor) {
       setTimeout(() => state.editor.refresh(), 100);
@@ -947,6 +941,7 @@ export function initializeEventHandlers() {
 
   // Before unload warning
   window.addEventListener("beforeunload", (e) => {
+    if (window.__blueprintStudioUpdateReload) return;
     if (state.openTabs.some((t) => t.modified)) {
       e.preventDefault();
       e.returnValue = "";

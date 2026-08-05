@@ -1,8 +1,18 @@
 /** STATUS-BAR.JS | Purpose: Displays editor status information in bottom bar (cursor position, */
-import { state, elements } from './state.js';
+import { state, elements, gitState, giteaState } from './state.js';
 import { getLanguageName } from './utils.js';
 import { t } from './translations.js';
 import { eventBus } from './event-bus.js';
+import { renderRepositoryStatusBar } from './context-indicators.js?v=2.5.188';
+
+let connectivityEventsInitialized = false;
+
+function updateRepositoryStatus() {
+  renderRepositoryStatusBar(elements.statusRepository, [
+    { provider: 'GitHub', state: gitState, enabled: state.gitIntegrationEnabled },
+    { provider: 'Gitea', state: giteaState, enabled: state.giteaIntegrationEnabled },
+  ]);
+}
 
 /**
  * Shows tab size picker menu
@@ -126,6 +136,16 @@ export function initStatusBarEvents() {
     // Add click listener
     elements.statusIndent.addEventListener('click', showTabSizePicker);
   }
+  if (!connectivityEventsInitialized) {
+    connectivityEventsInitialized = true;
+    eventBus.on('git:refresh', updateRepositoryStatus);
+    const handleConnectivityChange = () => {
+      updateRepositoryStatus();
+      eventBus.emit('source-control:connectivity-change');
+    };
+    window.addEventListener('online', handleConnectivityChange);
+    window.addEventListener('offline', handleConnectivityChange);
+  }
 }
 
 /**
@@ -133,6 +153,7 @@ export function initStatusBarEvents() {
  * Shows cursor position, indent settings, encoding, and language
  */
 export function updateStatusBar() {
+  updateRepositoryStatus();
   const tab = state.activeTab;
 
   if (tab && state.editor) {

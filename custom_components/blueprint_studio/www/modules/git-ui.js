@@ -3,12 +3,21 @@ import { state, elements, gitState, giteaState } from './state.js';
 import { isTextFile } from './utils.js';
 import { t } from './translations.js';
 import { eventBus } from './event-bus.js';
-import { saveSettings } from './settings.js?v=2.5.75';
+import { saveSettings } from './settings.js?v=2.5.188';
 import { refreshActivityRail } from './activity-rail.js';
-import { renderRepositoryContext } from './context-indicators.js?v=2.5.75';
+import { renderRepositoryContext } from './context-indicators.js?v=2.5.188';
+import { bindSourceControlRecovery, renderSourceControlRecovery } from './source-control-recovery.js?v=2.5.188';
+import {
+  clearCommitMessage,
+  captureSourceControlView,
+  getCommitMessage,
+  getUnstagedPaths,
+  renderSourceControlFiles,
+  scheduleSourceControlViewRestore,
+  updateCommitComposer,
+} from './source-control-view.js?v=2.5.188';
 import {
   showToast,
-  showModal,
   showConfirmDialog,
   setButtonLoading
 } from './ui.js';
@@ -16,6 +25,7 @@ import {
 import {
   isGitEnabled,
   gitStatus,
+  gitPull,
   gitStage,
   gitUnstage,
   gitCommit,
@@ -47,6 +57,7 @@ export function updateGitPanel() {
   const actions = panel.querySelector(".git-panel-actions");
 
   if (!container || !badge || !commitBtn || !actions) return;
+  const viewContext = captureSourceControlView(container);
 
   // Update badge
   badge.textContent = gitState.totalChanges;
@@ -164,7 +175,7 @@ export function updateGitPanel() {
 
   // Diverged Sync Detection
   let divergedWarningHtml = "";
-  if (gitState.ahead > 0 && gitState.behind > 0) {
+  if (false && gitState.ahead > 0 && gitState.behind > 0) {
     divergedWarningHtml = `
       <div style="margin: 8px; padding: 12px; background: rgba(156, 39, 176, 0.1); border: 1px solid #9c27b0; border-radius: 6px; font-size: 12px;">
         <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px; color: #9c27b0; font-weight: 600;">
@@ -192,7 +203,7 @@ export function updateGitPanel() {
     gitState.status.toLowerCase().includes("unmerged") ||
     gitState.status.toLowerCase().includes("conflict")
   );
-  if (isConflicted) {
+  if (false && isConflicted) {
     const conflictFiles = gitState.conflictFiles || [];
 
     const conflictRows = conflictFiles.map(f => `
@@ -225,7 +236,7 @@ export function updateGitPanel() {
     // Or for simplicity, if no remote, we guide them to connect first/alongside.
     // Actually, let's allow local commits without remote.
     // But if there are NO changes, show the Connect prompt.
-    if (gitState.totalChanges === 0) {
+    if (false && gitState.totalChanges === 0) {
       container.innerHTML = `
         <div class="git-empty-state">
           <span class="ui-icon material-icons git-empty-state-glyph git-empty-state-glyph-spaced">link_off</span>
@@ -242,11 +253,17 @@ export function updateGitPanel() {
     }
   }
 
-  if (gitState.totalChanges > 0 || branchWarningHtml || stuckWarningHtml || remoteCleanupHtml || divergedWarningHtml) {
-    container.innerHTML = stuckWarningHtml + branchWarningHtml + divergedWarningHtml + remoteCleanupHtml;
-    if (gitState.totalChanges > 0) {
-      renderGitFiles(container);
-    }
+  if (gitState.isInitialized || branchWarningHtml || stuckWarningHtml || remoteCleanupHtml || divergedWarningHtml) {
+    container.innerHTML = renderSourceControlRecovery(gitState, 'GitHub') + branchWarningHtml + remoteCleanupHtml;
+    renderGitFiles(container);
+    bindSourceControlRecovery(container, {
+      retry: () => gitStatus(true),
+      configure: () => eventBus.emit('git:show-settings'),
+      pull: () => gitPull(),
+      'force-push': () => forcePush(),
+      'hard-reset': () => hardReset(),
+      abort: () => abortGitOperation(),
+    });
 
     // Add event listeners for new buttons
     const btnRepair = document.getElementById("btn-repair-branch");
@@ -293,14 +310,15 @@ export function updateGitPanel() {
   }
 
   // Enable/disable commit button based on staged files
-  commitBtn.disabled = gitState.files.staged.length === 0;
+  updateCommitComposer('git', gitState);
+  scheduleSourceControlViewRestore(container, viewContext);
 }
 
 /**
  * Renders git files in the panel
  * Groups files by status: staged, modified, added, deleted, untracked
  */
-export function renderGitFiles(container) {
+function renderGitFilesLegacy(container) {
   // Note: We don't clear the container here anymore,
   // because it might contain branch/stuck warnings.
   // Instead, we build the file list HTML and append it.
@@ -398,6 +416,10 @@ export function renderGitFiles(container) {
   container.insertAdjacentHTML('beforeend', html);
 }
 
+export function renderGitFiles(container) {
+  renderSourceControlFiles(container, gitState, 'git');
+}
+
 /**
  * Toggle git file group collapse
  */
@@ -409,6 +431,9 @@ export function toggleGitGroup(groupKey, panelType = 'git') {
   const group = container.querySelector(`.git-file-group[data-group="${groupKey}"]`);
   if (group) {
     group.classList.toggle("collapsed");
+    group.querySelector('.git-file-group-toggle')?.setAttribute(
+      'aria-expanded', String(!group.classList.contains('collapsed')),
+    );
 
     // Save collapsed state to the appropriate state object
     const stateObj = panelType === 'gitea' ? giteaState : gitState;
@@ -449,19 +474,13 @@ export async function stageSelectedFiles() {
   if (gitStage) {
     await gitStage(Array.from(gitState.selectedFiles));
   }
-  gitState.selectedFiles.clear(); // Clear selection after staging
 }
 
 /**
  * Stage all unstaged files
  */
 export async function stageAllFiles() {
-  const unstagedFiles = [
-    ...gitState.files.modified.filter(f => !gitState.files.staged.includes(f)),
-    ...gitState.files.added.filter(f => !gitState.files.staged.includes(f)),
-    ...gitState.files.deleted.filter(f => !gitState.files.staged.includes(f)),
-    ...gitState.files.untracked
-  ];
+  const unstagedFiles = getUnstagedPaths(gitState);
 
   if (unstagedFiles.length > 0 && gitStage) {
     await gitStage(unstagedFiles);
@@ -484,31 +503,15 @@ export async function commitStagedFiles() {
   const stagedCount = gitState.files.staged.length;
   if (stagedCount === 0) return;
 
-  // Generate a smart default commit message
-  let defaultMessage = "Update via Blueprint Studio";
-  if (stagedCount === 1) {
-    const filename = gitState.files.staged[0].split("/").pop();
-    defaultMessage = `Update ${filename}`;
-  } else if (stagedCount > 1) {
-    const filename = gitState.files.staged[0].split("/").pop();
-    defaultMessage = `Update ${filename} and ${stagedCount - 1} others`;
-  }
-
-  if (!showModal) return;
-
-  const commitMessage = await showModal({
-    title: "Commit Changes",
-    placeholder: "Commit message",
-    value: defaultMessage,
-    hint: `Committing ${stagedCount} staged file(s)`,
-  });
-
-  if (!commitMessage) {
-    return;
-  }
+  const commitMessage = getCommitMessage('git');
+  if (!commitMessage) return;
 
   if (gitCommit) {
-    await gitCommit(commitMessage);
+    const committed = await gitCommit(commitMessage);
+    if (committed) {
+      clearCommitMessage('git');
+      updateCommitComposer('git', gitState);
+    }
   }
 }
 

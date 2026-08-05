@@ -4,14 +4,16 @@ import { state, elements } from "./state.js";
 const activeNotifications = new Map();
 const globalPendingMessages = [];
 const NOTIFICATION_TYPES = new Set(["success", "error", "warning", "info"]);
+const operationRecords = new Map();
+const MAX_OPERATION_HISTORY = 24;
+let operationClock = null;
 
 function normalizeMessage(message) {
   return String(message ?? "").replace(/\s+/g, " ").trim();
 }
 
-function compactMessage(message) {
-  const text = normalizeMessage(message);
-  return text.length <= 64 ? text : `${text.slice(0, 61)}...`;
+function normalizeDetail(message) {
+  return String(message ?? "").replace(/\r\n?/g, "\n").trim();
 }
 
 function notificationIcon(type) {
@@ -53,7 +55,7 @@ export function notify(message, options = {}) {
   if (!state.showToasts && type !== "error" && !action) return null;
   if (type === "error" && duration === 3000) duration = 0;
 
-  const displayMessage = compactMessage(message);
+  const displayMessage = normalizeMessage(message);
   if (!displayMessage) return null;
   const key = options.key || `${type}:${displayMessage}`;
   if (activeNotifications.has(key)) return activeNotifications.get(key);
@@ -73,6 +75,36 @@ export function notify(message, options = {}) {
   text.className = "toast-message";
   text.textContent = displayMessage;
   toast.appendChild(text);
+
+  let dismissTimer = null;
+  if (type === "error" || displayMessage.length > 64) {
+    toast.classList.add("toast--expandable");
+    const expandButton = document.createElement("button");
+    expandButton.className = "toast-expand-btn";
+    expandButton.type = "button";
+    expandButton.setAttribute("aria-label", "Show full notification");
+    expandButton.setAttribute("aria-expanded", "false");
+    expandButton.title = "Show full message";
+    const expandIcon = document.createElement("span");
+    expandIcon.className = "ui-icon material-icons";
+    expandIcon.setAttribute("aria-hidden", "true");
+    expandIcon.textContent = "more_horiz";
+    expandButton.appendChild(expandIcon);
+    const toggleExpanded = () => {
+      const expanded = toast.classList.toggle("expanded");
+      expandButton.setAttribute("aria-expanded", String(expanded));
+      expandButton.setAttribute("aria-label", expanded ? "Collapse notification" : "Show full notification");
+      expandButton.title = expanded ? "Collapse message" : "Show full message";
+      expandIcon.textContent = expanded ? "expand_less" : "more_horiz";
+      if (expanded && dismissTimer) {
+        clearTimeout(dismissTimer);
+        dismissTimer = null;
+      }
+    };
+    expandButton.addEventListener("click", toggleExpanded);
+    text.addEventListener("click", toggleExpanded);
+    toast.appendChild(expandButton);
+  }
 
   if (action?.text && typeof action.callback === "function") {
     const actionButton = document.createElement("button");
@@ -106,7 +138,7 @@ export function notify(message, options = {}) {
   activeNotifications.set(key, toast);
 
   if (duration > 0) {
-    setTimeout(() => {
+    dismissTimer = setTimeout(() => {
       toast.classList.add("dismissing");
       setTimeout(() => removeNotification(key, toast), 180);
     }, duration);
@@ -141,14 +173,90 @@ export function setControlPending(control, pending) {
 function ensureOperationStack() {
   let stack = document.getElementById("transfer-progress-stack");
   if (!stack) {
-    stack = document.createElement("div");
+    stack = document.createElement("aside");
     stack.id = "transfer-progress-stack";
-    stack.className = "transfer-progress-stack";
+    stack.className = "operation-center transfer-progress-stack";
     stack.setAttribute("role", "region");
-    stack.setAttribute("aria-label", "Active operations");
+    stack.setAttribute("aria-label", "Operations");
+    stack.innerHTML = `
+      <div class="operation-center-header">
+        <span class="ui-icon material-icons" aria-hidden="true">pending_actions</span>
+        <strong>Operations</strong>
+        <span class="operation-center-count" aria-live="polite">0 active</span>
+        <button type="button" class="ui-icon-button operation-center-clear" aria-label="Clear completed operations" title="Clear completed"><span class="ui-icon material-icons" aria-hidden="true">done_all</span></button>
+        <button type="button" class="ui-icon-button operation-center-toggle" aria-label="Minimize operations" title="Minimize"><span class="ui-icon material-icons" aria-hidden="true">expand_more</span></button>
+      </div>
+      <div class="operation-center-list">
+        <section class="operation-group operation-group-active" aria-labelledby="operation-active-heading">
+          <h2 id="operation-active-heading" class="operation-group-heading">Active</h2>
+          <div class="operation-group-list"></div>
+        </section>
+        <section class="operation-group operation-group-recent" aria-labelledby="operation-recent-heading">
+          <h2 id="operation-recent-heading" class="operation-group-heading">Recent</h2>
+          <div class="operation-group-list"></div>
+        </section>
+      </div>
+    `;
+    stack.querySelector(".operation-center-clear")?.addEventListener("click", clearCompletedOperations);
+    stack.querySelector(".operation-center-toggle")?.addEventListener("click", () => {
+      const minimized = stack.classList.toggle("minimized");
+      const button = stack.querySelector(".operation-center-toggle");
+      button?.setAttribute("aria-label", minimized ? "Expand operations" : "Minimize operations");
+      button?.setAttribute("title", minimized ? "Expand" : "Minimize");
+      const icon = button?.querySelector(".ui-icon");
+      if (icon) icon.textContent = minimized ? "expand_less" : "expand_more";
+    });
     document.body.appendChild(stack);
+    document.body.classList.add("operation-center-open");
   }
   return stack;
+}
+
+function isTerminalOperation(status) {
+  return ["done", "error", "cancelled"].includes(status);
+}
+
+function operationList(status = "running") {
+  const stack = ensureOperationStack();
+  const group = isTerminalOperation(status) ? ".operation-group-recent" : ".operation-group-active";
+  return stack.querySelector(`${group} .operation-group-list`);
+}
+
+function formatElapsed(startedAt, endedAt = Date.now()) {
+  const seconds = Math.max(0, Math.floor((endedAt - startedAt) / 1000));
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  return `${minutes}m ${seconds % 60}s`;
+}
+
+function refreshOperationCenter() {
+  const stack = document.getElementById("transfer-progress-stack");
+  if (!stack) return;
+  const active = [...operationRecords.values()].filter(record => !["done", "error", "cancelled"].includes(record.status)).length;
+  const count = stack.querySelector(".operation-center-count");
+  if (count) count.textContent = active ? `${active} active` : `${operationRecords.size} recent`;
+  stack.querySelector(".operation-center-clear")?.toggleAttribute("disabled", ![...operationRecords.values()].some(record => ["done", "error", "cancelled"].includes(record.status)));
+  for (const group of stack.querySelectorAll(".operation-group")) {
+    group.hidden = !group.querySelector(".zip-download-progress");
+  }
+  for (const [id, record] of operationRecords) {
+    const elapsed = document.getElementById(`transfer-progress-${id}`)?.querySelector(".operation-elapsed");
+    if (elapsed) elapsed.textContent = formatElapsed(record.startedAt, record.endedAt);
+  }
+}
+
+function startOperationClock() {
+  if (operationClock) return;
+  operationClock = setInterval(refreshOperationCenter, 1000);
+}
+
+function trimOperationHistory() {
+  if (operationRecords.size <= MAX_OPERATION_HISTORY) return;
+  for (const [id, record] of operationRecords) {
+    if (!isTerminalOperation(record.status)) continue;
+    removeOperationFeedback(id);
+    if (operationRecords.size <= MAX_OPERATION_HISTORY) break;
+  }
 }
 
 function ensureOperationCard(id) {
@@ -164,12 +272,16 @@ function ensureOperationCard(id) {
     <div class="zip-progress-header">
       <span class="ui-icon material-icons zip-progress-icon" aria-hidden="true"></span>
       <span class="zip-progress-title"></span>
+      <span class="operation-status"></span>
     </div>
+    <div class="operation-scope"></div>
     <div class="zip-progress-track" role="progressbar"><div class="zip-progress-bar"></div></div>
     <div class="zip-progress-meta"></div>
     <div class="zip-progress-file"></div>
+    <details class="operation-details"><summary>Details</summary><div class="operation-details-text"></div></details>
+    <div class="operation-footer"><span class="operation-elapsed">0s</span><div class="operation-actions"></div></div>
   `;
-  ensureOperationStack().appendChild(card);
+  operationList().prepend(card);
   return card;
 }
 
@@ -181,17 +293,42 @@ export function updateOperationFeedback(id, options = {}) {
   const bar = card.querySelector(".zip-progress-bar");
   const meta = card.querySelector(".zip-progress-meta");
   const detail = card.querySelector(".zip-progress-file");
+  const scope = card.querySelector(".operation-scope");
+  const status = card.querySelector(".operation-status");
+  const details = card.querySelector(".operation-details");
+  const detailsText = card.querySelector(".operation-details-text");
+  const actions = card.querySelector(".operation-actions");
   const percent = Number(options.percent);
   const determinate = Number.isFinite(percent);
+  const previous = operationRecords.get(id);
+  const nextStatus = options.status || "running";
+  const terminal = isTerminalOperation(nextStatus);
+  operationRecords.set(id, {
+    startedAt: previous?.startedAt || Date.now(),
+    endedAt: terminal ? previous?.endedAt || Date.now() : null,
+    status: nextStatus,
+    label: normalizeMessage(options.label) || previous?.label || 'Operation',
+    scope: normalizeMessage(options.scope) || previous?.scope || '',
+    target: normalizeMessage(options.target) || previous?.target || '',
+  });
 
   if (icon) icon.textContent = options.icon || "progress_activity";
   if (title) title.textContent = normalizeMessage(options.label) || "Operation in progress";
   if (meta) meta.textContent = normalizeMessage(options.message);
   if (detail) detail.textContent = normalizeMessage(options.detail);
-  card.dataset.status = options.status || "running";
+  const fullDetail = normalizeDetail(options.failureDetail);
+  if (details && detailsText) {
+    details.hidden = !fullDetail;
+    detailsText.textContent = fullDetail;
+    if (!fullDetail) details.open = false;
+  }
+  if (scope) scope.textContent = [normalizeMessage(options.scope), normalizeMessage(options.target)].filter(Boolean).join(" -> ");
+  if (status) status.textContent = nextStatus === "done" ? "Complete" : nextStatus === "error" ? "Failed" : nextStatus === "cancelled" ? "Cancelled" : nextStatus === "cancelling" ? "Cancelling" : "Running";
+  card.dataset.status = nextStatus;
   card.setAttribute("aria-label", `${title?.textContent || "Operation"}: ${meta?.textContent || "In progress"}`);
 
   if (track && bar) {
+    track.hidden = terminal;
     bar.classList.toggle("determinate", determinate);
     bar.style.width = determinate ? `${Math.max(0, Math.min(100, percent))}%` : "";
     track.setAttribute("aria-valuemin", "0");
@@ -199,11 +336,118 @@ export function updateOperationFeedback(id, options = {}) {
     if (determinate) track.setAttribute("aria-valuenow", String(Math.round(percent)));
     else track.removeAttribute("aria-valuenow");
   }
+  const destination = operationList(nextStatus);
+  if (destination && card.parentElement !== destination) destination.prepend(card);
+  if (actions) {
+    actions.replaceChildren();
+    for (const action of Array.isArray(options.actions) ? options.actions : []) {
+      if (!action?.label || typeof action.callback !== "function") continue;
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = `operation-action${action.primary ? " primary" : ""}`;
+      button.setAttribute("aria-label", action.ariaLabel || action.label);
+      button.title = action.title || action.label;
+      if (action.icon) {
+        const actionIcon = document.createElement("span");
+        actionIcon.className = "ui-icon material-icons";
+        actionIcon.setAttribute("aria-hidden", "true");
+        actionIcon.textContent = action.icon;
+        button.appendChild(actionIcon);
+      }
+      const actionLabel = document.createElement("span");
+      actionLabel.textContent = action.label;
+      button.appendChild(actionLabel);
+      button.addEventListener("click", () => {
+        Promise.resolve(action.callback()).catch(error => {
+          console.error(`[BPS] Operation action failed: ${action.label}`, error);
+        });
+      });
+      actions.appendChild(button);
+    }
+  }
+  refreshOperationCenter();
+  startOperationClock();
+  trimOperationHistory();
   return card;
 }
 
+export function startOperationFeedback(options = {}) {
+  const id = options.id
+    || window.crypto?.randomUUID?.()
+    || `operation-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const base = {
+    label: options.label,
+    icon: options.icon,
+    scope: options.scope,
+    target: options.target,
+  };
+  const openAction = typeof options.open === "function"
+    ? { label: options.openLabel || "Open", icon: options.openIcon || "open_in_new", callback: options.open }
+    : null;
+  const retryAction = typeof options.retry === "function"
+    ? { label: options.retryLabel || "Retry", icon: "refresh", primary: true, callback: options.retry }
+    : null;
+  const runningActions = Array.isArray(options.runningActions) ? options.runningActions : [];
+  const terminalActions = includeRetry => [includeRetry ? retryAction : null, openAction].filter(Boolean);
+
+  updateOperationFeedback(id, {
+    ...base,
+    status: "running",
+    message: options.message || "Operation in progress...",
+    actions: runningActions,
+  });
+
+  return {
+    id,
+    update(next = {}) {
+      updateOperationFeedback(id, { ...base, status: "running", actions: runningActions, ...next });
+    },
+    finish(message = "Operation complete", next = {}) {
+      updateOperationFeedback(id, { ...base, icon: "check_circle", status: "done", message, actions: terminalActions(false), ...next });
+    },
+    fail(message = "Operation failed", failureDetail = message, next = {}) {
+      updateOperationFeedback(id, { ...base, icon: "error", status: "error", message, failureDetail, actions: terminalActions(true), ...next });
+    },
+    cancel(message = "Operation cancelled", next = {}) {
+      updateOperationFeedback(id, {
+        ...base,
+        icon: "cancel",
+        status: "cancelled",
+        message,
+        actions: terminalActions(true),
+        ...next,
+      });
+    },
+  };
+}
+
 export function removeOperationFeedback(id) {
+  operationRecords.delete(id);
   document.getElementById(`transfer-progress-${id}`)?.remove();
   const stack = document.getElementById("transfer-progress-stack");
-  if (stack && stack.children.length === 0) stack.remove();
+  if (stack && operationRecords.size === 0) {
+    stack.remove();
+    document.body.classList.remove("operation-center-open");
+  }
+  if (operationRecords.size === 0 && operationClock) {
+    clearInterval(operationClock);
+    operationClock = null;
+  }
+  refreshOperationCenter();
+}
+
+export function clearCompletedOperations() {
+  for (const [id, record] of [...operationRecords]) {
+    if (isTerminalOperation(record.status)) removeOperationFeedback(id);
+  }
+}
+
+export function getActiveOperationSummary() {
+  return [...operationRecords.values()]
+    .filter(record => !isTerminalOperation(record.status))
+    .map(record => ({
+      label: record.label,
+      scope: record.scope,
+      target: record.target,
+    }));
 }

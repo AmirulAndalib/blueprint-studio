@@ -5,8 +5,8 @@ import {
   navigateSftp, 
   parseSftpPath,
   isSftpPath
-} from './sftp.js?v=2.5.75';
-import { setOverflowTooltip } from './tooltip.js?v=2.5.75';
+} from './sftp.js?v=2.5.188';
+import { setOverflowTooltip } from './tooltip.js?v=2.5.188';
 
 function bindBreadcrumbLink(element, label, action) {
   element.setAttribute("role", "button");
@@ -35,6 +35,12 @@ export function updateBreadcrumb(path) {
 
   const isSftp = isSftpPath(path);
   const isTerminal = path.startsWith('terminal://');
+
+  const locationBadge = document.createElement("span");
+  locationBadge.className = `breadcrumb-location-badge ${isSftp ? "is-remote" : isTerminal ? "is-terminal" : "is-local"}`;
+  locationBadge.innerHTML = `<span class="ui-icon material-icons" aria-hidden="true">${isSftp ? "cloud" : isTerminal ? "terminal" : "home"}</span><span>${isSftp ? "SFTP" : isTerminal ? "Terminal" : "Local"}</span>`;
+  locationBadge.setAttribute("aria-label", isSftp ? "Remote SFTP location" : isTerminal ? "Terminal session" : "Local Home Assistant location");
+  elements.breadcrumb.appendChild(locationBadge);
 
   // Handle local files: add /config/ prefix visually
   if (!isSftp && !isTerminal) {

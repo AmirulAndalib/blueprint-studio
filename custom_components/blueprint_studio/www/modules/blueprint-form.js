@@ -8,6 +8,7 @@ import { fetchWithAuth } from './api.js';
 import { showToast } from './ui.js';
 import { eventBus } from './event-bus.js';
 import { state } from './state.js';
+import { startOperationFeedback } from './feedback-service.js?v=2.5.188';
 
 let _weEnabledSplitView = false;
 let _mobileOverlayEl = null;
@@ -261,7 +262,7 @@ async function _renderForm(blueprintContent, bpInfo, preservedValues = {}) {
     const needsLabels  = allInputs.some(i => i.selector && 'label' in i.selector);
     const needsFloors  = allInputs.some(i => i.selector && 'floor' in i.selector);
     const needsThemes  = allInputs.some(i => i.selector && 'theme' in i.selector);
-    const needsAddons  = allInputs.some(i => i.selector && 'addon' in i.selector);
+    const needsAddons  = allInputs.some(i => i.selector && ('app' in i.selector || 'addon' in i.selector));
 
     let entities = [], devices = [], areas = [], labels = [], floors = [], themes = [], addons = [];
     try {
@@ -418,22 +419,13 @@ async function _renderForm(blueprintContent, bpInfo, preservedValues = {}) {
     previewEl.querySelector('#bf-btn-validate')?.addEventListener('click', async () => {
         const name = previewEl.querySelector('#bf-auto-name')?.value || bpInfo.name;
         const desc = previewEl.querySelector('#bf-auto-desc')?.value || '';
-        const yaml = await _generateAutomation(_blueprintContent, _formData, name, desc);
-        if (!yaml) return;
-        try {
-            const res = await fetchWithAuth(API_BASE, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'check_yaml', content: yaml }),
-            });
-            if (res.valid) {
-                showToast('YAML is valid', 'success');
-            } else {
-                showToast(`YAML error: ${res.error || 'Invalid YAML'}`, 'error', 6000);
-            }
-        } catch (e) {
-            showToast(`Validation failed: ${e.message}`, 'error');
-        }
+        await validateBlueprintAutomation({
+            blueprintContent: _blueprintContent,
+            formData: snapshotFormData(_formData),
+            name,
+            description: desc,
+            sourcePath: state.blueprintFormTabPath,
+        });
     });
 
     // Trigger initial live preview
@@ -699,6 +691,7 @@ function _controlHtml(inp, sType, sCfg, devices, areas, entities, labels, floors
                 <option value="">— Select theme —</option>${opts}
             </select>`;
         }
+        case 'app':
         case 'addon': {
             if (!(addons || []).length) {
                 return `<input type="text" class="bf-input" data-key="${key}"
@@ -1129,7 +1122,7 @@ function _scheduleLivePreview() {
     }, 600);
 }
 
-async function _generateAutomation(blueprintContent, formData, name, description) {
+async function _generateAutomation(blueprintContent, formData, name, description, { notifyOnError = true } = {}) {
     try {
         const res = await fetchWithAuth(API_BASE, {
             method: 'POST',
@@ -1145,6 +1138,7 @@ async function _generateAutomation(blueprintContent, formData, name, description
         if (!res.success) throw new Error(res.message || 'Generation failed');
         return res.automation;
     } catch (e) {
+        if (!notifyOnError) throw e;
         showToast(`Error: ${e.message}`, 'error');
         return null;
     }
@@ -1208,69 +1202,180 @@ async function _showSaveDialog(automationYaml, name, panelEl) {
 
     dialog.querySelector('.bf-confirm-btn').addEventListener('click', async () => {
         const mode = dialog.querySelector('input[name="bf-save-mode"]:checked')?.value;
+        let saved = false;
         if (mode === 'append') {
             close();
-            await _appendToAutomations(automationYaml);
-            closeBlueprintForm();
+            saved = await saveBlueprintAutomation({ mode, path: 'automations.yaml', automationYaml });
         } else {
             const path = dialog.querySelector('#bf-new-file-path').value.trim();
             if (!path) { showToast('Please enter a file path', 'warning'); return; }
             close();
-            await _saveNewFile(path, automationYaml);
-            closeBlueprintForm();
+            saved = await saveBlueprintAutomation({ mode, path, automationYaml });
         }
+        if (saved) closeBlueprintForm();
     });
 }
 
-async function _appendToAutomations(automationYaml) {
-    let currentContent = '';
-    try {
-        const r = await fetchWithAuth(`${API_BASE}?action=read_file&path=automations.yaml`);
-        currentContent = r.content || '';
-    } catch (_) { /* file may not exist yet */ }
+function snapshotFormData(formData) {
+    if (typeof structuredClone === 'function') return structuredClone(formData || {});
+    return JSON.parse(JSON.stringify(formData || {}));
+}
 
-    const separator = currentContent.trim() ? '\n\n' : '';
-    const newContent = currentContent.trimEnd() + separator + automationYaml;
+function revealAutomationPath(path) {
+    eventBus.emit('ui:switch-sidebar-view', 'explorer');
+    eventBus.emit('file:open', { path, forceReload: true });
+}
 
+function responseFailure(result, fallback) {
+    return result?.message || result?.error || fallback;
+}
+
+export async function validateBlueprintAutomation(request) {
+    const immutableRequest = {
+        blueprintContent: String(request.blueprintContent || ''),
+        formData: snapshotFormData(request.formData),
+        name: String(request.name || 'Automation'),
+        description: String(request.description || ''),
+        sourcePath: request.sourcePath ? String(request.sourcePath) : '',
+    };
+    const operation = startOperationFeedback({
+        label: 'Validate blueprint automation',
+        icon: 'fact_check',
+        message: 'Step 1 of 2: generating automation YAML...',
+        scope: 'Home Assistant automation',
+        target: immutableRequest.name,
+        retry: () => validateBlueprintAutomation(immutableRequest),
+        openLabel: immutableRequest.sourcePath ? 'Open blueprint' : 'Open form',
+        openIcon: 'description',
+        open: () => immutableRequest.sourcePath
+            ? revealAutomationPath(immutableRequest.sourcePath)
+            : eventBus.emit('ui:switch-sidebar-view', 'explorer'),
+    });
     try {
-        await fetchWithAuth(API_BASE, {
+        const yaml = await _generateAutomation(
+            immutableRequest.blueprintContent,
+            immutableRequest.formData,
+            immutableRequest.name,
+            immutableRequest.description,
+            { notifyOnError: false },
+        );
+        operation.update({ message: 'Step 2 of 2: checking generated YAML...', percent: 50 });
+        const result = await fetchWithAuth(API_BASE, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'write_file', path: 'automations.yaml', content: newContent }),
+            body: JSON.stringify({ action: 'check_yaml', content: yaml }),
         });
-        // write_file auto-reloads automations when path has no slash
-        // Also call reload_automations explicitly for robustness
-        try {
-            await fetchWithAuth(API_BASE, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'reload_automations' }),
-            });
-        } catch (_) { /* non-fatal */ }
-        showToast('Automation saved and reloaded!', 'success', 6000);
-    } catch (e) {
-        showToast(`Save failed: ${e.message}`, 'error');
+        if (!result?.valid) {
+            const message = responseFailure(result, 'Generated YAML is invalid');
+            operation.fail('Generated YAML is invalid', message);
+            showToast(`YAML error: ${message}`, 'error', 6000);
+            return false;
+        }
+        operation.finish('Generated automation YAML is valid', { detail: immutableRequest.name });
+        showToast('YAML is valid', 'success');
+        return true;
+    } catch (error) {
+        operation.fail('Blueprint automation validation failed', error.message);
+        showToast(`Validation failed: ${error.message}`, 'error');
+        return false;
     }
 }
 
-async function _saveNewFile(path, automationYaml) {
+export async function saveBlueprintAutomation(request) {
+    const immutableRequest = {
+        mode: request.mode === 'append' ? 'append' : 'new',
+        path: String(request.path || ''),
+        automationYaml: String(request.automationYaml || ''),
+    };
+    const stepCount = immutableRequest.mode === 'append' ? 2 : 3;
+    const operation = startOperationFeedback({
+        label: immutableRequest.mode === 'append' ? 'Append blueprint automation' : 'Save blueprint automation',
+        icon: 'save',
+        message: `Step 1 of ${stepCount}: checking ${immutableRequest.path}...`,
+        scope: 'Home Assistant configuration',
+        target: immutableRequest.path,
+        retry: () => saveBlueprintAutomation(immutableRequest),
+        openLabel: 'Open file',
+        openIcon: 'description',
+        open: () => revealAutomationPath(immutableRequest.path),
+    });
+
     try {
-        await fetchWithAuth(API_BASE, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'create_file', path, content: automationYaml, overwrite: false }),
-        });
-        // Reload automations after saving new file
+        let existingContent = null;
         try {
-            await fetchWithAuth(API_BASE, {
+            const existing = await fetchWithAuth(`${API_BASE}?action=read_file&path=${encodeURIComponent(immutableRequest.path)}`);
+            if (existing?.success === false) throw new Error(responseFailure(existing, 'Could not read destination'));
+            existingContent = typeof existing?.content === 'string' ? existing.content : '';
+        } catch (_error) {
+            existingContent = null;
+        }
+
+        const desiredYaml = immutableRequest.automationYaml.trim();
+        const alreadyWritten = immutableRequest.mode === 'append'
+            ? existingContent !== null && existingContent.trimEnd().endsWith(desiredYaml)
+            : existingContent !== null && existingContent.trim() === desiredYaml;
+
+        if (!alreadyWritten) {
+            operation.update({
+                message: `Step 2 of ${stepCount}: ${immutableRequest.mode === 'append' ? 'appending automation' : 'creating automation file'}...`,
+                percent: Math.round(100 / stepCount),
+            });
+            const content = immutableRequest.mode === 'append'
+                ? `${(existingContent || '').trimEnd()}${(existingContent || '').trim() ? '\n\n' : ''}${immutableRequest.automationYaml}`
+                : immutableRequest.automationYaml;
+            const writeResult = await fetchWithAuth(API_BASE, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(immutableRequest.mode === 'append'
+                    ? { action: 'write_file', path: immutableRequest.path, content }
+                    : { action: 'create_file', path: immutableRequest.path, content, overwrite: false }),
+            });
+            if (writeResult?.success === false) {
+                throw new Error(responseFailure(writeResult, 'Home Assistant rejected the file write'));
+            }
+        } else {
+            operation.update({
+                message: `Step 2 of ${stepCount}: exact automation already present; skipping write...`,
+                percent: Math.round(100 / stepCount),
+                detail: 'Retry did not duplicate the automation.',
+            });
+        }
+
+        if (immutableRequest.mode === 'new' || alreadyWritten) {
+            operation.update({
+                message: immutableRequest.mode === 'new'
+                    ? 'Step 3 of 3: reloading automations...'
+                    : 'Step 2 of 2: retrying the automation reload...',
+                percent: immutableRequest.mode === 'new' ? 67 : 50,
+            });
+            const reloadResult = await fetchWithAuth(API_BASE, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action: 'reload_automations' }),
             });
-        } catch (_) { /* non-fatal */ }
-        showToast(`Automation saved to ${path} and reloaded!`, 'success', 6000);
-    } catch (e) {
-        showToast(`Save failed: ${e.message}`, 'error');
+            if (reloadResult?.success === false) {
+                const message = responseFailure(reloadResult, 'Automation reload was rejected');
+                operation.fail('File saved, but automations could not be reloaded', message, {
+                    detail: `${immutableRequest.path} already contains the automation. Retry will skip the write and retry only the reload.`,
+                });
+                showToast(`Saved ${immutableRequest.path}, but reload failed: ${message}`, 'error');
+                return false;
+            }
+        }
+
+        operation.finish('Automation saved and loaded', {
+            detail: alreadyWritten
+                ? 'The existing matching file was retained and automations were reloaded.'
+                : immutableRequest.path,
+        });
+        showToast(`Automation saved to ${immutableRequest.path} and loaded!`, 'success', 6000);
+        return true;
+    } catch (error) {
+        operation.fail('Automation could not be saved', error.message, {
+            detail: 'The write outcome may be ambiguous after a connection failure. Retry checks the destination before writing and will not duplicate an exact match.',
+        });
+        showToast(`Save failed: ${error.message}`, 'error');
+        return false;
     }
 }
 

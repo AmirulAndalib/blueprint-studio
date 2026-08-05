@@ -6,9 +6,11 @@
 
 import { state, elements } from '../state.js';
 import { eventBus } from '../event-bus.js';
+import { fetchWithAuth } from '../api.js';
+import { API_BASE } from '../constants.js';
 import { triggerUpload, triggerFolderUpload, downloadFolder, downloadFileByPath, handleFileUpload, handleFolderUpload } from '../downloads-uploads.js';
 import { setThemePreset } from '../ui.js';
-import { saveSettings, updateShowHiddenButton } from '../settings.js?v=2.5.75';
+import { saveSettings, updateShowHiddenButton } from '../settings.js?v=2.5.188';
 import { renderFileTree, debouncedRenderFileTree, cancelPendingSearch, updateExplorerSearchUI, updateExplorerFilterIcon } from '../file-tree.js';
 import { updateSearchHighlights, updateMatchStatus, doReplace, doReplaceAll, doFind, openSearchWidget } from '../search.js';
 import { downloadCurrentFile } from '../downloads-uploads.js';
@@ -16,69 +18,49 @@ import { setToolbarControlLabel, updateToolbarState } from '../toolbar.js';
 import { copyToClipboard as copyToClipboardUtil, getTruePath as getTruePath, enableLongPressContextMenu } from '../utils.js';
 
 import { validateByFileType } from '../file-operations.js';
-import { showModal } from '../ui.js';
 import { t } from '../translations.js';
+import { initProblems, publishValidationResult, setValidationRunning } from '../problems.js?v=2.5.188';
+import { startOperationFeedback, updateOperationFeedback } from '../feedback-service.js?v=2.5.188';
 
 import { performGlobalSearch, performGlobalReplace, triggerGlobalSearch, initGlobalSearchWindowFunctions } from '../global-search.js';
 import { toggleMarkdownPreview, renderAssetPreview, cleanupMarkdownPreview, handleMarkdownChange } from '../asset-preview.js';
-import { toggleTerminal } from '../terminal.js?v=2.5.75';
-import { toggleAISidebar, sendAIChatMessage, updateAIVisibility } from '../ai-ui.js?v=2.5.75';
+import { toggleTerminal } from '../terminal.js?v=2.5.188';
+import { toggleAISidebar, sendAIChatMessage, updateAIVisibility } from '../ai-ui.js?v=2.5.188';
 
 import { updateBreadcrumb, expandFolderInTree } from '../breadcrumb.js';
 import { showUserGuide } from '../user-guide.js';
 import { closeDialog, openDialog } from '../dialog-manager.js';
 // Removed redundant import: import { renderAssetPreview } from '../asset-preview.js';
 
-/**
- * Helper function to escape HTML
- */
-function escapeHtml(text) {
-    const map = {
-        '&': '&amp;',
-        '<': '&lt;',
-        '>': '&gt;',
-        '"': '&quot;',
-        "'": '&#039;'
-    };
-    return text.replace(/[&<>"']/g, m => map[m]);
-}
-
-/**
- * Helper function to format validation results
- */
-function formatValidationResults(items, isWarnings) {
-    if (!items || items.length === 0) {
-        return '<div style="color: gray;">No issues found</div>';
+async function runGithubSupportAction({ action, label, target, successToast, fallbackUrl }) {
+    const operation = startOperationFeedback({
+        label,
+        icon: action === 'github_star' ? 'star' : 'person_add',
+        scope: 'GitHub account',
+        target,
+        message: 'Sending request to GitHub...',
+        retry: () => runGithubSupportAction({ action, label, target, successToast, fallbackUrl }),
+        openLabel: 'Open GitHub',
+        openIcon: 'open_in_new',
+        open: () => window.open(fallbackUrl, '_blank'),
+    });
+    try {
+        const response = await fetchWithAuth(API_BASE, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action }),
+        });
+        if (!response?.success) throw new Error(response?.message || response?.error || 'GitHub rejected the request');
+        operation.finish(response.message || `${label} complete`);
+        if (functions.showToast) functions.showToast(t(successToast), 'success');
+        if (elements.modalSupportOverlay) closeDialog(elements.modalSupportOverlay);
+        return true;
+    } catch (error) {
+        const message = error?.message || String(error);
+        operation.fail(`${label} failed`, message);
+        window.open(fallbackUrl, '_blank');
+        return false;
     }
-
-    const htmlItems = items.map((item, idx) => {
-        const severity = isWarnings ? 'ℹ️' : '❌';
-        const lineInfo = item.line ? `Line ${item.line}${item.column ? `, Col ${item.column}` : ''}` : '';
-        const typeLabel = item.type ? `[${item.type}]` : '';
-
-        let html = `
-          <div style="margin-bottom: 15px; padding: 10px; background: var(--bg-tertiary); border-left: 3px solid ${isWarnings ? '#FFA500' : '#FF6B6B'}; border-radius: 4px;">
-            <div style="font-weight: bold; margin-bottom: 5px;">
-              ${severity} ${item.message}
-            </div>
-            <div style="font-size: 0.85em; color: var(--text-secondary); margin-bottom: 5px;">
-              ${lineInfo} ${typeLabel}
-            </div>
-        `;
-
-        if (item.solution) {
-            html += `<div style="margin-bottom: 5px;"><strong>Fix:</strong> ${escapeHtml(item.solution)}</div>`;
-        }
-
-        if (item.example) {
-            html += `<div style="background: var(--bg-secondary); padding: 5px; border-radius: 3px; font-family: monospace; font-size: 0.8em; margin-top: 5px;"><strong>Example:</strong> ${escapeHtml(item.example)}</div>`;
-        }
-
-        html += '</div>';
-        return html;
-    }).join('');
-
-    return `<div style="max-height: 400px; overflow-y: auto;">${htmlItems}</div>`;
 }
 
 /**
@@ -86,9 +68,64 @@ function formatValidationResults(items, isWarnings) {
  */
 async function performValidation() {
     if (state.activeTab) {
+        const validatedTab = state.activeTab;
+        const validatedEditor = state.editor;
+        const cursor = validatedEditor?.getCursor();
+        const selections = validatedEditor?.listSelections?.();
+        const scroll = validatedEditor?.getScrollInfo();
         const fileName = state.activeTab.path.split('/').pop();
         const fileExt = fileName.match(/\\.(\\w+)$/i)?.[1]?.toLowerCase() || 'unknown';
-        const result = await validateByFileType(fileName, state.activeTab.content);
+        const operationId = window.crypto?.randomUUID?.() || `validation-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        const openValidatedFile = async () => {
+            await Promise.all(eventBus.emit('file:open', { path: validatedTab.path }).filter(Boolean));
+        };
+        const retryValidation = async () => {
+            await openValidatedFile();
+            await performValidation();
+        };
+        const restoreValidatedView = () => {
+            if (state.activeTab !== validatedTab || state.editor !== validatedEditor) return;
+            if (selections?.length) validatedEditor?.setSelections(selections);
+            else if (cursor) validatedEditor?.setCursor(cursor);
+            if (scroll) validatedEditor?.scrollTo(scroll.left, scroll.top);
+        };
+        const operationBase = {
+            label: `Validate ${fileName}`,
+            icon: 'fact_check',
+            scope: 'Document',
+            target: validatedTab.path,
+        };
+        updateOperationFeedback(operationId, {
+            ...operationBase,
+            status: 'running',
+            message: `Checking ${fileName}...`,
+        });
+        setValidationRunning(state.activeTab.path);
+        let result;
+        try {
+            result = await validateByFileType(fileName, state.activeTab.content);
+        } catch (error) {
+            const message = error?.message || 'Validation could not be completed.';
+            updateOperationFeedback(operationId, {
+                ...operationBase,
+                icon: 'error',
+                status: 'error',
+                message: 'Validation failed to run',
+                failureDetail: message,
+                actions: [
+                    { label: 'Retry', icon: 'refresh', primary: true, callback: retryValidation },
+                    { label: 'Open', icon: 'open_in_new', callback: openValidatedFile },
+                ],
+            });
+            if (functions.showToast) functions.showToast(message, 'error', 0);
+            restoreValidatedView();
+            return { valid: false, error: message };
+        }
+        const findings = publishValidationResult({
+            fileName: validatedTab.path,
+            result,
+            editor: state.activeTab === validatedTab && state.editor === validatedEditor ? validatedEditor : null,
+        });
 
         // Map extensions to display labels
         const fileTypeLabel = {
@@ -100,57 +137,54 @@ async function performValidation() {
         }[fileExt] || t("common.file") || 'File';
 
         if (result.valid) {
-            if (functions.showToast) functions.showToast(t("toast.file_is_valid", { type: fileTypeLabel }), "success");
+            updateOperationFeedback(operationId, {
+                ...operationBase,
+                icon: result.warnings?.length ? 'warning_amber' : 'check_circle',
+                status: 'done',
+                message: result.warnings?.length
+                    ? `Valid with ${result.warnings.length} warning(s)`
+                    : `${fileName} is valid`,
+                actions: [{ label: 'Open', icon: 'open_in_new', callback: openValidatedFile }],
+            });
+            eventBus.emit('editor:operation-result', {
+                status: result.warnings?.length ? 'warning' : 'success',
+                title: result.warnings?.length ? `Valid with ${result.warnings.length} warning(s)` : `${fileTypeLabel} is valid`,
+                message: `${fileName} passed ${fileTypeLabel} validation.`,
+            });
 
-            // Show warnings if any (even though valid)
-            if (result.warnings && result.warnings.length > 0) {
-                if (functions.showToast) {
-                    functions.showToast(
-                        t("toast.best_practice_found", { count: result.warning_count }),
-                        "info",
-                        5000,
-                        {
-                            text: t("toast.view"),
-                            callback: async () => {
-                                const warningHtml = formatValidationResults(result.warnings, true);
-                                await showModal({
-                                    title: t("modal.best_practices_title", { type: fileTypeLabel }),
-                                    message: warningHtml,
-                                    confirmText: t("modal.ok"),
-                                    isDanger: false
-                                });
-                            }
-                        }
-                    );
-                }
-            }
         } else {
             const errorToastMsg = result.error_count
                 ? t("toast.validation_errors_count", { type: fileTypeLabel, count: result.error_count })
                 : t("toast.validation_error_generic", { type: fileTypeLabel });
 
-            if (functions.showToast) {
-                functions.showToast(errorToastMsg, "error", 0, {
-                    text: t("toast.view_details"),
-                    callback: async () => {
-                        // Create formatted error display
-                        const errorHtml = formatValidationResults(result.errors || [], false);
-                        const fallbackHtml = result.error
-                            ? `<div style="color: red;">${escapeHtml(result.error)}</div>`
-                            : errorHtml;
-
-                        await showModal({
-                            title: t("modal.validation_errors_title", { type: fileTypeLabel }),
-                            message: fallbackHtml,
-                            confirmText: t("modal.ok"),
-                            isDanger: true
-                        });
-                    }
-                });
-            }
+            const failureDetail = [result.error, ...(result.errors || []).map(item => {
+                const location = item.line ? `Line ${item.line}${item.column ? `:${item.column}` : ''}: ` : '';
+                return `${location}${item.message || item.error || String(item)}`;
+            })].filter(Boolean).join('\n');
+            updateOperationFeedback(operationId, {
+                ...operationBase,
+                icon: 'error',
+                status: 'error',
+                message: `${findings.length || result.error_count || 1} issue(s) found`,
+                failureDetail: failureDetail || errorToastMsg,
+                actions: [
+                    { label: 'Retry', icon: 'refresh', primary: true, callback: retryValidation },
+                    { label: 'Open', icon: 'open_in_new', callback: openValidatedFile },
+                ],
+            });
+            if (functions.showToast) functions.showToast(errorToastMsg, "error", 0);
+            eventBus.emit('editor:operation-result', {
+                status: 'error',
+                title: `${fileTypeLabel} validation failed`,
+                message: result.error || `${findings.length || result.error_count || 1} issue(s) found in ${fileName}.`,
+            });
         }
+        restoreValidatedView();
+        return result;
     } else {
         if (functions.showToast) functions.showToast(t("toast.no_file_open"), "warning");
+        eventBus.emit('editor:operation-result', { status: 'warning', title: 'Validation unavailable', message: 'Open an editable file first.' });
+        return { valid: false, reason: 'no-file' };
     }
 }
 
@@ -216,6 +250,7 @@ let functions = {
  */
 export function initUICoordinator(callbacks) {
     functions = { ...functions, ...callbacks };
+    initProblems();
 
     // Initialize global search window functions (legacy onclick support)
     initGlobalSearchWindowFunctions();
@@ -438,9 +473,9 @@ export function initUICoordinator(callbacks) {
         }
     });
 
-    eventBus.on("ui:toggle-ai-sidebar", () => {
+    eventBus.on("ui:toggle-ai-sidebar", (forceVisible) => {
         if (functions.toggleAISidebar) {
-            functions.toggleAISidebar();
+            functions.toggleAISidebar(forceVisible);
         } else {            console.warn("[UICoordinator] toggleAISidebar implementation not registered");
         }
     });
@@ -451,7 +486,8 @@ export function initUICoordinator(callbacks) {
 
     // File Actions
     eventBus.on("file:format", () => {
-        if (functions.formatCode) functions.formatCode();
+        if (functions.formatCode) return functions.formatCode();
+        return null;
     });
 
     // Tab Drag & Drop
@@ -501,6 +537,11 @@ export function initUICoordinator(callbacks) {
     // Theme toggle
     if (elements.themeToggle) {
         const themeMenuItems = Array.from(document.querySelectorAll(".theme-menu-item"));
+        // Keep the popup outside the scrollable status bar so desktop, mobile,
+        // and composited themes cannot clip its fixed-position layer.
+        if (elements.themeMenu?.parentElement !== document.body) {
+            document.body.appendChild(elements.themeMenu);
+        }
         themeMenuItems.forEach(item => {
             item.setAttribute("role", "menuitemradio");
             item.setAttribute("tabindex", "-1");
@@ -601,8 +642,15 @@ export function initUICoordinator(callbacks) {
     }
 
     if (elements.sidebarOverlay) {
+        const closeActiveDrawer = () => {
+            if (state.aiSidebarVisible && functions.toggleAISidebar) {
+                functions.toggleAISidebar(false);
+            } else if (functions.hideSidebar) {
+                functions.hideSidebar();
+            }
+        };
         elements.sidebarOverlay.addEventListener("click", () => {
-            if (functions.hideSidebar) functions.hideSidebar();
+            closeActiveDrawer();
         });
         // Also handle touchstart so the overlay closes the sidebar immediately on
         // mobile without waiting for the synthetic click event. This is needed on
@@ -610,7 +658,7 @@ export function initUICoordinator(callbacks) {
         // can delay or swallow the click event on iOS Safari.
         elements.sidebarOverlay.addEventListener("touchstart", (e) => {
             e.preventDefault(); // prevent ghost click
-            if (functions.hideSidebar) functions.hideSidebar();
+            closeActiveDrawer();
         }, { passive: false });
     }
 
@@ -854,15 +902,13 @@ export function initUICoordinator(callbacks) {
             const isGitEnabled = localStorage.getItem("gitIntegrationEnabled") !== "false";
             if (isGitEnabled) {
                 e.preventDefault();
-                try {
-                    const res = await fetchWithAuth(API_BASE, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "github_star" }) });
-                    if (res.success) {
-                        if (functions.showToast) functions.showToast(t("toast.github_star_success"), "success");
-                        if (elements.modalSupportOverlay) closeDialog(elements.modalSupportOverlay);
-                    } else {
-                        window.open(elements.btnGithubStar.href, '_blank');
-                    }
-                } catch (err) { window.open(elements.btnGithubStar.href, '_blank'); }
+                await runGithubSupportAction({
+                    action: 'github_star',
+                    label: 'Star Blueprint Studio',
+                    target: 'ha-china/blueprint-studio',
+                    successToast: 'toast.github_star_success',
+                    fallbackUrl: elements.btnGithubStar.href,
+                });
             }
         });
     }
@@ -872,15 +918,13 @@ export function initUICoordinator(callbacks) {
             const isGitEnabled = localStorage.getItem("gitIntegrationEnabled") !== "false";
             if (isGitEnabled) {
                 e.preventDefault();
-                try {
-                    const res = await fetchWithAuth(API_BASE, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "github_follow" }) });
-                    if (res.success) {
-                        if (functions.showToast) functions.showToast(t("toast.github_follow_success"), "success");
-                        if (elements.modalSupportOverlay) closeDialog(elements.modalSupportOverlay);
-                    } else {
-                        window.open(elements.btnGithubFollow.href, '_blank');
-                    }
-                } catch (err) { window.open(elements.btnGithubFollow.href, '_blank'); }
+                await runGithubSupportAction({
+                    action: 'github_follow',
+                    label: 'Follow Blueprint Studio author',
+                    target: 'soulripper13',
+                    successToast: 'toast.github_follow_success',
+                    fallbackUrl: elements.btnGithubFollow.href,
+                });
             }
         });
     }
@@ -1176,6 +1220,11 @@ if (btnCollapseSearch) {
 
 // Search Mode Tabs
 const searchModeTabs = Array.from(document.querySelectorAll('.search-mode-tab'));
+const updateGlobalSearchScopeUI = (mode) => {
+    if (!elements.globalSearchInput) return;
+    elements.globalSearchInput.placeholder = t(`search.placeholder_${mode}`);
+    elements.globalSearchInput.setAttribute('aria-label', t(`search.label_${mode}`));
+};
 const activateSearchModeTab = (tab, moveFocus = false) => {
     searchModeTabs.forEach(item => {
         const selected = item === tab;
@@ -1183,6 +1232,7 @@ const activateSearchModeTab = (tab, moveFocus = false) => {
         item.setAttribute('aria-selected', String(selected));
         item.tabIndex = selected ? 0 : -1;
     });
+    updateGlobalSearchScopeUI(tab.dataset.mode || 'all');
     if (moveFocus) tab.focus();
     if (functions.triggerGlobalSearch) functions.triggerGlobalSearch();
 };

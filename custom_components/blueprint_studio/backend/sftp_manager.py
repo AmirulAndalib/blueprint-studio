@@ -26,6 +26,10 @@ from .zip_utils import is_macos_zip_metadata, safe_zip_member_path
 from .operation_tracker import TransferRegistry
 
 
+class ZipCancelled(Exception):
+    """Raised when an SFTP ZIP producer observes a cancel request."""
+
+
 def _is_text_file(filename: str) -> bool:
     """Return True if the file extension is considered a text/edit-able file."""
     ext = os.path.splitext(filename)[1].lower()
@@ -40,6 +44,9 @@ def _sftp_safe_exec(operation: str, operation_func: Callable) -> dict:
     """Unified SFTP operation executor - eliminates 70+ lines of try/except/finally."""
     try:
         return operation_func()
+    except ZipCancelled as exc:
+        _LOGGER.debug("SFTP %s cancelled", operation)
+        return {"success": False, "cancelled": True, "message": str(exc)}
     except Exception as exc:
         _LOGGER.error("SFTP %s failed: %s", operation, exc)
         return {"success": False, "message": str(exc)}
@@ -198,8 +205,8 @@ class SftpManager:
             "pooled_connections": pooled_connections,
             "stream_tokens": stream_tokens,
             "progress": {
-                "running": sum(item.get("status") == "running" for item in progress),
-                "completed": sum(item.get("status") in {"done", "error"} for item in progress),
+                "running": sum(item.get("status") in {"running", "cancelling"} for item in progress),
+                "completed": sum(item.get("status") in {"done", "error", "cancelled"} for item in progress),
                 "total": len(progress),
                 "retention_seconds": PROGRESS_RETENTION_SECONDS,
                 "maximum_entries": MAX_PROGRESS_ENTRIES,
@@ -208,7 +215,7 @@ class SftpManager:
 
     # -- streaming tokens ----------------------------------------------------
 
-    def create_stream_token(self, host: str, port: int, username: str, auth: dict, path: str, stream_type: str = "file", progress_id: str | None = None) -> dict:
+    def create_stream_token(self, host: str, port: int, username: str, auth: dict, path: str = "", stream_type: str = "file", progress_id: str | None = None, paths: list[str] | None = None) -> dict:
         """Create a short-lived opaque token for GET-based media streaming."""
         token = secrets.token_urlsafe(32)
         expires_at = time.monotonic() + self._stream_token_ttl
@@ -226,6 +233,7 @@ class SftpManager:
                 "username": username,
                 "auth": auth,
                 "path": path,
+                "paths": list(paths or []),
                 "type": stream_type,
                 "progress_id": progress_id,
                 "expires_at": expires_at,
@@ -234,7 +242,7 @@ class SftpManager:
             "success": True,
             "stream_id": token,
             "expires_in": self._stream_token_ttl,
-            "mime_type": "application/zip" if stream_type == "folder_zip" else mimetypes.guess_type(path)[0] or "application/octet-stream",
+            "mime_type": "application/zip" if stream_type in {"folder_zip", "selected_zip"} else mimetypes.guess_type(path)[0] or "application/octet-stream",
         }
 
     def get_stream_token(self, token: str) -> dict | None:
@@ -710,12 +718,102 @@ class SftpManager:
 
             return {"success": True}
         result = _sftp_safe_exec("stream_folder_zip", op)
-        if not result.get("success"):
+        if result.get("cancelled"):
+            self._cancel_zip_progress(progress_id)
+        elif not result.get("success"):
             self._fail_zip_progress(progress_id, result.get("message", "SFTP folder ZIP stream failed"))
         return result
 
+    def stream_selected_zip(self, host: str, port: int, username: str, auth: dict, paths: list[str], write_chunk: Callable[[bytes], None], progress_id: str | None = None) -> dict:
+        """Write selected remote files and folders to a streaming ZIP."""
+        def op():
+            import zipfile
+
+            class _ChunkWriter:
+                def __init__(self, callback):
+                    self._callback = callback
+                    self._position = 0
+
+                def write(self, data):
+                    if data:
+                        self._callback(data)
+                        self._position += len(data)
+                    return len(data)
+
+                def tell(self):
+                    return self._position
+
+                def flush(self):
+                    return None
+
+            normalized: list[str] = []
+            for raw_path in paths:
+                path = posixpath.normpath(raw_path)
+                if not path.startswith("/"):
+                    path = "/" + path
+                if path == "/" or path in normalized:
+                    continue
+                if any(path.startswith(parent.rstrip("/") + "/") for parent in normalized):
+                    continue
+                normalized = [child for child in normalized if not child.startswith(path.rstrip("/") + "/")]
+                normalized.append(path)
+            if not normalized:
+                return {"success": False, "message": "No remote items selected", "status_code": 400}
+
+            common_parent = posixpath.commonpath([posixpath.dirname(path) for path in normalized])
+            self._start_zip_progress(progress_id, "selected-items.zip")
+            with self._get_connection(host, port, username, auth) as (_, sftp):
+                with zipfile.ZipFile(_ChunkWriter(write_chunk), "w", zipfile.ZIP_DEFLATED) as zf:
+                    for path in normalized:
+                        attr = sftp.stat(path)
+                        archive_path = posixpath.relpath(path, common_parent)
+                        if archive_path in {"", "."} or archive_path.startswith("../"):
+                            archive_path = posixpath.basename(path)
+                        if stat.S_ISDIR(attr.st_mode):
+                            self._zip_remote_entry_stream(sftp, path, archive_path, zf, progress_id)
+                        else:
+                            self._zip_remote_file_stream(sftp, path, archive_path, zf, progress_id)
+            self._finish_zip_progress(progress_id)
+            return {"success": True}
+
+        result = _sftp_safe_exec("stream_selected_zip", op)
+        if result.get("cancelled"):
+            self._cancel_zip_progress(progress_id)
+        elif not result.get("success"):
+            self._fail_zip_progress(progress_id, result.get("message", "SFTP selected ZIP stream failed"))
+        return result
+
+    def _zip_remote_entry_stream(self, sftp, remote_path: str, archive_path: str, zf, progress_id: str | None = None) -> None:
+        self._check_zip_cancelled(progress_id)
+        entries = sftp.listdir_attr(remote_path)
+        if not entries:
+            zf.writestr(archive_path.rstrip("/") + "/", b"")
+            return
+        for entry in entries:
+            self._check_zip_cancelled(progress_id)
+            child_remote = posixpath.join(remote_path, entry.filename)
+            child_archive = posixpath.join(archive_path, entry.filename)
+            if stat.S_ISDIR(entry.st_mode):
+                self._zip_remote_entry_stream(sftp, child_remote, child_archive, zf, progress_id)
+            else:
+                self._zip_remote_file_stream(sftp, child_remote, child_archive, zf, progress_id)
+
+    def _zip_remote_file_stream(self, sftp, remote_path: str, archive_path: str, zf, progress_id: str | None = None) -> None:
+        self._update_zip_progress(progress_id, current_file=archive_path)
+        with sftp.open(remote_path, "rb") as remote_fh:
+            with zf.open(archive_path, "w") as zip_fh:
+                while True:
+                    self._check_zip_cancelled(progress_id)
+                    chunk = remote_fh.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    zip_fh.write(chunk)
+                    self._update_zip_progress(progress_id, bytes_delta=len(chunk))
+        self._update_zip_progress(progress_id, files_delta=1)
+
     def _zip_remote_dir_stream(self, sftp, base_path: str, current_path: str, zf, progress_id: str | None = None):
         """Recursively add remote directory contents to a streaming ZipFile."""
+        self._check_zip_cancelled(progress_id)
         try:
             entries = sftp.listdir_attr(current_path)
         except Exception as e:
@@ -729,6 +827,7 @@ class SftpManager:
             return
 
         for entry in entries:
+            self._check_zip_cancelled(progress_id)
             full_path = current_path.rstrip("/") + "/" + entry.filename
             rel_path = os.path.relpath(full_path, os.path.dirname(base_path)).replace("\\", "/")
             if stat.S_ISDIR(entry.st_mode):
@@ -740,12 +839,15 @@ class SftpManager:
                 with sftp.open(full_path, "rb") as remote_fh:
                     with zf.open(rel_path, "w") as zip_fh:
                         while True:
+                            self._check_zip_cancelled(progress_id)
                             chunk = remote_fh.read(1024 * 1024)
                             if not chunk:
                                 break
                             zip_fh.write(chunk)
                             self._update_zip_progress(progress_id, bytes_delta=len(chunk))
                 self._update_zip_progress(progress_id, files_delta=1)
+            except ZipCancelled:
+                raise
             except Exception as e:
                 _LOGGER.warning("Skipping file %s in stream_folder_zip: %s", full_path, e)
 
@@ -757,7 +859,7 @@ class SftpManager:
                 for progress_id, progress in self._zip_progress.items()
                 if now - progress.get("updated_at", 0) > (
                     ACTIVE_PROGRESS_RETENTION_SECONDS
-                    if progress.get("status") == "running"
+                    if progress.get("status") in {"running", "cancelling"}
                     else PROGRESS_RETENTION_SECONDS
                 )
             ]
@@ -767,7 +869,7 @@ class SftpManager:
             while len(self._zip_progress) >= MAX_PROGRESS_ENTRIES:
                 completed = {
                     key: value for key, value in self._zip_progress.items()
-                    if value.get("status") != "running"
+                    if value.get("status") not in {"running", "cancelling"}
                 }
                 candidates = completed or self._zip_progress
                 oldest = min(candidates, key=lambda key: candidates[key].get("updated_at", 0))
@@ -779,16 +881,62 @@ class SftpManager:
         self._cleanup_zip_progress()
         now = time.monotonic()
         with self._zip_progress_lock:
+            existing = self._zip_progress.get(progress_id)
+            cancel_requested = bool(existing and existing.get("cancel_requested"))
             self._zip_progress[progress_id] = {
                 "success": True,
-                "status": "running",
+                "status": "cancelling" if cancel_requested else "running",
                 "filename": filename,
                 "files_done": 0,
                 "bytes_done": 0,
                 "current_file": "",
                 "started_at": now,
                 "updated_at": now,
+                "cancel_requested": cancel_requested,
             }
+
+    def request_zip_cancel(self, progress_id: str | None) -> dict:
+        """Request cooperative cancellation, including before a stream starts."""
+        if not progress_id:
+            return {"success": False, "message": "Missing progress_id", "status_code": 400}
+        self._cleanup_zip_progress()
+        now = time.monotonic()
+        with self._zip_progress_lock:
+            progress = self._zip_progress.setdefault(progress_id, {
+                "success": True,
+                "status": "cancelling",
+                "filename": "",
+                "files_done": 0,
+                "bytes_done": 0,
+                "current_file": "",
+                "started_at": now,
+            })
+            if progress.get("status") in {"done", "error", "cancelled"}:
+                return {"success": False, "message": "ZIP transfer is no longer running", "status_code": 409}
+            progress["cancel_requested"] = True
+            progress["status"] = "cancelling"
+            progress["message"] = "Cancelling ZIP generation..."
+            progress["updated_at"] = now
+        return {"success": True, "status": "cancelling"}
+
+    def _check_zip_cancelled(self, progress_id: str | None) -> None:
+        if not progress_id:
+            return
+        with self._zip_progress_lock:
+            progress = self._zip_progress.get(progress_id)
+            if progress and progress.get("cancel_requested"):
+                raise ZipCancelled("ZIP generation cancelled")
+
+    def _cancel_zip_progress(self, progress_id: str | None) -> None:
+        if not progress_id:
+            return
+        with self._zip_progress_lock:
+            progress = self._zip_progress.get(progress_id)
+            if progress:
+                progress["status"] = "cancelled"
+                progress["message"] = "ZIP download cancelled"
+                progress["current_file"] = ""
+                progress["updated_at"] = time.monotonic()
 
     def _update_zip_progress(self, progress_id: str | None, *, current_file: str | None = None, bytes_delta: int = 0, files_delta: int = 0) -> None:
         if not progress_id:
@@ -811,7 +959,11 @@ class SftpManager:
         with self._zip_progress_lock:
             progress = self._zip_progress.get(progress_id)
             if progress:
-                progress["status"] = "done"
+                if progress.get("cancel_requested"):
+                    progress["status"] = "cancelled"
+                    progress["message"] = "ZIP download cancelled"
+                else:
+                    progress["status"] = "done"
                 progress["current_file"] = ""
                 progress["updated_at"] = time.monotonic()
 

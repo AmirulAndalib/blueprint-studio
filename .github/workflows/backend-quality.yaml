@@ -27,6 +27,11 @@ jobs:
           custom_components/blueprint_studio/backend/ticket_manager.py
           custom_components/blueprint_studio/backend/operation_tracker.py
           custom_components/blueprint_studio/backend/reliability.py
+          custom_components/blueprint_studio/backend/ai_context.py
+          custom_components/blueprint_studio/backend/ai_grounding.py
+          custom_components/blueprint_studio/backend/ai_proposals.py
+          custom_components/blueprint_studio/backend/ai_transport.py
+          custom_components/blueprint_studio/backend/ha_metadata.py
           tests/test_generated_transfers.py
           tests/test_git_process_contract.py
           tests/test_security_boundaries.py
@@ -40,7 +45,14 @@ jobs:
           custom_components/blueprint_studio/backend/ticket_manager.py
           custom_components/blueprint_studio/backend/operation_tracker.py
           custom_components/blueprint_studio/backend/reliability.py
+          custom_components/blueprint_studio/backend/ai_context.py
+          custom_components/blueprint_studio/backend/ai_grounding.py
+          custom_components/blueprint_studio/backend/ai_proposals.py
+          custom_components/blueprint_studio/backend/ai_transport.py
+          custom_components/blueprint_studio/backend/ha_metadata.py
       - name: Unit and Home Assistant integration tests
         run: pytest
+      - name: Frontend autocomplete and YAML context tests
+        run: node tests/js/autocomplete_context.mjs
       - name: Bytecode compilation
         run: python -m compileall -q custom_components/blueprint_studio

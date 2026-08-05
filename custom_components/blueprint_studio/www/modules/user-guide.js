@@ -399,26 +399,34 @@ const guideContent = [
             <h2>AI Providers</h2>
             <ul>
                 <li><strong>Rule-based (Built-in):</strong> Pattern matching templates. No setup, no internet, no API key needed. Good for basic tasks.</li>
-                <li><strong>Local AI:</strong> Connect to a locally-running model server. Completely private — no data leaves your network.
+                <li><strong>Local endpoint:</strong> Connect to a model server you control. Data stays on your network only when the configured endpoint is on that network.
                     <ul>
-                        <li><strong>Ollama:</strong> Default URL <code>http://localhost:11434</code>. Run <code>ollama run codellama:7b</code> to get started.</li>
+                        <li><strong>Ollama:</strong> Default URL <code>http://localhost:11434</code>. Fetch the installed model list and choose the model you want to use.</li>
                         <li><strong>LM Studio:</strong> Default URL <code>http://localhost:1234</code>. Load any model in LM Studio and start the local server.</li>
                         <li><strong>Custom Endpoint:</strong> Any server with an OpenAI-compatible <code>/v1/chat/completions</code> API.</li>
                     </ul>
                 </li>
-                <li><strong>Cloud AI:</strong> High-performance models for complex tasks.
+                <li><strong>Cloud AI:</strong> Provider model catalogs are loaded at configuration time, so Blueprint Studio does not assume version-specific model IDs.
                     <ul>
-                        <li><strong>Google Gemini:</strong> Gemini 2.5 Pro/Flash</li>
-                        <li><strong>OpenAI:</strong> GPT-4 and newer models</li>
-                        <li><strong>Anthropic Claude:</strong> Claude Opus, Sonnet, Haiku</li>
+                        <li><strong>Google Gemini</strong></li>
+                        <li><strong>OpenAI-compatible providers</strong></li>
+                        <li><strong>Anthropic Claude</strong></li>
                     </ul>
                 </li>
             </ul>
 
             <div class="user-guide-tip">
                 <div class="user-guide-tip-title"><span class="ui-icon material-icons">lock</span> API Key Security</div>
-                Your API keys are stored locally within your Home Assistant instance. They are never transmitted to Blueprint Studio's servers. If you use Local AI, no data ever leaves your network at all.
+                Your API keys are stored within your Home Assistant instance and sent only to the configured provider endpoint. Blueprint Studio has no relay server.
             </div>
+
+            <h2>Completion, Validation, Generation, and AI</h2>
+            <ul>
+                <li><strong>Autocomplete:</strong> Uses the parsed YAML cursor path and live Home Assistant metadata. It does not contact an AI provider.</li>
+                <li><strong>Validation:</strong> Parses YAML and reports syntax, compatibility, and installed-instance findings. It does not contact an AI provider.</li>
+                <li><strong>Deterministic generation:</strong> Uses built-in rules and remains inside Blueprint Studio.</li>
+                <li><strong>External AI:</strong> Sends the boundary described before submission, then parses and validates any proposed YAML. File edits require before/after review and explicit Apply.</li>
+            </ul>
         `
     },
     {
@@ -643,7 +651,7 @@ const guideContent = [
                 <li>All editor libraries, fonts, and UI components</li>
                 <li>Developer Tools (talks directly to your HA API)</li>
                 <li>SFTP and terminal SSH credentials are used by your Home Assistant instance to connect to saved hosts</li>
-                <li>Local AI (Ollama / LM Studio) — stays entirely within your network</li>
+                <li>Local AI stays within your network when its configured endpoint is local</li>
             </ul>
 
             <h2>What Requires Internet</h2>
@@ -658,6 +666,15 @@ const guideContent = [
 
             <h2>API Key Storage</h2>
             <p>AI API keys are stored in your HA configuration storage on your server. They are never sent to Blueprint Studio's servers (which don't exist — this is a local custom component). Keys are transmitted only directly to the chosen AI provider's API.</p>
+
+            <h2>AI Data Boundaries</h2>
+            <ul>
+                <li><strong>Rule-based:</strong> The request and open file stay inside Blueprint Studio; no AI provider is contacted.</li>
+                <li><strong>Home Assistant agent:</strong> A bounded selected excerpt and relevant entity/action metadata go to the conversation agent configured in Home Assistant. That agent's own integration determines whether it makes a further network request.</li>
+                <li><strong>Local AI:</strong> A bounded selected excerpt and relevant metadata go only to the configured Ollama, LM Studio, or custom endpoint.</li>
+                <li><strong>Cloud AI:</strong> A bounded selected excerpt and relevant metadata go directly to the selected Gemini, OpenAI-compatible, or Anthropic endpoint.</li>
+            </ul>
+            <p>Likely credentials, tokens, passwords, secret references, and hidden-file content are removed before provider submission. Stable request placeholders have no restorable mapping in provider output. Prompts and file content are not retained in diagnostics.</p>
         `
     },
     {
@@ -808,7 +825,7 @@ function createUserGuideModal() {
     overlay.className = 'modal-overlay';
 
     overlay.innerHTML = `
-        <div class="modal user-guide-modal" role="dialog" aria-modal="true" aria-labelledby="user-guide-title">
+        <div class="modal user-guide-modal modal--full-workflow" role="dialog" aria-modal="true" aria-labelledby="user-guide-title">
             <div class="modal-header">
                 <div class="modal-title" id="user-guide-title">Blueprint Studio User Guide</div>
                 <button class="modal-close" id="btn-close-user-guide" type="button" aria-label="Close user guide">

@@ -16,6 +16,7 @@ export const state = {
   contentSearchResults: null,
   explorerSearchLoading: false,
   isMobile: window.innerWidth <= MOBILE_BREAKPOINT,
+  workspaceMode: "desktop",
   sidebarVisible: false,
   activeSidebarView: "explorer", // Current active sidebar view (explorer, search, source-control, sftp)
   terminalVisible: false, // Terminal panel state
@@ -35,6 +36,8 @@ export const state = {
   loadedDirectories: new Map(), // Cache: path -> {folders: [], files: []}
   loadingDirectories: new Set(), // Track which directories are currently loading
   failedDirectories: new Set(), // Paths whose lazy load failed; prevents spinner retry loops
+  directoryErrors: new Map(), // Path -> error message for retryable local tree states
+  localTreeViewState: { status: "idle", error: "" },
   // Folder navigation (NEW - for browse-style navigation)
   currentNavigationPath: "", // Current folder being viewed (empty = root)
   navigationHistory: [], // History stack for back button
@@ -54,7 +57,7 @@ export const state = {
   // Local AI Settings
   localAiProvider: "ollama", // "ollama" | "lm-studio" | "custom"
   ollamaUrl: "http://localhost:11434",
-  ollamaModel: "codellama:7b",
+  ollamaModel: "",
   lmStudioUrl: "http://localhost:1234",
   lmStudioModel: "",
   customAiUrl: "",
@@ -66,7 +69,7 @@ export const state = {
 
   // Cloud AI Settings
   cloudProvider: "gemini", // "gemini" | "openai" | "claude"
-  aiModel: "gemini-2.0-flash-exp",
+  aiModel: "",
   geminiApiKey: "",
   openaiApiKey: "",
   openaiBaseUrl: "",
@@ -133,6 +136,9 @@ export const state = {
   blueprintFormTabPath: null,    // Path of the tab that has the blueprint form open
   inlineExplorerEdit: null,      // Inline create/rename state for the file explorer
   aiChatHistory: [],             // Saved AI chat messages
+  aiTaskMode: "ask",             // Current assistant task mode
+  aiIncludeFileContext: true,    // Include active document or selection
+  aiIncludeMetadata: true,       // Include relevant Home Assistant metadata
   aiSidebarVisible: false,       // Is the AI sidebar open?
   _nextUploadTarget: null,       // Temporary target for next upload operation
   _nextFolderUploadTarget: null, // Temporary target for next folder upload operation
@@ -162,6 +168,7 @@ export const state = {
     orientation: 'vertical',  // 'vertical' or 'horizontal'
     primaryPaneSize: 50,      // Percentage (for resize)
     activePane: 'primary',    // 'primary' or 'secondary'
+    responsiveSinglePane: false, // Narrow-layout presentation; split state remains intact
     primaryTabs: [],          // Tab indices in primary pane
     secondaryTabs: [],        // Tab indices in secondary pane
     primaryActiveTab: null,   // Active tab in primary pane
@@ -186,6 +193,9 @@ export const state = {
     expandedFolders: new Set(),
     loadedDirectories: new Map(), // path -> {folders: [], files: []}
     loadingDirectories: new Set(), // paths currently being fetched
+    directoryErrors: new Map(), // path -> error message for expanded remote folders
+    viewStatus: "idle",
+    error: "",
   },
 
   // SSH Host field defaults for new hosts (Phase 1)
@@ -199,7 +209,7 @@ export const elements = {};
 
 // Git state needs to be shared too
 export const gitState = {
-    files: { modified: [], added: [], deleted: [], untracked: [], staged: [], unstaged: [] },
+    files: { modified: [], added: [], deleted: [], untracked: [], staged: [], unstaged: [], ignored: [] },
     isInitialized: false,
     hasRemote: false,
     currentBranch: "unknown",
@@ -212,10 +222,11 @@ export const gitState = {
     totalChanges: 0,
     collapsedGroups: new Set(),
     conflictFiles: [],
+    lastError: "",
 };
 
 export const giteaState = {
-    files: { modified: [], added: [], deleted: [], untracked: [], staged: [], unstaged: [] },
+    files: { modified: [], added: [], deleted: [], untracked: [], staged: [], unstaged: [], ignored: [] },
     isInitialized: false,
     hasRemote: false,
     currentBranch: "unknown",
@@ -228,4 +239,5 @@ export const giteaState = {
     totalChanges: 0,
     collapsedGroups: new Set(),
     conflictFiles: [],
+    lastError: "",
 };

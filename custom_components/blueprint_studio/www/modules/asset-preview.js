@@ -1,12 +1,43 @@
 /** ASSET-PREVIEW.JS | Purpose: * Handles preview rendering for non-code files including images, PDFs, videos, */
 import { state, elements } from './state.js';
-import { isSftpPath, parseSftpPath, sftpStreamUrl } from './sftp.js?v=2.5.75';
+import { isSftpPath, parseSftpPath, sftpStreamUrl } from './sftp.js?v=2.5.188';
 import { t } from './translations.js';
 import { eventBus } from './event-bus.js';
 import { copyToClipboard } from './utils.js';
-import { saveSettings } from './settings.js?v=2.5.75';
+import { saveSettings } from './settings.js?v=2.5.188';
 import { IMAGE_EXTENSIONS, AUDIO_EXTENSIONS } from './constants.js';
 import { urlWithTicket, serveFileUrl } from './api.js';
+
+const escapeHtml = (value) => String(value ?? '').replace(/[&<>\"']/g, (char) => ({
+  '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;', "'": '&#39;'
+}[char]));
+
+function renderPreviewState(container, { title, message, tone = 'secondary', actions = '' } = {}) {
+  container.classList.add('visible');
+  container.innerHTML = `<div class="asset-preview-state asset-preview-state--${tone}" role="status">
+    <span class="ui-icon material-icons asset-preview-state-icon" aria-hidden="true">${tone === 'error' ? 'error_outline' : tone === 'warning' ? 'insert_drive_file' : 'hourglass_top'}</span>
+    <strong>${escapeHtml(title)}</strong>
+    ${message ? `<p>${escapeHtml(message)}</p>` : ''}
+    ${actions ? `<div class="asset-preview-state-actions">${actions}</div>` : ''}
+  </div>`;
+}
+
+function renderUnsupportedPreview(tab, filename, previewContainer) {
+  const safeName = escapeHtml(filename);
+  renderPreviewState(previewContainer, {
+    title: 'Preview unavailable',
+    message: `${filename} is not a supported preview format.`,
+    tone: 'warning',
+    actions: `<button type="button" class="ui-button" id="asset-open-text">Open as text</button>
+      <button type="button" class="ui-button" id="asset-download">Download ${safeName}</button>`
+  });
+  previewContainer.querySelector('#asset-open-text')?.addEventListener('click', () => {
+    eventBus.emit('file:open', { path: tab.path, forceText: true });
+  });
+  previewContainer.querySelector('#asset-download')?.addEventListener('click', () => {
+    eventBus.emit('file:download-content', { filename, content: tab.content, isBase64: true, mimeType: tab.mimeType });
+  });
+}
 
 /**
  * Renders preview for binary assets (images, PDFs, videos)
@@ -17,30 +48,34 @@ export async function renderAssetPreview(tab, container = null) {
   const previewContainer = container || elements.assetPreview;
   if (!previewContainer) return;
 
-  // Temporarily swap elements.assetPreview to use the provided container
-  const originalPreview = elements.assetPreview;
-  elements.assetPreview = previewContainer;
-
   const filename = tab.path.split("/").pop();
 
-  if (tab.isImage) {
-    renderImagePreview(tab, filename);
-  } else if (tab.isPdf) {
-    renderPdfPreview(tab, filename);
-  } else if (tab.isVideo) {
-    await renderVideoPreview(tab, filename);
-  } else if (tab.isAudio) {
-    await renderAudioPreview(tab, filename);
-  }
+  renderPreviewState(previewContainer, { title: 'Loading preview', message: filename });
 
-  // Restore original elements.assetPreview
-  elements.assetPreview = originalPreview;
+  try {
+    if (tab.isImage) renderImagePreview(tab, filename, previewContainer);
+    else if (tab.isPdf) await renderPdfPreview(tab, filename, previewContainer);
+    else if (tab.isVideo) await renderVideoPreview(tab, filename, previewContainer);
+    else if (tab.isAudio) await renderAudioPreview(tab, filename, previewContainer);
+    else renderUnsupportedPreview(tab, filename, previewContainer);
+  } catch (error) {
+    console.error('Asset preview error:', error);
+    renderPreviewState(previewContainer, {
+      title: 'Preview failed',
+      message: error?.message || 'The file could not be decoded or loaded.',
+      tone: 'error',
+      actions: `<button type="button" class="ui-button" id="asset-download">Download ${escapeHtml(filename)}</button>`
+    });
+    previewContainer.querySelector('#asset-download')?.addEventListener('click', () => {
+      eventBus.emit('file:download-content', { filename, content: tab.content, isBase64: true, mimeType: tab.mimeType });
+    });
+  }
 }
 
 /**
  * Renders image preview with navigation
  */
-function renderImagePreview(tab, filename) {
+function renderImagePreview(tab, filename, previewContainer) {
   let imageFiles = [];
 
   if (isSftpPath(tab.path)) {
@@ -92,10 +127,10 @@ function renderImagePreview(tab, filename) {
   const prevImage = currentIndex > 0 ? imageFiles[currentIndex - 1] : null;
   const nextImage = currentIndex < imageFiles.length - 1 ? imageFiles[currentIndex + 1] : null;
 
-  elements.assetPreview.style.padding = "0";
+  previewContainer.style.padding = "0";
   const dataUrl = `data:${tab.mimeType};base64,${tab.content}`;
 
-  elements.assetPreview.innerHTML = `
+  previewContainer.innerHTML = `
     <div class="image-viewer-container" style="width: 100%; height: 100%; display: flex; flex-direction: column; background: var(--bg-tertiary);">
       <div class="pdf-toolbar" style="padding: 8px 16px; background: var(--bg-secondary); border-bottom: 1px solid var(--borderColor); display: flex; justify-content: space-between; align-items: center; height: 48px; flex-shrink: 0;">
         <div style="display: flex; align-items: center; gap: 8px;">
@@ -127,6 +162,18 @@ function renderImagePreview(tab, filename) {
     </div>
   `;
 
+  previewContainer.querySelector('img')?.addEventListener('error', () => {
+    renderPreviewState(previewContainer, {
+      title: 'Image could not be decoded',
+      message: filename,
+      tone: 'error',
+      actions: `<button type="button" class="ui-button" id="asset-download">Download ${escapeHtml(filename)}</button>`
+    });
+    previewContainer.querySelector('#asset-download')?.addEventListener('click', () => {
+      eventBus.emit('file:download-content', { filename, content: tab.content, isBase64: true, mimeType: tab.mimeType });
+    });
+  }, { once: true });
+
   if (prevImage) {
     document.getElementById("img-prev").addEventListener("click", () => {
       const currentTab = state.activeTab;
@@ -157,7 +204,7 @@ function renderImagePreview(tab, filename) {
   });
 
   const handleKeyNav = (e) => {
-    if (!document.body.contains(elements.assetPreview)) {
+    if (!document.body.contains(previewContainer)) {
       document.removeEventListener("keydown", handleKeyNav);
       return;
     }
@@ -183,8 +230,8 @@ function renderImagePreview(tab, filename) {
  * Renders PDF preview with page navigation using PDF.js
  * (Required because native <object> tags are often blocked by Home Assistant's sandbox)
  */
-async function renderPdfPreview(tab, filename) {
-  elements.assetPreview.style.padding = "0";
+async function renderPdfPreview(tab, filename, previewContainer) {
+  previewContainer.style.padding = "0";
 
   const binaryString = atob(tab.content);
   const bytes = new Uint8Array(binaryString.length);
@@ -196,7 +243,7 @@ async function renderPdfPreview(tab, filename) {
   const pdfjsLib = await import('/local/blueprint_studio/vendor/pdfjs/pdf.min.js');
   pdfjsLib.GlobalWorkerOptions.workerSrc = '/local/blueprint_studio/vendor/pdfjs/pdf.worker.min.js';
 
-  elements.assetPreview.innerHTML = `
+  previewContainer.innerHTML = `
     <div class="pdf-container" style="width: 100%; height: 100%; display: flex; flex-direction: column; background: var(--bg-tertiary);">
       <div class="pdf-toolbar" style="padding: 8px 16px; background: var(--bg-secondary); border-bottom: 1px solid var(--borderColor); display: flex; justify-content: space-between; align-items: center; height: 48px; flex-shrink: 0;">
         <div style="display: flex; align-items: center; gap: 8px;">
@@ -272,7 +319,15 @@ async function renderPdfPreview(tab, filename) {
     renderPage(pageNum);
   }).catch(err => {
     console.error('PDF.js error:', err);
-    elements.assetPreview.innerHTML = `<div style="padding: 40px; text-align: center; color: var(--error-color);">Failed to load PDF: ${err.message}</div>`;
+    renderPreviewState(previewContainer, {
+      title: 'PDF could not be decoded',
+      message: err.message,
+      tone: 'error',
+      actions: `<button type="button" class="ui-button" id="asset-download">Download ${escapeHtml(filename)}</button>`
+    });
+    previewContainer.querySelector('#asset-download')?.addEventListener('click', () => {
+      eventBus.emit('file:download-content', { filename, content: tab.content, isBase64: true, mimeType: tab.mimeType });
+    });
   });
 
   document.getElementById('pdf-prev').addEventListener('click', () => {
@@ -300,8 +355,8 @@ async function renderPdfPreview(tab, filename) {
 /**
  * Renders video preview with streaming URL (Range support).
  */
-async function renderVideoPreview(tab, filename) {
-  elements.assetPreview.style.padding = "0";
+async function renderVideoPreview(tab, filename, previewContainer) {
+  previewContainer.style.padding = "0";
 
   // SFTP files use a direct stream URL so the browser can request metadata/ranges.
   const isSftp = isSftpPath(tab.path);
@@ -317,8 +372,7 @@ async function renderVideoPreview(tab, filename) {
   } else {
     srcUrl = await urlWithTicket(serveFileUrl(tab.path));
   }
-
-  elements.assetPreview.innerHTML = `
+  previewContainer.innerHTML = `
     <div class="video-viewer-container" style="width: 100%; height: 100%; display: flex; flex-direction: column; background: var(--bg-tertiary);">
       <div class="pdf-toolbar" style="padding: 8px 16px; background: var(--bg-secondary); border-bottom: 1px solid var(--borderColor); display: flex; justify-content: space-between; align-items: center; height: 48px; flex-shrink: 0;">
         <div style="display: flex; align-items: center; gap: 8px;">
@@ -355,14 +409,19 @@ async function renderVideoPreview(tab, filename) {
       document.body.removeChild(a);
     });
   }
+  previewContainer.querySelector('video')?.addEventListener('error', () => {
+    renderPreviewState(previewContainer, {
+      title: 'Video preview unavailable', message: `${filename} could not be loaded by this browser.`, tone: 'error'
+    });
+  }, { once: true });
 }
 
 /**
  * Renders audio preview with streaming URL.
  * Uses direct SFTP stream URLs for browser Range support.
  */
-async function renderAudioPreview(tab, filename) {
-  elements.assetPreview.style.padding = "0";
+async function renderAudioPreview(tab, filename, previewContainer) {
+  previewContainer.style.padding = "0";
 
   const isSftp = isSftpPath(tab.path);
   let srcUrl;
@@ -378,7 +437,7 @@ async function renderAudioPreview(tab, filename) {
     srcUrl = await urlWithTicket(serveFileUrl(tab.path));
   }
 
-  elements.assetPreview.innerHTML = `
+  previewContainer.innerHTML = `
     <div class="audio-viewer-container" style="width: 100%; height: 100%; display: flex; flex-direction: column; background: var(--bg-tertiary);">
       <div class="pdf-toolbar" style="padding: 8px 16px; background: var(--bg-secondary); border-bottom: 1px solid var(--borderColor); display: flex; justify-content: space-between; align-items: center; height: 48px; flex-shrink: 0;">
         <div style="display: flex; align-items: center; gap: 8px;">
@@ -418,6 +477,11 @@ async function renderAudioPreview(tab, filename) {
       document.body.removeChild(a);
     });
   }
+  previewContainer.querySelector('audio')?.addEventListener('error', () => {
+    renderPreviewState(previewContainer, {
+      title: 'Audio preview unavailable', message: `${filename} could not be loaded by this browser.`, tone: 'error'
+    });
+  }, { once: true });
 }
 
 /**

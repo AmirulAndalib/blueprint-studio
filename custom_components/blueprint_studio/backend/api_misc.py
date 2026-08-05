@@ -1,4 +1,5 @@
 """Settings, AI, syntax check, and utility handlers for Blueprint Studio API."""
+
 from __future__ import annotations
 
 import logging
@@ -44,57 +45,104 @@ class _HassCache:
 
 # ========== Settings ==========
 
+
 async def save_settings(data, store, hass, stored_data):
     """Save settings and broadcast change."""
     stored_data["settings"] = data.get("settings", {})
     await store.async_save(stored_data)
-    hass.bus.async_fire("blueprint_studio_settings_changed", {
-        "action": "settings_updated"
-    })
+    hass.bus.async_fire(
+        "blueprint_studio_settings_changed", {"action": "settings_updated"}
+    )
     return json_response({"success": True})
 
 
 # ========== Syntax Checkers ==========
 
+
 async def check_yaml(ai_manager, data, hass):
-    return await hass.async_add_executor_job(ai_manager.check_yaml, data.get("content", ""))
+    return await hass.async_add_executor_job(
+        ai_manager.check_yaml, data.get("content", "")
+    )
 
 
 async def check_jinja(ai_manager, data, hass):
-    return await hass.async_add_executor_job(ai_manager.check_jinja, data.get("content", ""))
+    return await hass.async_add_executor_job(
+        ai_manager.check_jinja, data.get("content", "")
+    )
 
 
 async def check_json(ai_manager, data, hass):
-    return await hass.async_add_executor_job(ai_manager.check_json, data.get("content", ""))
+    return await hass.async_add_executor_job(
+        ai_manager.check_json, data.get("content", "")
+    )
 
 
 async def check_python(ai_manager, data, hass):
-    return await hass.async_add_executor_job(ai_manager.check_python, data.get("content", ""))
+    return await hass.async_add_executor_job(
+        ai_manager.check_python, data.get("content", "")
+    )
 
 
 async def check_javascript(ai_manager, data, hass):
-    return await hass.async_add_executor_job(ai_manager.check_javascript, data.get("content", ""))
+    return await hass.async_add_executor_job(
+        ai_manager.check_javascript, data.get("content", "")
+    )
 
 
 async def check_syntax(ai_manager, data, hass):
     """Universal syntax checker - detects file type and applies appropriate validator."""
     content = data.get("content", "")
     file_path = data.get("file_path", "")
-    return await hass.async_add_executor_job(ai_manager.check_syntax, content, file_path)
+    return await hass.async_add_executor_job(
+        ai_manager.check_syntax, content, file_path
+    )
+
+
+async def ai_apply_proposal(ai_manager, data):
+    """Apply an explicitly reviewed AI proposal."""
+    return await ai_manager.apply_proposal(
+        data.get("proposal_id"), data.get("selected_paths")
+    )
+
+
+async def ai_undo_proposal(ai_manager, data):
+    """Undo a reviewed AI apply through its one-time restore record."""
+    return await ai_manager.undo_proposal(data.get("undo_id"))
+
+
+async def ai_cancel(ai_manager, data):
+    """Cancel provider work for an active request."""
+    return ai_manager.cancel_request(data.get("request_id"))
+
+
+async def ai_revise_proposal(ai_manager, data):
+    """Replace a reviewed proposal with edited or current-file content."""
+    return ai_manager.revise_proposal(
+        data.get("proposal_id"), data.get("path"), data.get("new_content")
+    )
+
+
+async def ai_reject_proposal(ai_manager, data):
+    """Discard an AI proposal without changing files."""
+    return ai_manager.reject_proposal(data.get("proposal_id"))
 
 
 async def convert_to_blueprint(ai_manager, data, hass):
     """Convert automation YAML to blueprint format."""
     from .ai_generators import convert_automation_to_blueprint
+
     content = data.get("content", "")
     blueprint_name = data.get("blueprint_name", "")
-    result = await hass.async_add_executor_job(convert_automation_to_blueprint, content, blueprint_name)
+    result = await hass.async_add_executor_job(
+        convert_automation_to_blueprint, content, blueprint_name
+    )
     return json_response({"success": True, "blueprint": result})
 
 
 async def parse_blueprint_inputs(ai_manager, data, hass):
     """Parse blueprint YAML and return structured input description for the Use Blueprint form."""
     from .ai_generators import parse_blueprint_inputs as _parse
+
     content = data.get("content", "")
     result = await hass.async_add_executor_job(_parse, content)
     return json_response({"success": True, "inputs": result})
@@ -103,35 +151,63 @@ async def parse_blueprint_inputs(ai_manager, data, hass):
 async def instantiate_blueprint(ai_manager, data, hass):
     """Substitute !input references in a blueprint and return ready-to-use automation YAML."""
     from .ai_generators import instantiate_blueprint as _inst
+
     content = data.get("content", "")
     input_values = data.get("input_values", {})
     name = data.get("name", "My Automation")
     description = data.get("description", "")
-    result = await hass.async_add_executor_job(_inst, content, input_values, name, description)
+    result = await hass.async_add_executor_job(
+        _inst, content, input_values, name, description
+    )
     return json_response({"success": True, "automation": result})
 
 
 # ========== AI ==========
 
+
 async def ai_query(ai_manager, data):
     """Handle AI query."""
-    return await ai_manager.query(
-        data.get("query"), data.get("current_file"),
-        data.get("file_content"), data.get("ai_type"),
-        data.get("cloud_provider"), data.get("ai_model")
+    return await ai_manager.run_query(
+        request_id=data.get("request_id"),
+        query=data.get("query"),
+        current_file=data.get("current_file"),
+        file_content=data.get("file_content"),
+        ai_type=data.get("ai_type"),
+        cloud_provider=data.get("cloud_provider"),
+        ai_model=data.get("ai_model"),
+        selected_excerpt=data.get("selected_excerpt"),
+        task_mode=data.get("task_mode", "ask"),
+        include_file_context=data.get("include_file_context", True),
+        include_metadata=data.get("include_metadata", True),
+    )
+
+
+async def ai_preview_context(ai_manager, data):
+    """Preview the minimized and redacted context before an AI request."""
+    return ai_manager.preview_context(
+        data.get("query"),
+        data.get("current_file"),
+        data.get("file_content"),
+        data.get("selected_excerpt"),
+        data.get("task_mode", "ask"),
+        data.get("include_file_context", True),
+        data.get("include_metadata", True),
     )
 
 
 async def list_hass_agents(hass):
     """Return available Home Assistant conversation agents."""
     from .claw_hook import list_conversation_agents
+
     agents = list_conversation_agents(hass)
     return json_response({"success": True, "agents": agents})
 
 
 async def ai_get_models(ai_manager, data):
     """Return model options for the current AI configuration."""
-    settings_override = data.get("settings") if isinstance(data.get("settings"), dict) else data
+    settings_override = (
+        data.get("settings") if isinstance(data.get("settings"), dict) else data
+    )
     return await ai_manager.get_models(
         data.get("ai_type"),
         data.get("cloud_provider"),
@@ -141,6 +217,7 @@ async def ai_get_models(ai_manager, data):
 
 
 # ========== Utility ==========
+
 
 async def restart_home_assistant(hass):
     """Restart Home Assistant."""
@@ -159,7 +236,7 @@ async def get_entities(hass, data):
         query         – Text filter on entity_id / friendly_name.
     """
     query = data.get("query", "").lower()
-    domains = data.get("domains")           # e.g. ["camera", "light"]
+    domains = data.get("domains")  # e.g. ["camera", "light"]
     device_classes = data.get("device_classes")  # e.g. ["motion", "door"]
     ensure_domains = data.get("ensure_domains")  # e.g. ["camera", "device_tracker"]
 
@@ -176,14 +253,15 @@ async def get_entities(hass, data):
     platform_map = {}
     try:
         from homeassistant.helpers import entity_registry as er
+
         ent_reg = er.async_get(hass)
         for entry in ent_reg.entities.values():
             platform_map[entry.entity_id] = entry.platform
     except Exception:
         pass  # Graceful fallback — entities just won't have integration info
 
-    ensured = []   # entities from ensure_domains — returned first
-    general = []   # everything else
+    ensured = []  # entities from ensure_domains — returned first
+    general = []  # everything else
 
     for s in hass.states.async_all():
         eid = s.entity_id
@@ -211,12 +289,17 @@ async def get_entities(hass, data):
             for ak, av in s.attributes.items():
                 try:
                     import json as _json
+
                     _json.dumps(av)
                     attrs[ak] = av
                 except Exception:
                     attrs[ak] = str(av)
             entry["attributes"] = attrs
-        if ensure_domains and not domains and any(eid_lower.startswith(d + ".") for d in ensure_domains):
+        if (
+            ensure_domains
+            and not domains
+            and any(eid_lower.startswith(d + ".") for d in ensure_domains)
+        ):
             ensured.append(entry)
         else:
             general.append(entry)
@@ -237,16 +320,20 @@ async def get_version(hass):
 
     is_haos = False
     try:
-        is_haos = hass.data.get('supervisor', {}).get('addon_info') is not None or \
-                  hass.data.get('homeassistant', {}).get('installation_type') == 'hassio'
+        is_haos = (
+            "hassio" in getattr(hass.config, "components", set())
+            or "hassio" in hass.data
+        )
     except Exception as e:
         _LOGGER.debug("Could not detect HAOS: %s", e)
 
-    return json_response({
-        "ha_version": ha_version_const,
-        "integration_version": VERSION,
-        "is_haos": is_haos
-    })
+    return json_response(
+        {
+            "ha_version": ha_version_const,
+            "integration_version": VERSION,
+            "is_haos": is_haos,
+        }
+    )
 
 
 async def get_devices(hass):
@@ -256,18 +343,21 @@ async def get_devices(hass):
         return json_response({"success": True, "devices": cached})
     try:
         from homeassistant.helpers import device_registry as dr
+
         dev_reg = dr.async_get(hass)
         devices = []
         for d in dev_reg.devices.values():
             identifiers = list(d.identifiers) if d.identifiers else []
             integration = identifiers[0][0] if identifiers else None
-            devices.append({
-                "id": d.id,
-                "name": d.name_by_user or d.name or d.id,
-                "manufacturer": d.manufacturer,
-                "model": d.model,
-                "integration": integration,
-            })
+            devices.append(
+                {
+                    "id": d.id,
+                    "name": d.name_by_user or d.name or d.id,
+                    "manufacturer": d.manufacturer,
+                    "model": d.model,
+                    "integration": integration,
+                }
+            )
         _HassCache.set("devices", devices)
         return json_response({"success": True, "devices": devices})
     except Exception as e:
@@ -282,6 +372,7 @@ async def get_areas(hass):
         return json_response({"success": True, "areas": cached})
     try:
         from homeassistant.helpers import area_registry as ar
+
         area_reg = ar.async_get(hass)
         areas = [{"id": a.id, "name": a.name} for a in area_reg.areas.values()]
         _HassCache.set("areas", areas)
@@ -295,8 +386,11 @@ async def get_labels(hass):
     """Return all registered labels as id/name pairs."""
     try:
         from homeassistant.helpers import label_registry as lr
+
         label_reg = lr.async_get(hass)
-        labels = [{"id": lb.label_id, "name": lb.name} for lb in label_reg.labels.values()]
+        labels = [
+            {"id": lb.label_id, "name": lb.name} for lb in label_reg.labels.values()
+        ]
         return json_response({"success": True, "labels": labels})
     except Exception as e:
         _LOGGER.debug("get_labels failed: %s", e)
@@ -307,6 +401,7 @@ async def get_floors(hass):
     """Return all registered floors as id/name pairs."""
     try:
         from homeassistant.helpers import floor_registry as fr
+
         floor_reg = fr.async_get(hass)
         floors = [{"id": f.floor_id, "name": f.name} for f in floor_reg.floors.values()]
         return json_response({"success": True, "floors": floors})
@@ -349,30 +444,32 @@ async def reload_automations(hass):
 async def reload_yaml(hass, data):
     """Reload a specific HA YAML domain (scripts, scenes, groups, etc.)."""
     RELOADABLE = {
-        "automation":       ("automation", "reload"),
-        "script":           ("script",     "reload"),
-        "scene":            ("scene",      "reload"),
-        "group":            ("group",      "reload"),
-        "input_boolean":    ("input_boolean", "reload"),
-        "input_number":     ("input_number",  "reload"),
-        "input_select":     ("input_select",  "reload"),
-        "input_text":       ("input_text",    "reload"),
-        "input_datetime":   ("input_datetime","reload"),
-        "input_button":     ("input_button",  "reload"),
-        "timer":            ("timer",         "reload"),
-        "counter":          ("counter",       "reload"),
-        "schedule":         ("schedule",      "reload"),
-        "template":         ("template",      "reload"),
-        "rest":             ("rest",          "reload"),
-        "homeassistant":    ("homeassistant", "reload_config_entry"),
-        "core":             ("homeassistant", "reload_all"),
+        "automation": ("automation", "reload"),
+        "script": ("script", "reload"),
+        "scene": ("scene", "reload"),
+        "group": ("group", "reload"),
+        "input_boolean": ("input_boolean", "reload"),
+        "input_number": ("input_number", "reload"),
+        "input_select": ("input_select", "reload"),
+        "input_text": ("input_text", "reload"),
+        "input_datetime": ("input_datetime", "reload"),
+        "input_button": ("input_button", "reload"),
+        "timer": ("timer", "reload"),
+        "counter": ("counter", "reload"),
+        "schedule": ("schedule", "reload"),
+        "template": ("template", "reload"),
+        "rest": ("rest", "reload"),
+        "homeassistant": ("homeassistant", "reload_config_entry"),
+        "core": ("homeassistant", "reload_all"),
     }
     domain = (data.get("domain") or "").strip().lower()
     if not domain:
         return json_response({"success": False, "message": "domain is required"})
     entry = RELOADABLE.get(domain)
     if not entry:
-        return json_response({"success": False, "message": f"'{domain}' is not reloadable via this tool"})
+        return json_response(
+            {"success": False, "message": f"'{domain}' is not reloadable via this tool"}
+        )
     try:
         await hass.services.async_call(entry[0], entry[1])
         return json_response({"success": True, "message": f"{domain} reloaded"})
@@ -383,12 +480,14 @@ async def reload_yaml(hass, data):
 async def get_themes(hass):
     """Return all installed theme names."""
     try:
-        themes = list(getattr(hass.data.get('frontend_storage', {}), 'themes', {}).keys())
+        themes = list(
+            getattr(hass.data.get("frontend_storage", {}), "themes", {}).keys()
+        )
         # Fallback: try hass.themes directly
         if not themes:
-            themes_obj = getattr(hass, 'themes', None)
+            themes_obj = getattr(hass, "themes", None)
             if themes_obj:
-                themes = list(getattr(themes_obj, 'themes', {}).keys())
+                themes = list(getattr(themes_obj, "themes", {}).keys())
         return json_response({"success": True, "themes": themes})
     except Exception as e:
         _LOGGER.debug("get_themes failed: %s", e)
@@ -398,15 +497,44 @@ async def get_themes(hass):
 async def get_addons(hass):
     """Return installed Supervisor add-ons (HAOS only)."""
     try:
-        hassio = hass.components.hassio
-        if not hassio.is_hassio():
-            return json_response({"success": True, "addons": []})
-        addons = await hassio.async_get_addon_store_info()
-        result = [{"slug": a["slug"], "name": a["name"]} for a in addons if a.get("installed")]
-        return json_response({"success": True, "addons": result})
+        from homeassistant.components.hassio.coordinator import get_addons_list
+
+        addons = get_addons_list(hass)
     except Exception as e:
-        _LOGGER.debug("get_addons failed: %s", e)
-        return json_response({"success": True, "addons": []})
+        _LOGGER.debug("Current Supervisor add-on registry unavailable: %s", e)
+        try:
+            hassio = hass.components.hassio
+            if not hassio.is_hassio():
+                return json_response({"success": True, "addons": []})
+            addons = await hassio.async_get_addon_store_info()
+            if isinstance(addons, dict):
+                addons = addons.get("addons", [])
+        except Exception as legacy_error:
+            _LOGGER.debug(
+                "Legacy Supervisor add-on registry unavailable: %s", legacy_error
+            )
+            return json_response({"success": True, "addons": []})
+
+    result = []
+    for addon in addons or []:
+        slug = (
+            addon.get("slug")
+            if isinstance(addon, dict)
+            else getattr(addon, "slug", None)
+        )
+        name = (
+            addon.get("name")
+            if isinstance(addon, dict)
+            else getattr(addon, "name", None)
+        )
+        installed = (
+            addon.get("installed")
+            if isinstance(addon, dict)
+            else getattr(addon, "installed", None)
+        )
+        if slug and installed is not False:
+            result.append({"slug": slug, "name": name or slug})
+    return json_response({"success": True, "addons": result})
 
 
 async def get_services(hass):
@@ -442,7 +570,9 @@ async def get_services(hass):
                         for sk, sv in v["fields"].items():
                             if isinstance(sv, dict):
                                 fields[sk] = {
-                                    "description": sv.get("description") or sv.get("name") or "",
+                                    "description": sv.get("description")
+                                    or sv.get("name")
+                                    or "",
                                     "required": bool(sv.get("required", False)),
                                     "example": sv.get("example"),
                                     "selector": sv.get("selector"),
@@ -454,21 +584,39 @@ async def get_services(hass):
                             "example": v.get("example"),
                             "selector": v.get("selector"),
                         }
-                services.append({
-                    "service": f"{domain}.{service_name}",
-                    "domain": domain,
-                    "name": meta.get("name") or service_name,
-                    "description": meta.get("description") or "",
-                    "fields": fields,
-                })
+                services.append(
+                    {
+                        "service": f"{domain}.{service_name}",
+                        "domain": domain,
+                        "name": meta.get("name") or service_name,
+                        "description": meta.get("description") or "",
+                        "fields": fields,
+                    }
+                )
 
         services.sort(key=lambda s: s["service"])
         # Cache for 60 seconds — services rarely change
-        _HassCache._store["services"] = (time.monotonic() - _HassCache._ttl + 60.0, services)
+        _HassCache._store["services"] = (
+            time.monotonic() - _HassCache._ttl + 60.0,
+            services,
+        )
         return json_response({"success": True, "services": services})
     except Exception as e:
         _LOGGER.debug("get_services failed: %s", e)
         return json_response({"success": True, "services": []})
+
+
+async def get_metadata(metadata_manager):
+    """Return the shared live Home Assistant metadata contract."""
+    if metadata_manager is None:
+        return json_response(
+            {
+                "success": False,
+                "message": "Home Assistant metadata is unavailable",
+            },
+            status_code=503,
+        )
+    return json_response(await metadata_manager.async_get())
 
 
 async def render_template(hass, data):
@@ -478,6 +626,7 @@ async def render_template(hass, data):
         return json_response({"success": True, "result": ""})
     try:
         from homeassistant.helpers import template as tpl
+
         tmpl = tpl.Template(template_str, hass)
         result = await hass.async_add_executor_job(tmpl.async_render)
         return json_response({"success": True, "result": str(result)})
@@ -493,7 +642,9 @@ async def call_service(hass, data):
     target = data.get("target") or {}
 
     if not domain or not service:
-        return json_response({"success": False, "error": "domain and service are required"})
+        return json_response(
+            {"success": False, "error": "domain and service are required"}
+        )
 
     try:
         await hass.services.async_call(
@@ -533,7 +684,9 @@ async def run_config_check(hass):
             try:
                 result = subprocess.run(
                     [hass_bin, "--script", "check_config", "--config", config_dir],
-                    capture_output=True, text=True, timeout=60
+                    capture_output=True,
+                    text=True,
+                    timeout=60,
                 )
                 output = (result.stdout or "") + (result.stderr or "")
                 return _parse_check_output(output, result.returncode, config_dir)
@@ -546,7 +699,9 @@ async def run_config_check(hass):
             try:
                 result = subprocess.run(
                     [ha_bin, "core", "check"],
-                    capture_output=True, text=True, timeout=30
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
                 )
                 output = (result.stdout or "") + (result.stderr or "")
                 return _parse_check_output(output, result.returncode, config_dir)
@@ -556,7 +711,7 @@ async def run_config_check(hass):
         return {
             "success": False,
             "output": "Config check is not available in this environment.\n"
-                      "Neither 'hass --script check_config' nor 'ha core check' could be run.",
+            "Neither 'hass --script check_config' nor 'ha core check' could be run.",
             "errors": [],
         }
 
@@ -574,7 +729,7 @@ def _parse_check_output(output: str, returncode: int, config_dir: str = "") -> d
     def _rel(path: str) -> str:
         """Return path relative to config dir, or as-is if outside."""
         if config_prefix and path.startswith(config_prefix):
-            return path[len(config_prefix):]
+            return path[len(config_prefix) :]
         return path
 
     errors = []
@@ -597,7 +752,7 @@ def _parse_check_output(output: str, returncode: int, config_dir: str = "") -> d
     # Regex for Format B location lines: in "path", line N[, column M]
     loc_re = re.compile(r'^\s*in\s+"([^"]+)",\s*line\s+(\d+)', re.IGNORECASE)
     # Regex for Format A: (path, line N) at end of line
-    inline_re = re.compile(r'\(([^,)]+),\s*line\s*(\d+)\)')
+    inline_re = re.compile(r"\(([^,)]+),\s*line\s*(\d+)\)")
 
     seen = set()  # deduplicate by (file, line)
 
@@ -608,11 +763,13 @@ def _parse_check_output(output: str, returncode: int, config_dir: str = "") -> d
             key = (_rel(m.group(1).strip()), int(m.group(2)))
             if key not in seen:
                 seen.add(key)
-                errors.append({
-                    "file": _rel(m.group(1).strip()),
-                    "line": int(m.group(2)),
-                    "message": line.strip(),
-                })
+                errors.append(
+                    {
+                        "file": _rel(m.group(1).strip()),
+                        "line": int(m.group(2)),
+                        "message": line.strip(),
+                    }
+                )
             continue
 
         # Format B — location line
@@ -633,11 +790,13 @@ def _parse_check_output(output: str, returncode: int, config_dir: str = "") -> d
                     msg = candidate
                     break
 
-            errors.append({
-                "file": fpath,
-                "line": lineno,
-                "message": msg or line.strip(),
-            })
+            errors.append(
+                {
+                    "file": fpath,
+                    "line": lineno,
+                    "message": msg or line.strip(),
+                }
+            )
 
     # Deduplicate: keep only first occurrence of each (file, line) pair
     # (already handled via `seen` above)

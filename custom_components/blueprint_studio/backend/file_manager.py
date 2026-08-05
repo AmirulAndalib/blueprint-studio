@@ -38,6 +38,10 @@ MAX_PROGRESS_ENTRIES = 128
 MAX_DOWNLOAD_TOKENS = 128
 
 
+class ZipCancelled(Exception):
+    """Raised when a ZIP producer observes a cooperative cancel request."""
+
+
 class _ZipChunkWriter:
     """Minimal unseekable file object that forwards ZIP bytes to a callback."""
 
@@ -58,6 +62,39 @@ class _ZipChunkWriter:
         return None
 
 
+def _copy_path_staged(source: Path, destination: Path, overwrite: bool) -> None:
+    """Stage a copy beside its destination and atomically commit it."""
+    if source == destination or (source.is_dir() and source in destination.parents):
+        raise ValueError("Cannot copy a folder into itself or one of its descendants")
+
+    staging_root = Path(
+        tempfile.mkdtemp(prefix=f".{destination.name}.copy-", dir=destination.parent)
+    )
+    staged = staging_root / "staged"
+    backup = staging_root / "previous"
+    try:
+        if source.is_dir():
+            shutil.copytree(source, staged)
+        else:
+            shutil.copy2(source, staged)
+
+        if destination.exists():
+            if not overwrite:
+                raise FileExistsError("Destination exists")
+            destination.rename(backup)
+        try:
+            staged.rename(destination)
+        except Exception:
+            if backup.exists() and not destination.exists():
+                backup.rename(destination)
+            raise
+    finally:
+        # If restoring the previous destination itself failed, retain the hidden
+        # staging directory rather than deleting the only recoverable copy.
+        if not backup.exists() or destination.exists():
+            shutil.rmtree(staging_root, ignore_errors=True)
+
+
 class FileManager:
     """Class to handle file operations."""
 
@@ -73,6 +110,7 @@ class FileManager:
         self._file_cache: dict[bool, list[dict]] = {}
         self._last_cache_update: float = 0
         self._cache_lock = threading.Lock()  # 🔒 Thread safety for concurrent requests
+        self._write_lock = threading.Lock()
         self._zip_progress: dict[str, dict[str, Any]] = {}
         self._zip_progress_lock = threading.Lock()
         self._download_tokens: dict[str, dict[str, Any]] = {}
@@ -103,8 +141,8 @@ class FileManager:
             "transfers": transfers,
             "download_tokens": download_tokens,
             "progress": {
-                "running": sum(item.get("status") == "running" for item in progress),
-                "completed": sum(item.get("status") in {"done", "error"} for item in progress),
+                "running": sum(item.get("status") in {"running", "cancelling"} for item in progress),
+                "completed": sum(item.get("status") in {"done", "error", "cancelled"} for item in progress),
                 "total": len(progress),
                 "retention_seconds": PROGRESS_RETENTION_SECONDS,
                 "maximum_entries": MAX_PROGRESS_ENTRIES,
@@ -896,10 +934,141 @@ class FileManager:
         safe_path = get_safe_path(self._get_root_dir(), path)
         if not safe_path: return json_message("Not allowed", status_code=403)
         try:
-            await self.hass.async_add_executor_job(safe_path.write_text, content, "utf-8")
+            await self.hass.async_add_executor_job(self._atomic_write_text_locked, safe_path, content)
             self._fire_update("write", path)
             return json_response({"success": True, "mtime": safe_path.stat().st_mtime})
         except Exception as e: return json_message(str(e), status_code=500)
+
+    @staticmethod
+    def _content_hash(content: bytes) -> str:
+        return hashlib.sha256(content).hexdigest()
+
+    @staticmethod
+    def _atomic_write_text(path: Path, content: str) -> None:
+        """Write UTF-8 content beside its destination and atomically replace it."""
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fd, temp_name = tempfile.mkstemp(prefix=f".{path.name}.ai-", dir=path.parent)
+        temp_path = Path(temp_name)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8", newline="") as handle:
+                handle.write(content)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temp_path, path)
+        finally:
+            temp_path.unlink(missing_ok=True)
+
+    def _atomic_write_text_locked(self, path: Path, content: str) -> None:
+        with self._write_lock:
+            self._atomic_write_text(path, content)
+
+    async def apply_ai_edits(self, edits: tuple[Any, ...]) -> dict[str, Any]:
+        """Conflict-check and transactionally apply a reviewed AI proposal."""
+        result = await self.hass.async_add_executor_job(self._apply_ai_edits_sync, edits)
+        for item in result["files"]:
+            self._fire_update(item["operation"], item["path"])
+        return result
+
+    async def undo_ai_edits(self, edits: tuple[Any, ...]) -> dict[str, Any]:
+        """Atomically restore a reviewed AI apply if its files are unchanged."""
+        result = await self.hass.async_add_executor_job(self._undo_ai_edits_sync, edits)
+        for item in result["files"]:
+            self._fire_update(item["operation"], item["path"])
+        return result
+
+    def _undo_ai_edits_sync(self, edits: tuple[Any, ...]) -> dict[str, Any]:
+        with self._write_lock:
+            prepared: list[dict[str, Any]] = []
+            for edit in edits:
+                if self._is_protected(edit.path):
+                    raise PermissionError("AI undo targets a protected path")
+                safe_path = get_safe_path(self._get_root_dir(), edit.path)
+                if safe_path is None:
+                    raise PermissionError("AI undo path is outside the workspace")
+                if not safe_path.exists() or not safe_path.is_file():
+                    raise FileExistsError(f"AI undo is stale for {edit.path}")
+                applied_bytes = safe_path.read_bytes()
+                if self._content_hash(applied_bytes) != edit.applied_hash:
+                    raise FileExistsError(f"AI undo is stale for {edit.path}")
+                prepared.append({"edit": edit, "path": safe_path, "applied": applied_bytes})
+
+            restored: list[dict[str, Any]] = []
+            try:
+                for item in prepared:
+                    if item["edit"].restore_content is None:
+                        item["path"].unlink()
+                    else:
+                        self._atomic_write_text(
+                            item["path"], item["edit"].restore_content
+                        )
+                    restored.append(item)
+            except Exception:
+                for item in reversed(restored):
+                    self._atomic_write_text(
+                        item["path"], item["applied"].decode("utf-8")
+                    )
+                raise
+
+            return {
+                "success": True,
+                "files": [
+                    {
+                        "path": item["edit"].path,
+                        "operation": "delete"
+                        if item["edit"].restore_content is None
+                        else "modify",
+                    }
+                    for item in prepared
+                ],
+            }
+
+    def _apply_ai_edits_sync(self, edits: tuple[Any, ...]) -> dict[str, Any]:
+        """Apply all edits or restore every changed file if a commit fails."""
+        with self._write_lock:
+            prepared: list[dict[str, Any]] = []
+            for edit in edits:
+                if self._is_protected(edit.path):
+                    raise PermissionError("AI proposal targets a protected path")
+                safe_path = get_safe_path(self._get_root_dir(), edit.path)
+                if safe_path is None:
+                    raise PermissionError("AI proposal path is outside the workspace")
+                exists = safe_path.exists()
+                if exists and not safe_path.is_file():
+                    raise PermissionError("AI proposal path is not a file")
+                old_bytes = safe_path.read_bytes() if exists else b""
+                if self._content_hash(old_bytes) != edit.source_hash or (
+                    edit.operation == "create" and exists
+                ) or (edit.operation == "replace" and not exists):
+                    raise FileExistsError(f"AI proposal is stale for {edit.path}")
+                prepared.append({
+                    "edit": edit,
+                    "path": safe_path,
+                    "existed": exists,
+                    "old_bytes": old_bytes,
+                })
+
+            committed: list[dict[str, Any]] = []
+            try:
+                for item in prepared:
+                    self._atomic_write_text(item["path"], item["edit"].new_content)
+                    committed.append(item)
+            except Exception:
+                for item in reversed(committed):
+                    if item["existed"]:
+                        self._atomic_write_text(
+                            item["path"], item["old_bytes"].decode("utf-8")
+                        )
+                    else:
+                        item["path"].unlink(missing_ok=True)
+                raise
+
+            return {
+                "success": True,
+                "files": [
+                    {"path": item["edit"].path, "operation": item["edit"].operation}
+                    for item in prepared
+                ],
+            }
 
     async def create_file(self, path: str, content: str, is_base64: bool = False, overwrite: bool = False) -> web.Response:
         """Create a new file."""
@@ -960,25 +1129,37 @@ class FileManager:
         if not dest_folder or not dest_folder.is_dir():
             return json_message("Invalid destination", status_code=400)
 
+        moved = []
+        skipped = []
         for path in paths:
-            if self._is_protected(path): continue
+            if self._is_protected(path):
+                skipped.append({"path": path, "reason": "Protected path"})
+                continue
             src = get_safe_path(self._get_root_dir(), path)
-            if not src or not src.exists(): continue
+            if not src or not src.exists():
+                skipped.append({"path": path, "reason": "Source not found or not allowed"})
+                continue
             
             # Destination path: dest_folder / original_filename
             dest = dest_folder / src.name
             
             if dest.exists():
                 _LOGGER.warning("Move skipped: %s already exists in %s", src.name, destination)
+                skipped.append({"path": path, "reason": "Destination already exists"})
                 continue
 
             try:
                 await self.hass.async_add_executor_job(src.rename, dest)
+                moved.append({
+                    "source": path,
+                    "destination": dest.relative_to(self._get_root_dir()).as_posix(),
+                })
             except Exception as e:
                 _LOGGER.error("Error moving %s to %s: %s", path, destination, e)
+                skipped.append({"path": path, "reason": str(e)})
 
         self._fire_update("move_multi")
-        return json_response({"success": True})
+        return json_response({"success": True, "moved": moved, "skipped": skipped})
 
     async def copy(self, source: str, destination: str, overwrite: bool = False) -> web.Response:
         """Copy a file or folder."""
@@ -986,8 +1167,7 @@ class FileManager:
         if not src or not dest or not src.exists(): return json_message("Invalid path", status_code=403)
         if dest.exists() and not overwrite: return json_message("Destination exists", status_code=409)
         try:
-            if src.is_dir(): await self.hass.async_add_executor_job(shutil.copytree, src, dest)
-            else: await self.hass.async_add_executor_job(shutil.copy2, src, dest)
+            await self.hass.async_add_executor_job(_copy_path_staged, src, dest, overwrite)
             self._fire_update("copy", destination)
             return json_response({"success": True, "path": destination})
         except Exception as e: return json_message(str(e), status_code=500)
@@ -1071,6 +1251,7 @@ class FileManager:
         self._start_zip_progress(progress_id, filename)
 
         def write_chunk(chunk: bytes) -> None:
+            self._check_zip_cancelled(progress_id)
             while not stopped.is_set():
                 try:
                     chunks.put(bytes(chunk), timeout=0.5)
@@ -1084,6 +1265,11 @@ class FileManager:
                 zip_writer(write_chunk)
                 result_holder["success"] = True
                 self._finish_zip_progress(progress_id)
+            except ZipCancelled as exc:
+                result_holder["success"] = False
+                result_holder["error"] = exc
+                self._cancel_zip_progress(progress_id)
+                _LOGGER.debug("Local ZIP generation cancelled")
             except Exception as exc:
                 result_holder["success"] = False
                 result_holder["error"] = exc
@@ -1150,6 +1336,7 @@ class FileManager:
         """Write a folder ZIP incrementally to *write_chunk*."""
         with zipfile.ZipFile(_ZipChunkWriter(write_chunk), "w", zipfile.ZIP_DEFLATED) as zf:
             for root, dirs, files in os.walk(folder_path):
+                self._check_zip_cancelled(progress_id)
                 dirs[:] = [d for d in dirs if d not in EXCLUDED_PATTERNS and not d.startswith(".")]
                 for f in files:
                     if f.startswith("."):
@@ -1161,6 +1348,7 @@ class FileManager:
         """Write a multi-item ZIP incrementally to *write_chunk*."""
         with zipfile.ZipFile(_ZipChunkWriter(write_chunk), "w", zipfile.ZIP_DEFLATED) as zf:
             for p in paths:
+                self._check_zip_cancelled(progress_id)
                 safe = get_safe_path(self._get_root_dir(), p)
                 if not safe or not safe.exists():
                     continue
@@ -1168,6 +1356,7 @@ class FileManager:
                     self._write_file_to_zip(zf, safe, safe.name, progress_id)
                 elif safe.is_dir():
                     for root, dirs, files in os.walk(safe):
+                        self._check_zip_cancelled(progress_id)
                         dirs[:] = [d for d in dirs if d not in EXCLUDED_PATTERNS and not d.startswith(".")]
                         for f in files:
                             if f.startswith("."):
@@ -1190,6 +1379,7 @@ class FileManager:
         self._update_zip_progress(progress_id, current_file=arcname_str)
         with file_path.open("rb") as src, zf.open(info, "w") as dest:
             while True:
+                self._check_zip_cancelled(progress_id)
                 chunk = src.read(1024 * 1024)
                 if not chunk:
                     break
@@ -1205,7 +1395,7 @@ class FileManager:
                 for progress_id, progress in self._zip_progress.items()
                 if now - progress.get("updated_at", 0) > (
                     ACTIVE_PROGRESS_RETENTION_SECONDS
-                    if progress.get("status") == "running"
+                    if progress.get("status") in {"running", "cancelling"}
                     else PROGRESS_RETENTION_SECONDS
                 )
             ]
@@ -1215,7 +1405,7 @@ class FileManager:
             while len(self._zip_progress) >= MAX_PROGRESS_ENTRIES:
                 completed = {
                     key: value for key, value in self._zip_progress.items()
-                    if value.get("status") != "running"
+                    if value.get("status") not in {"running", "cancelling"}
                 }
                 candidates = completed or self._zip_progress
                 oldest = min(candidates, key=lambda key: candidates[key].get("updated_at", 0))
@@ -1227,16 +1417,62 @@ class FileManager:
         self._cleanup_zip_progress()
         now = time.monotonic()
         with self._zip_progress_lock:
+            existing = self._zip_progress.get(progress_id)
+            cancel_requested = bool(existing and existing.get("cancel_requested"))
             self._zip_progress[progress_id] = {
                 "success": True,
-                "status": "running",
+                "status": "cancelling" if cancel_requested else "running",
                 "filename": filename,
                 "files_done": 0,
                 "bytes_done": 0,
                 "current_file": "",
                 "started_at": now,
                 "updated_at": now,
+                "cancel_requested": cancel_requested,
             }
+
+    def request_zip_cancel(self, progress_id: str | None) -> dict:
+        """Request cooperative cancellation, including before a stream starts."""
+        if not progress_id:
+            return {"success": False, "message": "Missing progress_id", "status_code": 400}
+        self._cleanup_zip_progress()
+        now = time.monotonic()
+        with self._zip_progress_lock:
+            progress = self._zip_progress.setdefault(progress_id, {
+                "success": True,
+                "status": "cancelling",
+                "filename": "",
+                "files_done": 0,
+                "bytes_done": 0,
+                "current_file": "",
+                "started_at": now,
+            })
+            if progress.get("status") in {"done", "error", "cancelled"}:
+                return {"success": False, "message": "ZIP transfer is no longer running", "status_code": 409}
+            progress["cancel_requested"] = True
+            progress["status"] = "cancelling"
+            progress["message"] = "Cancelling ZIP generation..."
+            progress["updated_at"] = now
+        return {"success": True, "status": "cancelling"}
+
+    def _check_zip_cancelled(self, progress_id: str | None) -> None:
+        if not progress_id:
+            return
+        with self._zip_progress_lock:
+            progress = self._zip_progress.get(progress_id)
+            if progress and progress.get("cancel_requested"):
+                raise ZipCancelled("ZIP generation cancelled")
+
+    def _cancel_zip_progress(self, progress_id: str | None) -> None:
+        if not progress_id:
+            return
+        with self._zip_progress_lock:
+            progress = self._zip_progress.get(progress_id)
+            if progress:
+                progress["status"] = "cancelled"
+                progress["message"] = "ZIP download cancelled"
+                progress["current_file"] = ""
+                progress["updated_at"] = time.monotonic()
 
     def _update_zip_progress(self, progress_id: str | None, *, current_file: str | None = None, bytes_delta: int = 0, files_delta: int = 0) -> None:
         if not progress_id:
@@ -1259,7 +1495,11 @@ class FileManager:
         with self._zip_progress_lock:
             progress = self._zip_progress.get(progress_id)
             if progress:
-                progress["status"] = "done"
+                if progress.get("cancel_requested"):
+                    progress["status"] = "cancelled"
+                    progress["message"] = "ZIP download cancelled"
+                else:
+                    progress["status"] = "done"
                 progress["current_file"] = ""
                 progress["updated_at"] = time.monotonic()
 

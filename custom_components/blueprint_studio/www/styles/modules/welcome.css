@@ -1,14 +1,93 @@
     /* Welcome Screen */
     .welcome-screen {
+      position: relative;
+      z-index: 30;
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: center;
+      justify-content: flex-start;
       height: 100%;
       color: var(--text-muted);
       text-align: center;
       padding: 32px 24px;
       overflow-y: auto;
+      pointer-events: auto;
+    }
+
+    .welcome-workspace {
+      display: grid;
+      grid-template-columns: minmax(0, 1.5fr) minmax(180px, 1fr);
+      gap: 24px;
+      width: min(720px, 100%);
+      padding-top: 8px;
+      border-top: 1px solid var(--border-color);
+      text-align: left;
+    }
+
+    .welcome-workspace h3 {
+      margin: 10px 0 6px;
+      color: var(--text-muted);
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    .welcome-recent-list {
+      display: flex;
+      min-width: 0;
+      flex-direction: column;
+    }
+
+    .welcome-recent-item,
+    .welcome-recovery-action {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      width: 100%;
+      min-height: 44px;
+      padding: 6px 8px;
+      border: 0;
+      border-radius: 4px;
+      background: transparent;
+      color: var(--text-primary);
+      font: inherit;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .welcome-recent-item:hover,
+    .welcome-recovery-action:hover { background: var(--bg-hover); }
+
+    .welcome-recent-copy,
+    .welcome-recovery-copy {
+      display: flex;
+      min-width: 0;
+      flex-direction: column;
+    }
+
+    .welcome-recent-copy strong,
+    .welcome-recent-copy small,
+    .welcome-recovery-copy small {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .welcome-recent-copy small,
+    .welcome-recovery-copy small,
+    .welcome-recent-empty {
+      color: var(--text-secondary);
+      font-size: 11px;
+    }
+
+    .welcome-recent-empty { display: block; padding: 10px 8px; }
+
+    .welcome-recovery-action[data-recovery="true"] .material-icons { color: var(--warning-color); }
+
+    @media (max-width: 700px) {
+      .welcome-workspace { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+      .welcome-screen { padding: 20px 16px; }
+      .welcome-actions { margin: 16px 0; }
     }
 
     .welcome-screen > .material-icons {

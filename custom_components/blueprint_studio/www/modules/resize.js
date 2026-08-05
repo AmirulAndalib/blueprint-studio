@@ -1,23 +1,29 @@
 /** RESIZE.JS | Purpose: Sidebar drag-to-resize functionality. Allows user to adjust */
 import { state, elements } from './state.js';
-import { isMobile } from './utils.js';
 import { eventBus } from './event-bus.js';
 import {
   constrainSidebarWidth,
   getSidebarMaxWidth,
+  isWorkspaceDrawerMode,
   SIDEBAR_MIN_WIDTH,
-} from './workspace-layout.js';
+} from './workspace-layout.js?v=2.5.188';
+import { captureEditorViewports, scheduleEditorViewportRestore } from './editor-viewport.js?v=2.5.188';
 
 /**
  * Initialize the sidebar resize handle
  * Sets up drag handlers for resizing the sidebar
  */
 export function initResizeHandle() {
-  if (!elements.resizeHandle || isMobile()) return;
+  if (!elements.resizeHandle) return;
 
   let isResizing = false;
+  let editorSnapshots = [];
 
   const applyWidth = (width) => {
+    if (isWorkspaceDrawerMode()) {
+      elements.sidebar.style.removeProperty('width');
+      return constrainSidebarWidth(width);
+    }
     const nextWidth = constrainSidebarWidth(width);
     elements.sidebar.style.width = `${nextWidth}px`;
     elements.resizeHandle.setAttribute('aria-valuemin', String(SIDEBAR_MIN_WIDTH));
@@ -33,7 +39,9 @@ export function initResizeHandle() {
   };
 
   elements.resizeHandle.addEventListener("pointerdown", (e) => {
+    if (isWorkspaceDrawerMode()) return;
     isResizing = true;
+    editorSnapshots = captureEditorViewports();
     elements.resizeHandle.classList.add("active");
     document.body.style.cursor = "col-resize";
     document.body.style.userSelect = "none";
@@ -53,6 +61,7 @@ export function initResizeHandle() {
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
       saveWidth();
+      scheduleEditorViewportRestore(editorSnapshots);
     }
   };
 
@@ -68,8 +77,10 @@ export function initResizeHandle() {
     else if (event.key === 'End') nextWidth = getSidebarMaxWidth();
     else return;
     event.preventDefault();
+    const snapshots = captureEditorViewports();
     applyWidth(nextWidth);
     saveWidth();
+    scheduleEditorViewportRestore(snapshots);
   });
 
   window.addEventListener('resize', () => applyWidth(state.sidebarWidth));

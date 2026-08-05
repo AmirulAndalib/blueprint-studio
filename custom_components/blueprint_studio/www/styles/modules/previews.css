@@ -19,6 +19,35 @@
       display: flex;
     }
 
+    .asset-preview-state {
+        width: min(100%, 520px);
+        min-height: 180px;
+        margin: auto;
+        padding: 28px;
+        box-sizing: border-box;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        text-align: center;
+        color: var(--text-primary);
+        border: 1px solid var(--border-color);
+        border-radius: var(--border-radius, 4px);
+        background: var(--bg-secondary);
+    }
+
+    .asset-preview-state p {
+        margin: 0;
+        color: var(--text-secondary);
+        overflow-wrap: anywhere;
+    }
+
+    .asset-preview-state-icon { font-size: 32px; color: var(--text-secondary); }
+    .asset-preview-state--warning .asset-preview-state-icon { color: var(--warning-color); }
+    .asset-preview-state--error .asset-preview-state-icon { color: var(--error-color); }
+    .asset-preview-state-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 8px; }
+
     .asset-preview-empty-icon {
       color: var(--content-disabled);
       display: block;
@@ -47,6 +76,8 @@
         margin-top: 20px;
         text-align: center;
         color: var(--text-secondary);
+        max-width: 100%;
+        overflow-wrap: anywhere;
     }
 
     .asset-name {
@@ -80,6 +111,8 @@
         word-wrap: break-word;
         padding: 40px;
         background: var(--bg-primary);
+        min-width: 0;
+        overflow-wrap: anywhere;
     }
 
     .markdown-body h1, .markdown-body h2, .markdown-body h3 {
@@ -109,6 +142,9 @@
         background-color: var(--bg-tertiary);
         border-radius: 6px;
         margin-bottom: 16px;
+        max-width: 100%;
+        overflow-wrap: normal;
+        white-space: pre;
     }
     .markdown-body pre code { background: transparent; padding: 0; }
     .markdown-body blockquote {

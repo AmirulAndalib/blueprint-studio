@@ -1,12 +1,14 @@
 import { t } from './translations.js';
 /** COMMAND-PALETTE.JS | Purpose: * Provides a unified quick-access command and file switcher (VS Code style) */
-import { state, elements } from './state.js';
+import { state, elements, gitState, giteaState } from './state.js';
 import { getTruePath, getFileIcon, copyToClipboard } from './utils.js';
 import { eventBus } from './event-bus.js';
 import { API_BASE } from './constants.js';
 import { fetchWithAuth } from './api.js';
-import { showToast, showConfirmDialog, showGlobalLoading, hideGlobalLoading } from './ui.js';
+import { showToast, showConfirmDialog } from './ui.js';
 import { closeDialog, openDialog } from './dialog-manager.js';
+import { startOperationFeedback } from './feedback-service.js?v=2.5.188';
+import { getGitActionConfirmation } from './git-action-confirmation.js?v=2.5.188';
 
 const TOOLBAR_REQUIREMENTS = {
   'btn-format': () => state.activeTab ? null : 'Open a file to format it',
@@ -79,15 +81,85 @@ function toolbarCommands() {
     });
 }
 
+export async function cleanGitLocks() {
+  const branch = gitState.currentBranch || 'Current branch';
+  return confirmCleanGitLocks(branch);
+}
+
+async function confirmCleanGitLocks(branch) {
+  const confirmed = await showConfirmDialog(getGitActionConfirmation('clean-locks', {
+    currentBranch: branch,
+  }));
+  if (!confirmed) return false;
+
+  const operation = startOperationFeedback({
+    label: 'Clean Git recovery state',
+    icon: 'delete_sweep',
+    scope: 'Local Git repository',
+    target: `${branch} -> .git locks and operation state`,
+    message: 'Removing stale Git recovery state...',
+    retry: () => confirmCleanGitLocks(branch),
+    open: () => eventBus.emit('ui:switch-sidebar-view', 'source-control'),
+    openLabel: 'Source Control',
+    openIcon: 'account_tree',
+  });
+  try {
+    const response = await fetchWithAuth(API_BASE, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'git_clean_locks' }),
+    });
+    if (!response.success) {
+      const message = response.message || response.error || 'Unknown Git cleanup error';
+      operation.fail('Could not clean Git recovery state', message);
+      showToast(t('toast.clean_locks_failed', { error: message }), 'error');
+      return false;
+    }
+
+    const removed = Array.isArray(response.removed) ? response.removed : [];
+    operation.finish(response.message || `Removed ${removed.length} Git state entries`, {
+      detail: removed.length ? `Removed: ${removed.join(', ')}` : 'No stale Git recovery state was found.',
+    });
+    showToast(response.message || 'Git recovery state cleaned', 'success');
+    eventBus.emit('git:refresh');
+    return true;
+  } catch (error) {
+    operation.fail('Could not clean Git recovery state', error.message);
+    showToast(t('toast.generic_error', { error: error.message }), 'error');
+    return false;
+  }
+}
+
 function paletteOnlyCommands() {
   const activeFile = (reason) => () => ({ enabled: !!state.activeTab, reason: state.activeTab ? '' : reason });
   const editor = (reason) => () => ({ enabled: !!state.editor && !!state.activeTab, reason: state.editor && state.activeTab ? '' : reason });
   const git = () => ({ enabled: !!state.gitIntegrationEnabled, reason: state.gitIntegrationEnabled ? '' : 'Enable GitHub source control in Settings' });
+  const sourceProvider = () => state.gitIntegrationEnabled ? 'git' : 'gitea';
+  const sourceState = () => sourceProvider() === 'git' ? gitState : giteaState;
+  const sourceEnabled = () => state.gitIntegrationEnabled || state.giteaIntegrationEnabled;
+  const changeStage = (action, files) => eventBus.emit('source-control:change-stage', {
+    provider: sourceProvider(), action, files,
+  });
+  const label = (key, fallback) => t(key) === key ? fallback : t(key);
   return [
     { id: 'new_blueprint', label: 'New Blueprint', icon: 'architecture', scope: 'Blueprint', action: () => eventBus.emit('blueprint:new') },
     { id: 'convert_to_blueprint', label: 'Convert to Blueprint (or Selection)', icon: 'architecture', scope: 'Blueprint', availability: activeFile('Open a file to convert it'), action: () => eventBus.emit('blueprint:convert') },
     { id: 'generate_uuid', label: t('palette.cmd_generate_uuid'), icon: 'fingerprint', scope: 'Editor', shortcut: 'Ctrl+Shift+U', availability: editor('Open a file to insert a UUID'), action: () => eventBus.emit('editor:insert-uuid') },
     { id: 'git_history', label: t('palette.cmd_git_history'), icon: 'history', scope: 'GitHub source control', availability: git, action: () => eventBus.emit('git:show-history') },
+    { id: 'source_stage_file', label: label('palette.cmd_stage_file', 'Stage Active File'), icon: 'add', scope: 'Source control', availability: () => {
+      const path = state.activeTab?.path;
+      const enabled = sourceEnabled() && Boolean(path) && !sourceState().files.staged.includes(path);
+      return { enabled, reason: !sourceEnabled() ? 'Enable source control in Settings' : !path ? 'Open a file to stage it' : 'The active file is already staged' };
+    }, action: () => changeStage('stage', [state.activeTab.path]) },
+    { id: 'source_unstage_file', label: label('palette.cmd_unstage_file', 'Unstage Active File'), icon: 'remove', scope: 'Source control', availability: () => {
+      const path = state.activeTab?.path;
+      const enabled = sourceEnabled() && Boolean(path) && sourceState().files.staged.includes(path);
+      return { enabled, reason: !sourceEnabled() ? 'Enable source control in Settings' : !path ? 'Open a staged file first' : 'The active file is not staged' };
+    }, action: () => changeStage('unstage', [state.activeTab.path]) },
+    { id: 'source_stage_selected', label: label('palette.cmd_stage_selected', 'Stage Selected Files'), icon: 'playlist_add', scope: 'Source control', availability: () => ({
+      enabled: sourceEnabled() && sourceState().selectedFiles.size > 0,
+      reason: sourceEnabled() ? 'Select changed files in Source Control first' : 'Enable source control in Settings',
+    }), action: () => changeStage('stage', [...sourceState().selectedFiles]) },
     { id: 'dev_tools_actions', label: 'Developer Tools: Actions', icon: 'construction', scope: 'Home Assistant', action: () => eventBus.emit('ha:dev-tools', { tab: 'actions' }) },
     { id: 'dev_tools_template', label: 'Developer Tools: Template', icon: 'construction', scope: 'Home Assistant', action: () => eventBus.emit('ha:dev-tools', { tab: 'template' }) },
     { id: 'dev_tools_states', label: 'Developer Tools: States', icon: 'construction', scope: 'Home Assistant', action: () => eventBus.emit('ha:dev-tools', { tab: 'states' }) },
@@ -95,18 +167,7 @@ function paletteOnlyCommands() {
     { id: 'shortcuts', label: t('palette.cmd_shortcuts'), icon: 'keyboard', scope: 'Help', action: () => eventBus.emit('ui:show-shortcuts') },
     { id: 'report_issue', label: t('palette.cmd_report_issue'), icon: 'bug_report', scope: 'Help', action: () => eventBus.emit('ui:report-issue') },
     { id: 'request_feature', label: t('palette.cmd_request_feature'), icon: 'lightbulb', scope: 'Help', action: () => eventBus.emit('ui:request-feature') },
-    { id: 'clean_git_locks', label: t('palette.cmd_clean_git_locks'), icon: 'delete_sweep', scope: 'GitHub source control', availability: git, action: async () => {
-      if (!await showConfirmDialog({ title: t('palette.cmd_clean_git_locks'), message: 'Are you sure you want to clean Git lock files? This can fix stuck operations.', confirmText: 'Clean Locks', isDanger: true })) return;
-      try {
-        showGlobalLoading('Cleaning locks...');
-        const res = await fetchWithAuth(API_BASE, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'git_clean_locks' }) });
-        hideGlobalLoading();
-        if (res.success) showToast(res.message, 'success'); else showToast(t('toast.clean_locks_failed', { error: res.message }), 'error');
-      } catch (error) {
-        hideGlobalLoading();
-        showToast(t('toast.generic_error', { error: error.message }), 'error');
-      }
-    }},
+    { id: 'clean_git_locks', label: t('palette.cmd_clean_git_locks'), icon: 'delete_sweep', scope: 'GitHub source control', availability: git, action: cleanGitLocks },
     { id: 'copy_path', label: t('palette.cmd_copy_path'), icon: 'content_copy', scope: 'File', availability: activeFile('Open a file to copy its path'), action: () => copyToClipboard(getTruePath(state.activeTab.path)) },
     { id: 'toggle_word_wrap', label: t('palette.cmd_toggle_word_wrap'), icon: 'wrap_text', scope: 'Editor', availability: editor('Open a file to change word wrapping'), action: () => {
       state.wordWrap = !state.wordWrap;

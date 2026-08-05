@@ -17,6 +17,8 @@ import {
     startInlineExplorerRename
 } from '../file-tree.js';
 import { showToast, setButtonLoading, showConfirmDialog } from '../ui.js';
+import { classifyTreeError, renderTreeViewState } from '../tree-view-state.js?v=2.5.188';
+import { startOperationFeedback } from '../feedback-service.js?v=2.5.188';
 
 import { 
     isTextFile, 
@@ -29,10 +31,10 @@ import {
 import { 
     isSftpPath as isSftpPathImpl,
     parseSftpPath as parseSftpPathImpl,
-    openSftpFile as openSftpFileImpl,
-    saveSftpFile as saveSftpFileImpl
-} from '../sftp.js?v=2.5.75';
+    openSftpFile as openSftpFileImpl
+} from '../sftp.js?v=2.5.188';
 import {
+    saveFile as saveFileImpl,
     createFile as createFileImpl,
     createFolder as createFolderImpl,
     renameItem as renameItemImpl,
@@ -63,56 +65,94 @@ import {
     downloadSelectedItems as downloadSelectedItemsImpl,
     triggerUpload as triggerUploadImpl
 } from '../downloads-uploads.js';
-import { invalidateEditorConfigCache } from '../editorconfig.js';
 
 let isLoadingFiles = false;
 const fileContentCache = new Map();
+
+function openBlueprintConversionPath(path) {
+    eventBus.emit('ui:switch-sidebar-view', 'explorer');
+    eventBus.emit('file:open', { path });
+}
+
+async function confirmBlueprintConversionRetry(request) {
+    const confirmed = await showConfirmDialog({
+        title: 'Retry blueprint conversion?',
+        message: `Convert the original ${request.sourceKind.toLowerCase()} snapshot again and replace ${request.destinationPath} with the result?`,
+        confirmText: 'Retry Conversion',
+        cancelText: t('modal.cancel_button'),
+        isDanger: true,
+    });
+    if (confirmed) return runBlueprintConversion(request);
+    return false;
+}
+
+async function runBlueprintConversion(request) {
+    let destinationSaved = false;
+    let conversionComplete = false;
+    const operation = startOperationFeedback({
+        label: 'Convert to blueprint',
+        icon: 'architecture',
+        scope: request.sourceKind,
+        target: `${request.sourcePath} -> ${request.destinationPath}`,
+        message: `Converting ${request.sourceLabel}...`,
+        retry: () => confirmBlueprintConversionRetry(request),
+        open: () => openBlueprintConversionPath(destinationSaved ? request.destinationPath : request.sourcePath),
+        openLabel: 'Open file',
+        openIcon: 'description',
+    });
+
+    try {
+        operation.update({ message: `Converting ${request.sourceLabel}...`, percent: 20 });
+        const response = await fetchWithAuth(API_BASE, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                action: 'convert_to_blueprint',
+                content: request.content,
+                blueprint_name: request.blueprintName,
+            }),
+        });
+        if (!response?.success || typeof response.blueprint !== 'string' || !response.blueprint.trim()) {
+            throw new Error(response?.message || response?.error || 'Home Assistant returned no blueprint content');
+        }
+
+        conversionComplete = true;
+        operation.update({ message: `Saving ${request.destinationPath}...`, percent: 65 });
+        let saveFailure = '';
+        const saved = await createFileImpl(
+            request.destinationPath,
+            response.blueprint,
+            false,
+            true,
+            false,
+            {
+                silentOperation: true,
+                silentToast: true,
+                silentErrorToast: true,
+                onResult: result => { if (!result.success) saveFailure = result.message; },
+            },
+        );
+        if (!saved) throw new Error(saveFailure || 'Home Assistant rejected the generated file write');
+
+        destinationSaved = true;
+        operation.finish(`Created ${request.destinationPath}`, { percent: 100 });
+        showToast(`Blueprint created from ${request.sourceLabel} -> ${request.destinationPath}`, 'success');
+        return true;
+    } catch (error) {
+        const message = conversionComplete
+            ? 'Blueprint converted but could not be saved'
+            : 'Blueprint conversion failed';
+        operation.fail(message, error.message);
+        showToast(`${message}: ${error.message}`, 'error');
+        return false;
+    }
+}
 
 /**
  * Saves a file to the backend
  */
 export async function saveFile(path, content, options = {}) {
-    // SFTP files are saved via the SFTP module
-    if (isSftpPathImpl(path)) {
-      const tab = state.openTabs.find(t => t.path === path);
-      if (tab) return await saveSftpFileImpl(tab, content);
-      return false;
-    }
-
-    try {
-      const response = await fetchWithAuth(API_BASE, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "write_file", path, content }),
-      });
-      
-      // Update tab mtime if successful
-      if (response.success && response.mtime) {
-          const tab = state.openTabs.find(t => t.path === path);
-          if (tab) tab.mtime = response.mtime;
-      }
-
-      // Invalidate editorconfig cache for this directory if an .editorconfig was saved
-      if (path.endsWith('.editorconfig')) {
-          const dir = path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '';
-          invalidateEditorConfigCache(dir);
-      }
-
-      // Refresh files to get updated size
-      eventBus.emit('ui:reload-files', { force: true });
-      
-      if (!options.silentToast) {
-        showToast(t("toast.saved", { file: path.split("/").pop() }), "success");
-      }
-
-      // Auto-refresh git status after saving
-      eventBus.emit('git:status-check', { fetch: false, silent: true });
-
-      return true;
-    } catch (error) {
-      showToast(t("toast.save_failed", { error: error.message }), "error");
-      return false;
-    }
+    return saveFileImpl(path, content, options);
 }
 
 /**
@@ -164,7 +204,14 @@ export async function saveCurrentFile(isAutoSave = false) {
       setButtonLoading(elements.btnSave, true);
     }
 
-    const success = await saveFile(tab.path, content, { silentToast: reallyAutoSave });
+    tab.saveState = 'saving';
+    tab.saveError = '';
+    eventBus.emit('ui:refresh-tabs');
+
+    const success = await saveFile(tab.path, content, {
+      silentToast: reallyAutoSave,
+      silentOperation: reallyAutoSave,
+    });
 
     if (!reallyAutoSave && elements.btnSave) {
       setButtonLoading(elements.btnSave, false);
@@ -173,7 +220,10 @@ export async function saveCurrentFile(isAutoSave = false) {
     if (success) {
       tab.previousContent = previousContent;
       tab.originalContent = content;
-      tab.modified = false;
+      const unchangedSinceRequest = tab.content === content;
+      tab.modified = !unchangedSinceRequest;
+      tab.saveState = unchangedSinceRequest ? 'saved' : '';
+      if (unchangedSinceRequest) tab.externalConflict = false;
       eventBus.emit('ui:refresh-tabs');
       eventBus.emit('ui:refresh-tree');
       if (functions.updateToolbarState) functions.updateToolbarState();
@@ -183,6 +233,10 @@ export async function saveCurrentFile(isAutoSave = false) {
       if (reallyAutoSave) {
         showToast("Saved", "success", 1200);
       }
+    } else {
+      tab.saveState = 'failed';
+      tab.saveError = 'Save failed';
+      eventBus.emit('ui:refresh-tabs');
     }
 }
 
@@ -193,12 +247,11 @@ export function setFileTreeLoading(isLoading) {
     if (elements.fileTree) {
         if (isLoading) {
             elements.fileTree.classList.add("loading");
-            elements.fileTree.innerHTML = `
-                <div class="loading-item">
-                    <span class="ui-icon material-icons loading-spinner">sync</span>
-                    <span class="tree-name">${t("common.loading")}</span>
-                </div>
-            `;
+            renderTreeViewState(elements.fileTree, {
+                status: "loading",
+                title: t("tree.loading_local"),
+                copy: t("tree.loading_copy"),
+            });
         } else {
             elements.fileTree.classList.remove("loading");
         }
@@ -277,7 +330,7 @@ export async function loadFile(path) {
 /**
  * Opens a file and manages the tab state
  */
-export async function openFile(path, forceReload = false, noActivate = false) {
+export async function openFile(path, forceReload = false, noActivate = false, forceText = false) {
     if (isSftpPathImpl(path)) {
       const { connId, remotePath } = parseSftpPathImpl(path);
       return await openSftpFileImpl(connId, remotePath, noActivate);
@@ -289,15 +342,50 @@ export async function openFile(path, forceReload = false, noActivate = false) {
     const isPdf = ext === "pdf";
     const isVideo = VIDEO_EXTENSIONS.has(ext);
     const isAudio = AUDIO_EXTENSIONS.has(ext);
-    const isBinary = !isTextFile(path);
+    const isBinary = !forceText && !isTextFile(path);
+    let tab = state.openTabs.find((t) => t.path === path);
 
-    // If it's a binary file that's not an image, PDF, video, or audio, just download it
-    if (isBinary && !isImage && !isPdf && !isVideo && !isAudio) {
-      downloadFileByPathUtil(path);
-      return;
+    // Unknown binary files get a recoverable preview instead of downloading immediately.
+    if (!tab && isBinary && !isImage && !isPdf && !isVideo && !isAudio) {
+      try {
+        const data = await loadFile(path);
+        tab = {
+          path,
+          content: data.content,
+          originalContent: data.content,
+          mtime: data.mtime,
+          modified: false,
+          history: null,
+          cursor: null,
+          scroll: null,
+          isBinary: true,
+          isImage: false,
+          isPdf: false,
+          isVideo: false,
+          isAudio: false,
+          mimeType: data.mime_type || 'application/octet-stream'
+        };
+        state.openTabs.push(tab);
+      } catch (error) {
+        showToast(t("toast.open_failed", { file: filename, error: error.message }), "error");
+        return;
+      }
     }
 
-    let tab = state.openTabs.find((t) => t.path === path);
+    if (forceText && tab?.isBinary) {
+      try {
+        tab.content = atob(tab.content || '');
+      } catch (error) {
+        showToast(`Could not decode ${filename} as text: ${error.message}`, 'error');
+        return;
+      }
+      tab.originalContent = tab.content;
+      tab.isBinary = false;
+      tab.isImage = false;
+      tab.isPdf = false;
+      tab.isVideo = false;
+      tab.isAudio = false;
+    }
 
     // ONE TAB MODE logic
     if (state.onTabMode && !tab) {
@@ -305,11 +393,11 @@ export async function openFile(path, forceReload = false, noActivate = false) {
       for (const t of tabsToClose) {
         if (t.modified && t.content !== undefined && !t.isBinary) {
           try {
-            await fetchWithAuth(API_BASE, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ action: "write_file", path: t.path, content: t.content }),
+            const saved = await saveFile(t.path, t.content, {
+              silentToast: true,
+              silentOperation: true,
             });
+            if (!saved) console.warn("One Tab Mode: could not auto-save", t.path);
           } catch (e) {
             console.warn("One Tab Mode: could not auto-save", t.path, e);
           }
@@ -416,6 +504,8 @@ export async function loadFiles(force = false) {
         return;
     }
     isLoadingFiles = true;
+    state.localTreeViewState = { status: "loading", error: "" };
+    setFileTreeLoading(true);
     
     try {
       if (elements.btnRefresh) {
@@ -459,6 +549,7 @@ export async function loadFiles(force = false) {
         state.folders = result.folders || [];
         state.files = result.files || [];
         state.allItems = [...result.folders, ...result.files];
+        state.localTreeViewState = { status: "ready", error: "" };
 
         // Initialize navigation if first load
         if (!state.currentNavigationPath && state.currentNavigationPath !== "") {
@@ -507,6 +598,7 @@ export async function loadFiles(force = false) {
       state.folders = items.filter(item => item.type === "folder");
       state.allItems = items;
       state.fileTree = buildFileTreeImpl(items);
+      state.localTreeViewState = { status: "ready", error: "" };
       eventBus.emit('ui:refresh-tree');
       eventBus.emit('ui:refresh-sftp');
 
@@ -528,16 +620,23 @@ export async function loadFiles(force = false) {
           state.folders = items.filter(item => item.type === "folder");
           state.allItems = items;
           state.fileTree = buildFileTreeImpl(items);
+          state.localTreeViewState = { status: "ready", error: "" };
           eventBus.emit('ui:refresh-tree');
           showToast(t("toast.recovered_success"), "success");
           return;
         } catch (retryError) {
           console.error("Auto-recovery failed:", retryError);
+          const status = classifyTreeError(retryError);
+          state.localTreeViewState = { status, error: retryError.message || String(retryError) };
+          eventBus.emit('ui:refresh-tree');
           showToast(t("toast.load_files_failed_retry", { error: retryError.message }), "error");
           return;
         }
       }
 
+      const status = classifyTreeError(error);
+      state.localTreeViewState = { status, error: error.message || String(error) };
+      eventBus.emit('ui:refresh-tree');
       showToast(t("toast.load_files_failed", { error: error.message }), "error");
     } finally {
         isLoadingFiles = false;
@@ -572,7 +671,7 @@ export function initFileCoordinator(callbacks) {
 
     // File Operations
     eventBus.on("file:open", async (data) => {
-        return await openFile(data.path, data.forceReload, data.noActivate);
+        return await openFile(data.path, data.forceReload, data.noActivate, data.forceText);
     });
 
     eventBus.on("file:new", (data) => {
@@ -608,29 +707,16 @@ export function initFileCoordinator(callbacks) {
             if (aliasMatch) blueprintName = aliasMatch[1].trim();
         }
 
-        try {
-            const res = await fetchWithAuth(API_BASE, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    action: "convert_to_blueprint",
-                    content,
-                    blueprint_name: blueprintName,
-                }),
-            });
-            if (res.success && res.blueprint) {
-                // Derive output filename from blueprint name
-                const slug = blueprintName.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
-                const newPath = `blueprints/automation/${slug}_blueprint.yaml`;
-                eventBus.emit('file:create', { path: newPath, content: res.blueprint, noOpen: false, overwrite: true });
-                const sourceLabel = usingSelection ? "selection" : originalName;
-                showToast(`Blueprint created from ${sourceLabel} → ${newPath}`, "success");
-            } else {
-                showToast(res.message || "Conversion failed", "error");
-            }
-        } catch (e) {
-            showToast(`Error: ${e.message}`, "error");
-        }
+        const slug = blueprintName.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || 'converted';
+        const destinationPath = `blueprints/automation/${slug}_blueprint.yaml`;
+        await runBlueprintConversion(Object.freeze({
+            sourcePath: tab.path,
+            sourceKind: usingSelection ? 'Document selection' : 'Document',
+            sourceLabel: usingSelection ? 'selection' : originalName,
+            destinationPath,
+            blueprintName,
+            content,
+        }));
     });
 
     eventBus.on("blueprint:use", async () => {
@@ -677,11 +763,11 @@ export function initFileCoordinator(callbacks) {
     });
 
     eventBus.on("file:copy", (data) => {
-        copyItemImpl(data.oldPath, data.newPath, data.overwrite);
+        copyItemImpl(data.oldPath, data.newPath, data.overwrite, data.isFolder);
     });
 
     eventBus.on("file:delete", (data) => {
-        deleteItemImpl(data.path);
+        deleteItemImpl(data.path, data.isFolder);
     });
 
     eventBus.on("file:save", async (data) => {

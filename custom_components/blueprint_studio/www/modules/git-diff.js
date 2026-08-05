@@ -1,12 +1,10 @@
 import { t } from './translations.js';
 /** GIT-DIFF.JS | Purpose: * Visualizes git diffs and commit history. Shows file changes, commit details, */
-import { state, elements, gitState } from './state.js';
+import { state, elements, gitState, giteaState } from './state.js';
 import { fetchWithAuth } from './api.js';
 import { eventBus } from './event-bus.js';
 import { API_BASE } from './constants.js';
 import {
-  showGlobalLoading,
-  hideGlobalLoading,
   showToast,
   showModal,
   resetModalToDefault,
@@ -16,11 +14,47 @@ import {
 import { getEditorMode, ensureDiffLibrariesLoaded } from './utils.js';
 import { isGitEnabled } from './git-operations.js';
 import { revealAndOpenFile as _revealAndOpenFile, showNavIndicator } from './file-nav-helper.js';
+import { createTextDiffReview, getRawDiffRows } from './diff-review.js?v=2.5.188';
+import { startOperationFeedback } from './feedback-service.js?v=2.5.188';
 
 let _aiDiffQueue = [];
 let _aiDiffActive = false;
 
 const DIFF_HISTORY_KEY = 'bps_ai_diff_history';
+const workingDiffViewContexts = new Map();
+const MAX_WORKING_DIFF_VIEW_CONTEXTS = 50;
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+function startHistoryOperation({ label, target, message, retry, open }) {
+  return startOperationFeedback({
+    label,
+    icon: 'history',
+    scope: 'Local Git repository',
+    target,
+    message,
+    retry,
+    open,
+    openLabel: 'History',
+    openIcon: 'history',
+  });
+}
+
+function rememberWorkingDiffViewContext(key, context) {
+  if (!context) return;
+  workingDiffViewContexts.delete(key);
+  workingDiffViewContexts.set(key, context);
+  if (workingDiffViewContexts.size > MAX_WORKING_DIFF_VIEW_CONTEXTS) {
+    workingDiffViewContexts.delete(workingDiffViewContexts.keys().next().value);
+  }
+}
 const DIFF_HISTORY_MAX = 30;
 
 function _loadDiffHistory() {
@@ -120,14 +154,11 @@ export async function undoDiffByIndex(index) {
 }
 
 export function initAiDiffListener() {
-  console.log('[BPS] initAiDiffListener registered');
   eventBus.on('ai:show-diff', (data) => {
-    console.log('[BPS] ai:show-diff event', data?.path);
     _aiDiffQueue.push(data);
     if (!_aiDiffActive) _processNextAiDiff();
   });
   eventBus.on('ai:navigate-file', (data) => {
-    console.log('[BPS] ai:navigate-file event', data?.path);
     if (data && data.path) _revealAndOpenFile(data.path, 'navigate').catch((e) => console.warn('[BPS] navigate-file error', e));
   });
   eventBus.on('ai:undo-diff', () => { undoLastDiff(); });
@@ -136,7 +167,6 @@ export function initAiDiffListener() {
     window.__blueprintStudioAiEditListenerInstalled = true;
     window.addEventListener('message', (event) => {
       if (!event.data || event.data.type !== 'blueprint_studio_ai_edit') return;
-      console.log('[BPS] postMessage received', event.data.payload?.action, event.data.payload?.path);
       const data = event.data.payload || {};
       if (data.action === 'navigate' && data.path) {
         _revealAndOpenFile(data.path, 'tool').catch((e) => console.warn('[BPS] postMessage navigate error', e));
@@ -148,7 +178,6 @@ export function initAiDiffListener() {
         });
       }
     });
-    console.log('[BPS] postMessage listener installed');
   }
 }
 
@@ -923,6 +952,12 @@ export async function showFullDiffModal(path, oldContent, newContent) {
             <button id="diff-nav-next" class="diff-nav-btn" type="button" title="Next difference">
               <span class="ui-icon material-icons">keyboard_arrow_down</span>
             </button>
+            <button id="diff-whitespace-toggle" class="ui-icon-button" type="button" title="Hide whitespace-only changes" aria-label="Hide whitespace-only changes" aria-pressed="false">
+              <span class="ui-icon material-icons" aria-hidden="true">space_bar</span>
+            </button>
+            <button id="diff-wrap-toggle" class="ui-icon-button" type="button" title="Wrap long lines" aria-label="Wrap long lines" aria-pressed="true">
+              <span class="ui-icon material-icons" aria-hidden="true">wrap_text</span>
+            </button>
           </div>
           <button id="ai-diff-reject" type="button" style="display:inline-flex;align-items:center;gap:4px;padding:6px 16px;border-radius:6px;border:1px solid var(--error-color);background:transparent;color:var(--error-color);cursor:pointer;font-size:13px;font-weight:600;">
             <span class="ui-icon ui-icon--size-sm material-icons">undo</span> Reject
@@ -946,19 +981,32 @@ export async function showFullDiffModal(path, oldContent, newContent) {
     const target = document.getElementById("diff-view");
     const mode = getEditorMode(path);
 
-    const mergeView = CodeMirror.MergeView(target, {
-      value: newContent,
-      origLeft: oldContent,
-      lineNumbers: true,
-      mode: mode,
-      theme: state.theme === "light" ? "default" : "material-darker",
-      highlightDifferences: true,
-      connect: "align",
-      collapseIdentical: false,
-      readOnly: true,
-      revertButtons: false,
-    });
-    const diffNavigation = setupDiffNavigation(mergeView);
+    const largeDiff = oldContent.length + newContent.length > 1_000_000;
+    let ignoreWhitespace = false;
+    let wrapLines = true;
+    let mergeView = null;
+    let diffNavigation = null;
+    const createMergeView = () => {
+      diffNavigation?.cleanup();
+      target.replaceChildren();
+      mergeView = CodeMirror.MergeView(target, {
+        value: newContent,
+        origLeft: oldContent,
+        lineNumbers: true,
+        lineWrapping: wrapLines,
+        mode: mode,
+        theme: state.theme === "light" ? "default" : "material-darker",
+        highlightDifferences: true,
+        ignoreWhitespace,
+        connect: "align",
+        collapseIdentical: largeDiff ? 4 : false,
+        readOnly: true,
+        revertButtons: false,
+      });
+      diffNavigation = setupDiffNavigation(mergeView);
+    };
+    createMergeView();
+    setupMergeViewDisplayControls({ getMergeView: () => mergeView, recreate: createMergeView, getIgnoreWhitespace: () => ignoreWhitespace, setIgnoreWhitespace: value => { ignoreWhitespace = value; }, getWrapLines: () => wrapLines, setWrapLines: value => { wrapLines = value; } });
 
     return new Promise((resolve) => {
       let isClosed = false;
@@ -967,7 +1015,7 @@ export async function showFullDiffModal(path, oldContent, newContent) {
       const closeHandler = (result) => {
         if (isClosed) return;
         isClosed = true;
-        diffNavigation.cleanup();
+        diffNavigation?.cleanup();
         deactivateSharedModal();
         modalOverlay.removeEventListener("click", overlayClickHandler);
         if (unsubscribeHideModal) unsubscribeHideModal();
@@ -1066,7 +1114,36 @@ function centerEditorOnLine(cm, line) {
   cm.scrollTo(null, targetTop);
 }
 
-function setupDiffNavigation(mergeView) {
+function setupMergeViewDisplayControls({
+  getMergeView,
+  recreate,
+  getIgnoreWhitespace,
+  setIgnoreWhitespace,
+  getWrapLines,
+  setWrapLines,
+}) {
+  const whitespaceButton = document.getElementById('diff-whitespace-toggle');
+  const wrapButton = document.getElementById('diff-wrap-toggle');
+  whitespaceButton?.addEventListener('click', () => {
+    const enabled = !getIgnoreWhitespace();
+    setIgnoreWhitespace(enabled);
+    whitespaceButton.setAttribute('aria-pressed', String(enabled));
+    whitespaceButton.title = enabled ? 'Show whitespace-only changes' : 'Hide whitespace-only changes';
+    whitespaceButton.setAttribute('aria-label', whitespaceButton.title);
+    recreate();
+  });
+  wrapButton?.addEventListener('click', () => {
+    const enabled = !getWrapLines();
+    setWrapLines(enabled);
+    wrapButton.setAttribute('aria-pressed', String(enabled));
+    const mergeView = getMergeView();
+    [mergeView?.editor(), mergeView?.leftOriginal?.(), mergeView?.rightOriginal?.()]
+      .filter(Boolean)
+      .forEach(editor => editor.setOption('lineWrapping', enabled));
+  });
+}
+
+function setupDiffNavigation(mergeView, initialIndex = 0) {
   const previousButton = document.getElementById("diff-nav-prev");
   const nextButton = document.getElementById("diff-nav-next");
   const countLabel = document.getElementById("diff-nav-count");
@@ -1074,7 +1151,9 @@ function setupDiffNavigation(mergeView) {
   const leftOriginal = mergeView.leftOriginal?.();
   const rightOriginal = mergeView.rightOriginal?.();
   const chunks = getMergeViewChunks(mergeView);
-  let activeIndex = chunks.length ? 0 : -1;
+  let activeIndex = chunks.length
+    ? Math.max(0, Math.min(initialIndex, chunks.length - 1))
+    : -1;
   let activeLineHandles = [];
   let isActive = true;
   let pendingFrame = null;
@@ -1166,6 +1245,9 @@ function setupDiffNavigation(mergeView) {
   }
 
   return {
+    getActiveIndex() {
+      return activeIndex;
+    },
     cleanup() {
       isActive = false;
       if (pendingFrame) {
@@ -1177,14 +1259,68 @@ function setupDiffNavigation(mergeView) {
   };
 }
 
+function captureMergeViewContext(mergeView, navigation) {
+  if (!mergeView) return null;
+  const captureScroll = editor => {
+    if (!editor) return null;
+    const { left, top } = editor.getScrollInfo();
+    return { left, top };
+  };
+  return {
+    activeIndex: navigation?.getActiveIndex?.() ?? 0,
+    editor: captureScroll(mergeView.editor?.()),
+    left: captureScroll(mergeView.leftOriginal?.()),
+    right: captureScroll(mergeView.rightOriginal?.()),
+  };
+}
+
+function scheduleMergeViewContextRestore(mergeView, context) {
+  if (!mergeView || !context) return;
+  requestAnimationFrame(() => {
+    const restoreScroll = (editor, scroll) => {
+      if (editor && scroll) editor.scrollTo(scroll.left, scroll.top);
+    };
+    restoreScroll(mergeView.editor?.(), context.editor);
+    restoreScroll(mergeView.leftOriginal?.(), context.left);
+    restoreScroll(mergeView.rightOriginal?.(), context.right);
+  });
+}
+
+function resetFailedWorkingDiffModal(path) {
+  const modalTitle = document.getElementById('modal-title');
+  if (modalTitle?.textContent !== `Diff: ${path}`) return;
+  deactivateSharedModal();
+  resetModalToDefault();
+  const modal = document.getElementById('modal');
+  const modalBody = document.getElementById('modal-body');
+  for (const property of ['height', 'display', 'flexDirection']) {
+    if (modal) modal.style[property] = '';
+  }
+  for (const property of ['padding', 'flex', 'display', 'flexDirection', 'overflow']) {
+    if (modalBody) modalBody.style[property] = '';
+  }
+}
+
 /**
  * Show diff modal for a file
  * Compares HEAD version with current version
  */
-export async function showDiffModal(path) {
+export async function showDiffModal(path, provider = 'git') {
+  const providerLabel = provider === 'gitea' ? 'Gitea' : 'GitHub';
+  const operation = startOperationFeedback({
+    label: `Load diff for ${path.split('/').pop()}`,
+    icon: 'difference',
+    scope: `Local Git repository (${providerLabel})`,
+    target: `HEAD -> ${path}`,
+    message: 'Preparing diff components...',
+    retry: () => showDiffModal(path, provider),
+    open: () => _revealAndOpenFile(path, 'diff'),
+    openLabel: 'Open File',
+    openIcon: 'description',
+  });
   try {
     await ensureDiffLibrariesLoaded();
-    showGlobalLoading(`Calculating diff for ${path}...`);
+    operation.update({ message: `Loading HEAD and working content for ${path}...` });
 
     // 1. Get HEAD content (Old)
     const headData = await fetchWithAuth(API_BASE, {
@@ -1193,10 +1329,10 @@ export async function showDiffModal(path) {
       body: JSON.stringify({ action: "git_show", path: path }),
     });
 
-    let oldContent = "";
-    if (headData.success) {
-      oldContent = headData.content;
+    if (!headData.success) {
+      throw new Error(headData.message || headData.error || 'Could not load the HEAD version');
     }
+    const oldContent = headData.content || "";
 
     // 2. Get Current Content (New)
     let newContent = "";
@@ -1209,8 +1345,6 @@ export async function showDiffModal(path) {
       const diskData = await loadFile(path);
       newContent = diskData.content;
     }
-
-    hideGlobalLoading();
 
     // 3. Setup Modal
     const modalOverlay = document.getElementById("modal-overlay");
@@ -1236,13 +1370,20 @@ export async function showDiffModal(path) {
           <span class="ui-icon material-icons">difference</span>
           <span id="diff-nav-count">No differences</span>
         </div>
-        <div class="diff-viewer-actions" aria-label="Diff navigation">
+        <div class="diff-viewer-actions" aria-label="Diff navigation and staging">
           <button id="diff-nav-prev" class="diff-nav-btn" type="button" title="Previous difference" aria-label="Previous difference">
             <span class="ui-icon material-icons">keyboard_arrow_up</span>
           </button>
           <button id="diff-nav-next" class="diff-nav-btn" type="button" title="Next difference" aria-label="Next difference">
             <span class="ui-icon material-icons">keyboard_arrow_down</span>
           </button>
+          <button id="diff-whitespace-toggle" class="ui-icon-button" type="button" title="Hide whitespace-only changes" aria-label="Hide whitespace-only changes" aria-pressed="false">
+            <span class="ui-icon material-icons" aria-hidden="true">space_bar</span>
+          </button>
+          <button id="diff-wrap-toggle" class="ui-icon-button" type="button" title="Wrap long lines" aria-label="Wrap long lines" aria-pressed="true">
+            <span class="ui-icon material-icons" aria-hidden="true">wrap_text</span>
+          </button>
+          <button id="diff-change-stage" class="ui-button" type="button"></button>
         </div>
       </div>
       <div id="diff-view" class="diff-viewer-container"></div>
@@ -1260,19 +1401,49 @@ export async function showDiffModal(path) {
     const mode = getEditorMode(path);
 
     // Old on Left (origLeft), New on Right (value/main)
-    const mergeView = CodeMirror.MergeView(target, {
-      value: newContent,
-      origLeft: oldContent,
-      lineNumbers: true,
-      mode: mode,
-      theme: state.theme === "light" ? "default" : "material-darker",
-      highlightDifferences: true,
-      connect: "align",
-      collapseIdentical: false,
-      readOnly: true,
-      revertButtons: false
+    const largeDiff = oldContent.length + newContent.length > 1_000_000;
+    let ignoreWhitespace = false;
+    let wrapLines = true;
+    let mergeView = null;
+    let diffNavigation = null;
+    const viewContextKey = `${provider}:${path}`;
+    let viewContext = workingDiffViewContexts.get(viewContextKey) || null;
+    const createMergeView = () => {
+      viewContext = captureMergeViewContext(mergeView, diffNavigation) || viewContext;
+      diffNavigation?.cleanup();
+      target.replaceChildren();
+      mergeView = CodeMirror.MergeView(target, {
+        value: newContent,
+        origLeft: oldContent,
+        lineNumbers: true,
+        lineWrapping: wrapLines,
+        mode: mode,
+        theme: state.theme === "light" ? "default" : "material-darker",
+        highlightDifferences: true,
+        ignoreWhitespace,
+        connect: "align",
+        collapseIdentical: largeDiff ? 4 : false,
+        readOnly: true,
+        revertButtons: false
+      });
+      diffNavigation = setupDiffNavigation(mergeView, viewContext?.activeIndex || 0);
+      scheduleMergeViewContextRestore(mergeView, viewContext);
+    };
+    createMergeView();
+    setupMergeViewDisplayControls({ getMergeView: () => mergeView, recreate: createMergeView, getIgnoreWhitespace: () => ignoreWhitespace, setIgnoreWhitespace: value => { ignoreWhitespace = value; }, getWrapLines: () => wrapLines, setWrapLines: value => { wrapLines = value; } });
+    const repositoryState = provider === 'gitea' ? giteaState : gitState;
+    const stageButton = document.getElementById('diff-change-stage');
+    const staged = repositoryState.files.staged.includes(path);
+    stageButton.textContent = staged ? 'Unstage file' : 'Stage file';
+    stageButton.addEventListener('click', async () => {
+      stageButton.disabled = true;
+      await Promise.all(eventBus.emit('source-control:change-stage', {
+        provider,
+        action: staged ? 'unstage' : 'stage',
+        files: [path],
+      }));
+      closeHandler();
     });
-    const diffNavigation = setupDiffNavigation(mergeView);
 
     // Cleanup handler
     let isClosed = false;
@@ -1280,7 +1451,9 @@ export async function showDiffModal(path) {
     const closeHandler = () => {
       if (isClosed) return;
       isClosed = true;
-      diffNavigation.cleanup();
+      viewContext = captureMergeViewContext(mergeView, diffNavigation) || viewContext;
+      rememberWorkingDiffViewContext(viewContextKey, viewContext);
+      diffNavigation?.cleanup();
       deactivateSharedModal();
       modalOverlay.removeEventListener("click", overlayClickHandler);
       if (unsubscribeHideModal) unsubscribeHideModal();
@@ -1303,11 +1476,17 @@ export async function showDiffModal(path) {
     modalOverlay.addEventListener("click", overlayClickHandler);
     document.getElementById("modal-close").onclick = closeHandler;
     unsubscribeHideModal = eventBus.on("ui:hide-modal", closeHandler);
+    operation.finish(`Diff ready for ${path.split('/').pop()}`, {
+      detail: `Compared HEAD with the current working content for ${path}`,
+    });
+    return true;
 
   } catch (error) {
-    hideGlobalLoading();
+    resetFailedWorkingDiffModal(path);
+    operation.fail(`Could not load diff for ${path.split('/').pop()}`, error.message);
     showToast(t("toast.diff_failed", { error: error.message }), "error");
   }
+  return false;
 }
 
 /**
@@ -1324,37 +1503,45 @@ export async function showGitHistory() {
     return;
   }
 
+  const branch = gitState.currentBranch || 'Current branch';
+  const operation = startHistoryOperation({
+    label: 'Load Git history',
+    target: `${branch} -> latest 30 commits`,
+    message: 'Fetching commit history...',
+    retry: () => showGitHistory(),
+    open: () => showGitHistory(),
+  });
   try {
-    showGlobalLoading("Fetching history...");
     const data = await fetchWithAuth(API_BASE, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "git_log", count: 30 }),
     });
-    hideGlobalLoading();
-
     if (data.success) {
       if (data.commits.length === 0) {
+        operation.finish('No commits found');
         showToast(t("toast.no_commits_found_in_this_repos"), "success");
-        return;
+        return true;
       }
 
       const commitListHtml = data.commits.map(commit => {
         const date = new Date(commit.timestamp * 1000).toLocaleString();
+        const safeHash = escapeHtml(commit.hash);
         return `
-          <div class="git-history-item" data-hash="${commit.hash}" style="padding: 12px; border-bottom: 1px solid var(--border-color); cursor: pointer; transition: background 0.15s;">
+          <div class="git-history-item" data-hash="${safeHash}" style="padding: 12px; border-bottom: 1px solid var(--border-color); cursor: pointer; transition: background 0.15s;">
             <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-              <span style="font-weight: 600; color: var(--accent-color); font-family: monospace;">${commit.hash.substring(0, 7)}</span>
-              <span style="font-size: 11px; color: var(--text-muted);">${date}</span>
+              <span style="font-weight: 600; color: var(--accent-color); font-family: monospace;">${escapeHtml(commit.hash.substring(0, 7))}</span>
+              <span style="font-size: 11px; color: var(--text-muted);">${escapeHtml(date)}</span>
             </div>
-            <div style="font-size: 14px; color: var(--text-primary); margin-bottom: 4px;">${commit.message}</div>
-            <div style="font-size: 12px; color: var(--text-secondary); opacity: 0.8;">by ${commit.author}</div>
+            <div style="font-size: 14px; color: var(--text-primary); margin-bottom: 4px;">${escapeHtml(commit.message)}</div>
+            <div style="font-size: 12px; color: var(--text-secondary); opacity: 0.8;">by ${escapeHtml(commit.author)}</div>
           </div>
         `;
       }).join("");
+      operation.finish(`${data.commits.length} ${data.commits.length === 1 ? 'commit' : 'commits'} loaded`);
 
       // Show commit history modal
-      const historyPromise = showModal({
+      showModal({
         title: "Commit History",
         message: `
           <div style="max-height: 60vh; overflow-y: auto; margin: -16px; background: var(--bg-primary);">
@@ -1385,58 +1572,63 @@ export async function showGitHistory() {
           item.addEventListener("mouseleave", () => item.style.background = "transparent");
         });
       }, 100);
+      return true;
 
     } else {
-      showToast(t("toast.fetch_history_failed", { error: data.message }), "error");
+      const message = data.message || data.error || 'Unknown history error';
+      operation.fail('Could not load Git history', message);
+      showToast(t("toast.fetch_history_failed", { error: message }), "error");
     }
   } catch (e) {
-    hideGlobalLoading();
+    operation.fail('Could not load Git history', e.message);
     showToast(t("toast.fetch_history_error", { error: e.message }), "error");
   }
+  return false;
 }
 
 /**
  * Show diff for a specific commit
  */
 export async function showGitCommitDiff(commit) {
+  const request = Object.freeze({ ...commit });
+  return loadGitCommitDiff(request);
+}
+
+async function loadGitCommitDiff(commit) {
+  const shortHash = commit.hash.substring(0, 7);
+  const branch = gitState.currentBranch || 'Current branch';
+  const operation = startHistoryOperation({
+    label: `Load commit ${shortHash}`,
+    target: `${branch} -> ${commit.hash}`,
+    message: `Loading diff for ${shortHash}...`,
+    retry: () => loadGitCommitDiff(commit),
+    open: () => showGitHistory(),
+  });
   try {
-    showGlobalLoading(`Loading diff for ${commit.hash.substring(0, 7)}...`);
     const data = await fetchWithAuth(API_BASE, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "git_diff_commit", hash: commit.hash }),
     });
-    hideGlobalLoading();
-
     if (data.success) {
       // We'll reuse the modal but with a large diff view
       const date = new Date(commit.timestamp * 1000).toLocaleString();
 
-      // Format diff with some basic coloring
-      const lines = data.diff.split("\n");
-      const coloredDiff = lines.map(line => {
-        let color = "inherit";
-        if (line.startsWith("+") && !line.startsWith("+++")) color = "var(--success-color)";
-        else if (line.startsWith("-") && !line.startsWith("---")) color = "var(--error-color)";
-        else if (line.startsWith("@@")) color = "var(--accent-color)";
-
-        return `<div style="color: ${color}; white-space: pre-wrap; font-family: monospace; font-size: 12px; line-height: 1.4;">${line.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div>`;
-      }).join("");
+      const diffRows = getRawDiffRows(data.diff);
+      operation.finish(`${diffRows.length} diff ${diffRows.length === 1 ? 'line' : 'lines'} loaded`);
 
       // Show commit diff modal
       const diffPromise = showModal({
-        title: `Commit: ${commit.hash.substring(0, 7)}`,
+        title: `Commit: ${shortHash}`,
         message: `
           <div style="display: flex; flex-direction: column; height: 70vh;">
             <div style="padding-bottom: 12px; border-bottom: 1px solid var(--border-color); margin-bottom: 12px;">
-              <div style="font-size: 16px; font-weight: 600; margin-bottom: 4px;">${commit.message}</div>
+              <div style="font-size: 16px; font-weight: 600; margin-bottom: 4px;">${escapeHtml(commit.message)}</div>
               <div style="font-size: 12px; color: var(--text-secondary);">
-                <strong>Author:</strong> ${commit.author} | <strong>Date:</strong> ${date}
+                <strong>Author:</strong> ${escapeHtml(commit.author)} | <strong>Date:</strong> ${escapeHtml(date)}
               </div>
             </div>
-            <div style="flex: 1; overflow: auto; background: var(--bg-primary); padding: 12px; border-radius: 4px; border: 1px solid var(--border-color);">
-              ${coloredDiff || '<div style="color: var(--text-muted); text-align: center; padding: 20px;">No changes to display in this commit</div>'}
-            </div>
+            <div id="commit-diff-content" class="diff-review-shell"></div>
           </div>
         `,
         confirmText: "Back to History"
@@ -1448,6 +1640,10 @@ export async function showGitCommitDiff(commit) {
         modal.style.maxWidth = "min(900px, 95vw)";
         modal.style.width = "min(900px, 95vw)";
       }
+      createTextDiffReview(document.getElementById('commit-diff-content'), diffRows, {
+        emptyMessage: 'No changes to display in this commit',
+        label: 'Commit diff controls',
+      });
 
       // Wait for user to close the modal
       const result = await diffPromise;
@@ -1457,12 +1653,16 @@ export async function showGitCommitDiff(commit) {
       if (result !== null) {
         await showGitHistory();
       }
+      return true;
 
     } else {
-      showToast(t("toast.fetch_diff_failed", { error: data.message }), "error");
+      const message = data.message || data.error || 'Unknown commit diff error';
+      operation.fail('Could not load commit diff', message);
+      showToast(t("toast.fetch_diff_failed", { error: message }), "error");
     }
   } catch (e) {
-    hideGlobalLoading();
+    operation.fail('Could not load commit diff', e.message);
     showToast(t("toast.fetch_diff_error", { error: e.message }), "error");
   }
+  return false;
 }

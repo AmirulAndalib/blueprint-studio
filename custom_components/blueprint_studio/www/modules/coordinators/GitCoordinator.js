@@ -4,10 +4,10 @@
  * This is a "piece" of the decomposed app.js.
  */
 
-import { state, elements } from '../state.js';
+import { state, elements, gitState, giteaState } from '../state.js';
 import { eventBus } from '../event-bus.js';
 import { showModal } from '../ui.js';
-import { saveSettings } from '../settings.js?v=2.5.75';
+import { saveSettings } from '../settings.js?v=2.5.188';
 import { renderFileTree } from '../file-tree.js';
 import {
     gitPull as gitPullImpl,
@@ -20,7 +20,9 @@ import {
     forcePush as forcePushImpl,
     hardReset as hardResetImpl,
     showBranchManager as showBranchManagerImpl,
-    gitResolveConflict as gitResolveConflictImpl
+    gitResolveConflict as gitResolveConflictImpl,
+    gitStage as gitStageImpl,
+    gitUnstage as gitUnstageImpl
 } from '../git-operations.js';
 import {
     giteaStatus as giteaStatusImpl,
@@ -33,8 +35,22 @@ import {
     stageSelectedGiteaFiles as stageSelectedGiteaFilesImpl,
     stageAllGiteaFiles as stageAllGiteaFilesImpl,
     unstageAllGiteaFiles as unstageAllGiteaFilesImpl,
-    toggleGiteaFileSelection as toggleGiteaFileSelectionImpl
-} from '../gitea-integration.js?v=2.5.75';
+    toggleGiteaFileSelection as toggleGiteaFileSelectionImpl,
+    giteaStage as giteaStageImpl,
+    giteaUnstage as giteaUnstageImpl
+} from '../gitea-integration.js?v=2.5.188';
+import { updateCommitComposer } from '../source-control-view.js?v=2.5.188';
+
+async function changeSourceControlStage(provider, action, files) {
+    if (!files.length) return;
+    if (provider === 'gitea') {
+        if (action === 'stage') await giteaStageImpl(files);
+        else await giteaUnstageImpl(files);
+        return;
+    }
+    if (action === 'stage') await gitStageImpl(files);
+    else await gitUnstageImpl(files);
+}
 
 // Functions provided via callbacks during initialization to avoid circular dependencies
 let functions = {
@@ -67,6 +83,11 @@ export function initGitCoordinator(callbacks) {
     const gitFilesContainer = document.getElementById("git-files-container");
     if (gitFilesContainer) {
         gitFilesContainer.addEventListener("click", (e) => {
+            const stageButton = e.target.closest('.btn-source-control-stage');
+            if (stageButton) {
+                changeSourceControlStage('git', stageButton.dataset.action, [stageButton.dataset.path]);
+                return;
+            }
             // Handle git file group header clicks (toggle collapse)
             const groupHeader = e.target.closest(".git-file-group-header");
             if (groupHeader) {
@@ -82,7 +103,7 @@ export function initGitCoordinator(callbacks) {
             const diffBtn = e.target.closest(".btn-git-diff");
             if (diffBtn) {
                 const path = diffBtn.dataset.path;
-                if (functions.showDiffModal) functions.showDiffModal(path);
+                if (functions.showDiffModal) functions.showDiffModal(path, 'git');
                 return;
             }
 
@@ -104,7 +125,7 @@ export function initGitCoordinator(callbacks) {
                 if (target.id === "btn-git-pull-empty-state") {
                     gitPullImpl();
                 } else if (target.id === "btn-git-refresh-empty-state") {
-                    checkGitStatusIfEnabledImpl(true);
+                    gitStatusImpl(true);
                 } else if (target.id === "btn-git-init-panel") {
                     gitInitImpl();
                 } else if (target.id === "btn-git-connect-panel") {
@@ -125,7 +146,7 @@ export function initGitCoordinator(callbacks) {
             const fileItem = e.target.closest(".git-file-item");
             if (fileItem && !e.target.classList.contains("git-file-checkbox")) {
                 const checkbox = fileItem.querySelector(".git-file-checkbox");
-                if (checkbox) {
+                if (checkbox && !checkbox.disabled) {
                     checkbox.checked = !checkbox.checked;
                     const path = checkbox.getAttribute("data-file-path");
                     if (path && functions.toggleFileSelection) {
@@ -150,6 +171,11 @@ export function initGitCoordinator(callbacks) {
     const giteaFilesContainer = document.getElementById("gitea-files-container");
     if (giteaFilesContainer) {
         giteaFilesContainer.addEventListener("click", (e) => {
+            const stageButton = e.target.closest('.btn-source-control-stage');
+            if (stageButton) {
+                changeSourceControlStage('gitea', stageButton.dataset.action, [stageButton.dataset.path]);
+                return;
+            }
             // Handle gitea file group header clicks (toggle collapse)
             const groupHeader = e.target.closest(".git-file-group-header");
             if (groupHeader) {
@@ -165,7 +191,7 @@ export function initGitCoordinator(callbacks) {
             const diffBtn = e.target.closest(".btn-git-diff");
             if (diffBtn) {
                 const path = diffBtn.dataset.path;
-                if (functions.showDiffModal) functions.showDiffModal(path);
+                if (functions.showDiffModal) functions.showDiffModal(path, 'gitea');
                 return;
             }
 
@@ -206,11 +232,11 @@ export function initGitCoordinator(callbacks) {
             const fileItem = e.target.closest(".git-file-item");
             if (fileItem && !e.target.classList.contains("gitea-file-checkbox")) {
                 const checkbox = fileItem.querySelector(".gitea-file-checkbox");
-                if (checkbox) {
+                if (checkbox && !checkbox.disabled) {
                     checkbox.checked = !checkbox.checked;
                     const path = checkbox.getAttribute("data-file-path");
                     if (path) {
-                        if (functions.toggleFileSelection) functions.toggleFileSelection(path);
+                        toggleGiteaFileSelectionImpl(path);
                     }
                 }
             }
@@ -395,6 +421,18 @@ export function initGitCoordinator(callbacks) {
     if (elements.btnGiteaCommitStaged) {
         elements.btnGiteaCommitStaged.addEventListener("click", () => giteaCommitImpl());
     }
+    for (const [provider, repositoryState, inputId, button] of [
+        ['git', gitState, 'commit-message', elements.btnCommitStaged],
+        ['gitea', giteaState, 'gitea-commit-message', elements.btnGiteaCommitStaged],
+    ]) {
+        const input = document.getElementById(inputId);
+        input?.addEventListener('input', () => updateCommitComposer(provider, repositoryState));
+        input?.addEventListener('keydown', (event) => {
+            if (event.key !== 'Enter' || (!event.ctrlKey && !event.metaKey) || button?.disabled) return;
+            event.preventDefault();
+            button.click();
+        });
+    }
 
     // Gitea panel delegation for checkboxes
     if (giteaFilesContainer) {
@@ -422,7 +460,11 @@ export function initGitCoordinator(callbacks) {
     });
 
     eventBus.on("git:show-diff", (data) => {
-        if (functions.showDiffModal) functions.showDiffModal(data.path);
+        if (functions.showDiffModal) functions.showDiffModal(data.path, data.provider || 'git');
+    });
+
+    eventBus.on('source-control:change-stage', (data) => {
+        return changeSourceControlStage(data.provider || 'git', data.action, data.files || []);
     });
 
     eventBus.on("git:toggle-group", (data) => {
@@ -442,7 +484,8 @@ export function initGitCoordinator(callbacks) {
     });
 
     eventBus.on("git:commit-staged", () => {
-        if (functions.commitStagedFiles) functions.commitStagedFiles();
+        if (functions.commitStagedFiles) return functions.commitStagedFiles();
+        return false;
     });
 
     eventBus.on("git:toggle-selection", (data) => {
@@ -490,6 +533,11 @@ export function initGitCoordinator(callbacks) {
         if (functions.updateGitPanel) functions.updateGitPanel();
         if (functions.updateGiteaPanel) functions.updateGiteaPanel();
         renderFileTree();
+    });
+
+    eventBus.on('source-control:connectivity-change', () => {
+        if (functions.updateGitPanel) functions.updateGitPanel();
+        if (functions.updateGiteaPanel) functions.updateGiteaPanel();
     });
 
     // Toggle git panel collapse via keyboard shortcut (Ctrl+Shift+G)

@@ -79,6 +79,7 @@
         border-bottom: 1px solid var(--border-color);
         background: var(--bg-secondary);
         align-items: center;
+        min-width: 0;
     }
 
     .sftp-select {
@@ -91,6 +92,7 @@
         font-size: 13px;
         outline: none;
         cursor: pointer;
+        min-width: 0;
     }
 
     .sftp-select:focus {
@@ -105,16 +107,25 @@
       cursor: pointer;
       font-size: 13px;
       user-select: none;
+      min-width: 0;
+      overflow: hidden;
     }
     .sftp-connection-item:hover { background: var(--bg-hover); }
     .sftp-connection-item.active { color: var(--accent-color); }
-    .sftp-conn-label { font-weight: 500; }
+    .sftp-conn-label {
+      font-weight: 500;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
     .sftp-connection-actions {
       margin-left: auto;
       display: flex;
       gap: 2px;
       opacity: 0;
       transition: opacity 0.15s;
+      flex: 0 0 auto;
     }
     .sftp-connection-item:hover .sftp-connection-actions { opacity: 1; }
     .sftp-breadcrumb {

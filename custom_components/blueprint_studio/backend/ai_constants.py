@@ -1,6 +1,8 @@
 "Lookup tables and error patterns for AI modules."
 from __future__ import annotations
 
+from .ha_metadata import SELECTOR_TYPES
+
 # Domain synonym mapping - maps natural language to HA domains
 DOMAIN_SYNONYMS = {
     "light": ["light", "lights", "bulb", "bulbs", "lamp", "lamps", "lighting", "chandelier", "spotlight", "led strip", "led", "strip light"],
@@ -129,45 +131,39 @@ DOMAIN_ACTIONS = {
 YAML_ERROR_PATTERNS = {
     "legacy_service": {
         "pattern": r"^\s*-?\s*service:\s*(\w+\.\w+)",
-        "message": "Legacy 'service:' syntax detected",
-        "solution": "Replace 'service:' with 'action:' (modern 2024+ syntax)",
+        "message": "Supported legacy 'service:' syntax detected",
+        "solution": "Prefer 'action:' for current Home Assistant YAML; 'service:' remains supported",
         "example": "service: light.turn_on  →  action: light.turn_on"
     },
     "missing_id": {
         "pattern": r"^-\s+alias:",
-        "message": "Automation missing unique 'id:' field",
-        "solution": "Add 'id: \"XXXXXXXXXXXXX\"' (13-digit timestamp) before 'alias:'",
-        "example": "- alias: My Auto  →  - id: '1738012345678'\n  alias: My Auto"
+        "message": "Automation has no optional unique 'id:' field",
+        "solution": "Add any stable unique string as 'id:' to enable UI editing and debug traces",
+        "example": "- alias: My Auto  →  - id: 'kitchen_light_auto'\n  alias: My Auto"
     },
     "singular_trigger": {
         "pattern": r"^\s*trigger:\s*$",
-        "message": "Legacy singular 'trigger:' key detected",
-        "solution": "Use modern plural 'triggers:' instead",
+        "message": "Supported legacy singular 'trigger:' key detected",
+        "solution": "Prefer the current plural 'triggers:' key when modernizing this automation",
         "example": "trigger:  →  triggers:"
     },
     "singular_condition": {
         "pattern": r"^\s*condition:\s*$",
-        "message": "Legacy singular 'condition:' key detected",
-        "solution": "Use modern plural 'conditions:' instead",
+        "message": "Supported legacy singular 'condition:' key detected",
+        "solution": "Prefer the current plural 'conditions:' key when modernizing this automation",
         "example": "condition:  →  conditions:"
     },
     "singular_action": {
         "pattern": r"^\s*action:\s*$",
-        "message": "Legacy singular 'action:' key detected at top level",
-        "solution": "Use modern plural 'actions:' at automation level",
+        "message": "Supported legacy singular 'action:' key detected at top level",
+        "solution": "Prefer the current plural 'actions:' key when modernizing this automation",
         "example": "action:  →  actions:"
     },
     "old_trigger_syntax": {
         "pattern": r"^\s*-\s+platform:\s+(\w+)",
-        "message": "Legacy 'platform:' trigger syntax detected",
-        "solution": "Use modern '- trigger: platform' syntax",
+        "message": "Supported legacy 'platform:' trigger syntax detected",
+        "solution": "Prefer the current '- trigger: platform' syntax when modernizing this trigger",
         "example": "- platform: time  →  - trigger: time"
-    },
-    "missing_metadata": {
-        "pattern": r"(action:\s+\w+\.\w+)(?!.*metadata:)",
-        "message": "Action missing 'metadata: {}' field",
-        "solution": "Add 'metadata: {}' after action declaration",
-        "example": "action: light.turn_on\ntarget:  →  action: light.turn_on\nmetadata: {}\ntarget:"
     },
     "malformed_entity_id": {
         "pattern": r"entity_id:\s+([a-zA-Z_]+)(?!\.[a-zA-Z_])",
@@ -202,13 +198,7 @@ YAML_ERROR_PATTERNS = {
 }
 
 # Blueprint selector types
-BLUEPRINT_SELECTOR_TYPES = {
-    'entity', 'device', 'area', 'target', 'number', 'text', 'boolean',
-    'select', 'time', 'date', 'datetime', 'color_temp', 'color_rgb',
-    'action', 'object', 'template', 'icon', 'duration', 'trigger',
-    'condition', 'theme', 'addon', 'floor', 'label', 'location',
-    'media', 'attribute', 'state', 'country', 'currency',
-}
+BLUEPRINT_SELECTOR_TYPES = SELECTOR_TYPES
 
 # Valid blueprint domains
 BLUEPRINT_VALID_DOMAINS = {'automation', 'script', 'template'}

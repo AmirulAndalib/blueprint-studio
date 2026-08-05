@@ -7,11 +7,12 @@ import { fetchWithAuth } from './api.js';
 import { 
     getPaneForTab, 
     updatePaneActiveState,
+    isResponsiveSinglePaneSplit,
     enableSplitView,
     disableSplitView,
     updatePaneSizes,
     initSplitResize
-} from './split-view.js?v=2.5.75';
+} from './split-view.js?v=2.5.188';
 import { cleanupMarkdownPreview } from './asset-preview.js';
 import { showConfirmDialog } from './ui.js';
 import { 
@@ -20,7 +21,7 @@ import {
     fitTerminal,
     toggleTerminal as toggleTerminalImpl,
     setTerminalMode
-} from './terminal.js?v=2.5.75';
+} from './terminal.js?v=2.5.188';
 import {
     createEditor,
     createSecondaryEditor,
@@ -44,14 +45,15 @@ import {
 } from './status-bar.js';
 import {
     saveSettings as saveSettingsImpl
-} from './settings.js?v=2.5.75';
+} from './settings.js?v=2.5.188';
 import {
     isSftpPath as isSftpPathImpl,
     parseSftpPath as parseSftpPathImpl,
     openSftpFile as openSftpFileImpl
-} from './sftp.js?v=2.5.75';
-import { setOverflowTooltip } from './tooltip.js?v=2.5.75';
+} from './sftp.js?v=2.5.188';
+import { setOverflowTooltip } from './tooltip.js?v=2.5.188';
 import { getEditorConfigIndent } from './editorconfig.js';
+import { restoreWelcomeWorkspace } from './editor-workflow.js?v=2.5.188';
 
 /**
  * Pause all playing <video> and <audio> elements in the asset preview containers.
@@ -69,6 +71,224 @@ function stopActiveMedia() {
   }
 }
 
+const TAB_LIST_PANES = ['primary', 'secondary'];
+const recentlyClosedTabs = [];
+const MAX_RECENTLY_CLOSED_TABS = 10;
+let tabListControlsInitialized = false;
+
+function escapeMarkup(value) {
+  return String(value ?? '').replace(/[&<>"']/g, (character) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  })[character]);
+}
+
+function tabLocation(tab) {
+  if (tab.isTerminal || tab.path.startsWith('terminal://')) return { label: 'Terminal', icon: 'terminal', className: 'is-terminal' };
+  if (isSftpPathImpl(tab.path)) return { label: 'SFTP', icon: 'cloud', className: 'is-remote' };
+  return { label: 'Local', icon: 'home', className: 'is-local' };
+}
+
+function tabStatus(tab, active = false) {
+  if (tab.saveState === 'saving') return { label: 'Saving', icon: 'sync', className: 'is-saving' };
+  if (tab.saveState === 'failed') return { label: 'Save failed', icon: 'error', className: 'is-error' };
+  if (tab.saveState === 'saved') return { label: 'Saved', icon: 'check_circle', className: 'is-saved' };
+  if (tab.externalConflict) return { label: 'Conflict', icon: 'warning', className: 'is-error' };
+  if (tab.externallyChanged) return { label: 'Changed outside', icon: 'sync_problem', className: 'is-external' };
+  if (tab.modified) return { label: 'Unsaved', icon: 'circle', className: 'is-dirty' };
+  if (state.markdownPreviewActive && tab.path.endsWith('.md') && active) return { label: 'Preview', icon: 'visibility', className: 'is-preview' };
+  if (state.favoriteFiles.includes(tab.path)) return { label: 'Pinned', icon: 'push_pin', className: 'is-pinned' };
+  if (active) return { label: 'Active', icon: 'check', className: 'is-active' };
+  return null;
+}
+
+function rememberClosedTabs(tabs) {
+  tabs.filter((tab) => tab?.path && !tab.isTerminal).forEach((tab) => {
+    const existing = recentlyClosedTabs.findIndex((entry) => entry.path === tab.path);
+    if (existing !== -1) recentlyClosedTabs.splice(existing, 1);
+    recentlyClosedTabs.unshift({ path: tab.path, closedAt: Date.now() });
+  });
+  recentlyClosedTabs.splice(MAX_RECENTLY_CLOSED_TABS);
+}
+
+function reopenClosedTab(pane, entry) {
+  const index = recentlyClosedTabs.indexOf(entry);
+  if (index !== -1) recentlyClosedTabs.splice(index, 1);
+  if (state.splitView?.enabled) eventBus.emit('ui:set-active-pane', { pane });
+  eventBus.emit('file:open', { path: entry.path });
+  closeTabList(pane);
+  renderTabs();
+}
+
+function paneTabEntries(pane) {
+  if (isResponsiveSinglePaneSplit()) {
+    if (pane !== state.splitView.activePane) return [];
+    return state.openTabs.map((tab, tabIndex) => ({
+      tab,
+      tabIndex,
+      pane: getPaneForTab(tabIndex) || state.splitView.activePane,
+      active: tab === state.activeTab,
+    }));
+  }
+  if (!state.splitView?.enabled) {
+    return pane === 'primary'
+      ? state.openTabs.map((tab, tabIndex) => ({ tab, tabIndex, pane: 'primary', active: tab === state.activeTab }))
+      : [];
+  }
+  const tabIndices = pane === 'primary' ? state.splitView.primaryTabs : state.splitView.secondaryTabs;
+  const activeTab = pane === 'primary' ? state.splitView.primaryActiveTab : state.splitView.secondaryActiveTab;
+  return tabIndices
+    .filter((tabIndex) => tabIndex >= 0 && tabIndex < state.openTabs.length)
+    .map((tabIndex) => ({ tab: state.openTabs[tabIndex], tabIndex, pane, active: state.openTabs[tabIndex] === activeTab }));
+}
+
+function closeTabList(pane, restoreFocus = false) {
+  const trigger = document.getElementById(`${pane}-tab-list-trigger`);
+  const menu = document.getElementById(`${pane}-tab-list-menu`);
+  if (!trigger || !menu) return;
+  menu.hidden = true;
+  trigger.setAttribute('aria-expanded', 'false');
+  if (restoreFocus) trigger.focus();
+}
+
+function closeAllTabLists(exceptPane = null) {
+  TAB_LIST_PANES.forEach((pane) => {
+    if (pane !== exceptPane) closeTabList(pane);
+  });
+}
+
+function activateListedTab(pane, tab) {
+  if (state.splitView?.enabled) eventBus.emit('ui:set-active-pane', { pane });
+  eventBus.emit('tab:activate', { tab });
+  closeTabList(pane);
+  renderTabs();
+  eventBus.emit('ui:refresh-tree');
+}
+
+function rebuildTabList(pane) {
+  const trigger = document.getElementById(`${pane}-tab-list-trigger`);
+  const menu = document.getElementById(`${pane}-tab-list-menu`);
+  if (!trigger || !menu) return;
+  const entries = paneTabEntries(pane);
+  trigger.hidden = entries.length === 0 && recentlyClosedTabs.length === 0;
+  menu.replaceChildren();
+
+  if (entries.length) {
+    const heading = document.createElement('div');
+    heading.className = 'tab-list-heading';
+    heading.textContent = 'Open files';
+    menu.appendChild(heading);
+  }
+
+  entries.forEach(({ tab, active, pane: targetPane }) => {
+    const item = document.createElement('button');
+    const icon = tab.isTerminal ? { icon: 'terminal', class: 'default' } : getFileIcon(tab.path);
+    const fileName = tab.path.split('/').pop();
+    const parentPath = tab.path.includes('/') ? tab.path.split('/').slice(0, -1).join('/') : tab.path;
+    item.type = 'button';
+    item.className = 'ui-menu__item tab-list-item';
+    item.setAttribute('role', 'menuitem');
+    item.setAttribute('aria-current', active ? 'page' : 'false');
+    const location = tabLocation(tab);
+    const currentStatus = tabStatus(tab, active);
+    item.setAttribute('aria-label', `${fileName}, ${location.label}${currentStatus ? `, ${currentStatus.label}` : ''}`);
+
+    const iconNode = document.createElement('span');
+    iconNode.className = `tab-list-item-icon ui-icon material-icons ${icon.class}`;
+    iconNode.setAttribute('aria-hidden', 'true');
+    iconNode.textContent = icon.icon;
+    const copy = document.createElement('span');
+    copy.className = 'tab-list-item-copy';
+    const name = document.createElement('span');
+    name.className = 'tab-list-item-name';
+    name.textContent = fileName;
+    const path = document.createElement('span');
+    path.className = 'tab-list-item-path';
+    path.textContent = `${location.label} · ${parentPath}`;
+    copy.append(name, path);
+    item.append(iconNode, copy);
+    if (currentStatus) {
+      const status = document.createElement('span');
+      status.className = `tab-list-item-status ${currentStatus.className}`;
+      status.innerHTML = `<span class="ui-icon material-icons" aria-hidden="true">${currentStatus.icon}</span><span>${currentStatus.label}</span>`;
+      item.appendChild(status);
+    }
+    item.addEventListener('click', () => activateListedTab(targetPane, tab));
+    menu.appendChild(item);
+  });
+
+  if (recentlyClosedTabs.length) {
+    const heading = document.createElement('div');
+    heading.className = 'tab-list-heading tab-list-heading--recent';
+    heading.textContent = 'Recently closed';
+    menu.appendChild(heading);
+    recentlyClosedTabs.forEach((entry) => {
+      const item = document.createElement('button');
+      const location = isSftpPathImpl(entry.path) ? 'SFTP' : 'Local';
+      item.type = 'button';
+      item.className = 'ui-menu__item tab-list-item recently-closed-tab';
+      item.setAttribute('role', 'menuitem');
+      item.setAttribute('aria-label', `Reopen ${entry.path}`);
+      item.innerHTML = `<span class="tab-list-item-icon ui-icon material-icons" aria-hidden="true">restore</span><span class="tab-list-item-copy"><span class="tab-list-item-name"></span><span class="tab-list-item-path"></span></span>`;
+      item.querySelector('.tab-list-item-name').textContent = entry.path.split('/').pop();
+      item.querySelector('.tab-list-item-path').textContent = `${location} · ${entry.path}`;
+      item.addEventListener('click', () => reopenClosedTab(pane, entry));
+      menu.appendChild(item);
+    });
+  }
+
+  if (!entries.length) closeTabList(pane);
+}
+
+function initializeTabListControls() {
+  if (tabListControlsInitialized) return;
+  const controls = TAB_LIST_PANES.map((pane) => ({
+    pane,
+    trigger: document.getElementById(`${pane}-tab-list-trigger`),
+    menu: document.getElementById(`${pane}-tab-list-menu`),
+  }));
+  if (controls.some(({ trigger, menu }) => !trigger || !menu)) return;
+  tabListControlsInitialized = true;
+
+  controls.forEach(({ pane, trigger, menu }) => {
+    trigger.addEventListener('click', () => {
+      const shouldOpen = menu.hidden;
+      closeAllTabLists(shouldOpen ? pane : null);
+      menu.hidden = !shouldOpen;
+      trigger.setAttribute('aria-expanded', String(shouldOpen));
+      if (shouldOpen) menu.querySelector('[aria-current="page"]')?.scrollIntoView({ block: 'nearest' });
+    });
+    trigger.addEventListener('keydown', (event) => {
+      if (event.key !== 'ArrowDown') return;
+      event.preventDefault();
+      if (menu.hidden) trigger.click();
+      menu.querySelector('.tab-list-item')?.focus();
+    });
+    menu.addEventListener('keydown', (event) => {
+      const items = [...menu.querySelectorAll('.tab-list-item')];
+      const currentIndex = items.indexOf(document.activeElement);
+      let targetIndex = null;
+      if (event.key === 'ArrowDown') targetIndex = (currentIndex + 1) % items.length;
+      if (event.key === 'ArrowUp') targetIndex = (currentIndex - 1 + items.length) % items.length;
+      if (event.key === 'Home') targetIndex = 0;
+      if (event.key === 'End') targetIndex = items.length - 1;
+      if (targetIndex !== null && items.length) {
+        event.preventDefault();
+        items[targetIndex].focus();
+      } else if (event.key === 'Escape') {
+        event.preventDefault();
+        closeTabList(pane, true);
+      }
+    });
+  });
+
+  document.addEventListener('pointerdown', (event) => {
+    controls.forEach(({ pane, trigger, menu }) => {
+      if (!menu.hidden && !menu.contains(event.target) && !trigger.contains(event.target)) closeTabList(pane);
+    });
+  });
+  window.addEventListener('resize', () => closeAllTabLists());
+}
+
 /**
  * Renders the tab bar UI
  * Shows tabs separately for each pane when split view is enabled
@@ -79,6 +299,7 @@ export function renderTabs() {
   const secondaryContainer = document.getElementById('secondary-tabs-container');
 
   if (!primaryContainer) return;
+  initializeTabListControls();
 
   // Clear both containers
   primaryContainer.innerHTML = "";
@@ -127,6 +348,12 @@ export function renderTabs() {
     });
     primaryContainer.appendChild(fragment); // Single DOM operation instead of N operations
   }
+
+  TAB_LIST_PANES.forEach(rebuildTabList);
+  window.requestAnimationFrame(() => {
+    primaryContainer.querySelector('.tab.active')?.scrollIntoView({ inline: 'nearest', block: 'nearest' });
+    secondaryContainer?.querySelector('.tab.active')?.scrollIntoView({ inline: 'nearest', block: 'nearest' });
+  });
 }
 
 /**
@@ -137,6 +364,9 @@ function createTabElement(tab, tabIndex, isActive, pane) {
   tabEl.className = `tab ${isActive ? "active" : ""}`;
   tabEl.setAttribute('data-tab-index', tabIndex);
   tabEl.setAttribute('draggable', 'true');
+  tabEl.setAttribute('role', 'tab');
+  tabEl.setAttribute('aria-selected', String(isActive));
+  tabEl.tabIndex = isActive ? 0 : -1;
 
   if (pane) {
     tabEl.setAttribute('data-pane', pane);
@@ -150,15 +380,20 @@ function createTabElement(tab, tabIndex, isActive, pane) {
   }
   
   const fileName = tab.path.split("/").pop();
+  const location = tabLocation(tab);
+  const currentStatus = tabStatus(tab, isActive);
+  const stateClass = currentStatus ? ` ${currentStatus.className}` : '';
+  tabEl.className += `${stateClass} ${location.className}`;
 
   tabEl.innerHTML = `
     <span class="tab-icon ${icon.class} ui-icon material-icons">${icon.icon}</span>
+    <span class="tab-location" title="${location.label}">${location.label}</span>
     <span class="tab-name">${fileName}</span>
-    ${tab.modified ? '<div class="tab-modified"></div>' : ""}
-    <div class="tab-close"><span class="ui-icon material-icons">close</span></div>
+    ${currentStatus ? `<span class="tab-state ${currentStatus.className}"><span class="ui-icon material-icons" aria-hidden="true">${currentStatus.icon}</span><span class="tab-state-label">${currentStatus.label}</span></span>` : ""}
+    <button class="tab-close" type="button"><span class="ui-icon material-icons" aria-hidden="true">close</span></button>
   `;
   const tabName = tabEl.querySelector('.tab-name');
-  tabEl.setAttribute('aria-label', tab.path);
+  tabEl.setAttribute('aria-label', `${tab.path}, ${location.label}${currentStatus ? `, ${currentStatus.label}` : ''}`);
   setOverflowTooltip(tabEl, tab.path, tabName);
 
   tabEl.addEventListener("click", (e) => {
@@ -170,6 +405,12 @@ function createTabElement(tab, tabIndex, isActive, pane) {
       eventBus.emit('tab:activate', { tab });
       renderTabs();
       eventBus.emit('ui:refresh-tree');
+    }
+  });
+  tabEl.addEventListener('keydown', (event) => {
+    if ((event.key === 'Enter' || event.key === ' ') && !event.target.closest('.tab-close')) {
+      event.preventDefault();
+      tabEl.click();
     }
   });
 
@@ -188,6 +429,7 @@ function createTabElement(tab, tabIndex, isActive, pane) {
   enableLongPressContextMenu(tabEl);
 
   const closeBtn = tabEl.querySelector(".tab-close");
+  closeBtn.setAttribute('aria-label', `Close ${fileName}`);
   closeBtn.addEventListener("click", (e) => {
     e.stopPropagation();
     eventBus.emit('tab:close', { tab, pane });
@@ -254,6 +496,7 @@ export async function closeAllTabs(force = false) {
     }
   });
 
+  rememberClosedTabs(state.openTabs);
   state.openTabs = [];
   state.activeTab = null;
 
@@ -267,9 +510,7 @@ export async function closeAllTabs(force = false) {
     // Hide the editor wrapper to show welcome screen
     state.editor.getWrapperElement().style.display = "none";
   }
-  if (elements.welcomeScreen) {
-    elements.welcomeScreen.style.display = "flex";
-  }
+  restoreWelcomeWorkspace();
   if (elements.assetPreview) {
     elements.assetPreview.classList.remove("visible");
     elements.assetPreview.innerHTML = "";
@@ -304,6 +545,7 @@ export async function closeOtherTabs(keepTab, force = false) {
     }
   });
 
+  rememberClosedTabs(otherTabs);
   state.openTabs = [keepTab];
 
   if (state.splitView && state.splitView.enabled) {
@@ -343,6 +585,7 @@ export async function closeTabsToRight(tab, force = false) {
     }
   });
 
+  rememberClosedTabs(tabsToClose);
   state.openTabs = state.openTabs.slice(0, index + 1);
 
   if (state.splitView && state.splitView.enabled && state.openTabs.length <= 1) {
@@ -437,6 +680,7 @@ eventBus.on("ui:refresh-tabs", () => {
  * Activates a tab, restoring its state into the editor
  */
 export async function activateTab(tab, skipSave = false) {
+    if (!state.openTabs.includes(tab)) return;
     // Hide welcome screen
     if (elements.welcomeScreen) {
       elements.welcomeScreen.style.display = "none";
@@ -594,6 +838,7 @@ export async function activateTab(tab, skipSave = false) {
           targetEditor.getWrapperElement().style.display = "block";
 
           const mode = getEditorMode(tab.path);
+          targetEditor.blueprintStudioFilePath = tab.path;
           try {
             targetEditor.setOption("mode", mode);
           } catch (error) {
@@ -620,6 +865,13 @@ export async function activateTab(tab, skipSave = false) {
           // 1. EditorConfig wins if present
           // 2. Otherwise detect from content + file-type defaults
           const ecIndent = await getEditorConfigIndent(tab.path || "");
+          // File loading and EditorConfig discovery are asynchronous. Do not
+          // let a closed or superseded tab restore a full-size editor above
+          // the Welcome screen after its close workflow has completed.
+          if (!state.openTabs.includes(tab) || state.activeTab !== tab) {
+            if (state.openTabs.length === 0) restoreWelcomeWorkspace();
+            return;
+          }
           const indent = ecIndent || (hasIndentedContent
             ? detectIndentation(tab.content, tab.path || "")
             : detectIndentation("", tab.path || ""));
@@ -694,7 +946,9 @@ export async function closeTab(data, force = false) {
     }
 
     if (!force && tab.modified) {
-      if (!await showConfirmDialog({ title: 'Close Unsaved File', message: `File ${tab.path.split("/").pop()} has unsaved changes. Close anyway?`, confirmText: 'Close File', isDanger: true })) {
+      const location = tabLocation(tab);
+      const pathLabel = isSftpPathImpl(tab.path) ? tab.path : `/config/${tab.path}`;
+      if (!await showConfirmDialog({ title: 'Close Unsaved File', message: `<div class="operation-location ${location.className}"><span class="ui-icon material-icons" aria-hidden="true">${location.icon}</span><span><strong>${location.label}</strong><small>${escapeMarkup(pathLabel)}</small></span></div>File <b>${escapeMarkup(tab.path.split("/").pop())}</b> has unsaved changes. Close anyway?`, confirmText: 'Close File', isDanger: true })) {
         return;
       }
     }
@@ -725,6 +979,7 @@ export async function closeTab(data, force = false) {
       if (state.splitView.secondaryActiveTab === tab) state.splitView.secondaryActiveTab = null;
     }
 
+    rememberClosedTabs([tab]);
     state.openTabs.splice(index, 1);
 
     // Auto-close split view if only 1 tab remains
@@ -744,7 +999,7 @@ export async function closeTab(data, force = false) {
         applyMinimapState(state.primaryEditor, state.secondaryEditor, state.showMinimap, null);
         if (state.editor) state.editor.getWrapperElement().style.display = "none";
         if (state.secondaryEditor) state.secondaryEditor.getWrapperElement().style.display = "none";
-        if (elements.welcomeScreen) elements.welcomeScreen.style.display = "flex";
+        restoreWelcomeWorkspace();
         if (elements.assetPreview) elements.assetPreview.classList.remove("visible");
         if (elements.breadcrumb) elements.breadcrumb.innerHTML = "";
         if (elements.groupMarkdown) elements.groupMarkdown.style.display = "none";
@@ -763,7 +1018,7 @@ export async function closeTab(data, force = false) {
  */
 export async function restoreOpenTabs() {
     if (!state.rememberWorkspace) {
-      if (elements.welcomeScreen) elements.welcomeScreen.style.display = "flex";
+      restoreWelcomeWorkspace();
       return;
     }
 
@@ -781,9 +1036,7 @@ export async function restoreOpenTabs() {
           wrapperDiv.style.display = "none";
         }
       }
-      if (elements.welcomeScreen) {
-        elements.welcomeScreen.style.display = "flex";
-      }
+      restoreWelcomeWorkspace();
       if (elements.assetPreview) {
         elements.assetPreview.classList.remove("visible");
         elements.assetPreview.innerHTML = "";
@@ -923,7 +1176,7 @@ export async function restoreOpenTabs() {
         const wrapperDiv = document.getElementById('codemirror-wrapper');
         if (wrapperDiv) wrapperDiv.style.display = "none";
       }
-      if (elements.welcomeScreen) elements.welcomeScreen.style.display = "flex";
+      restoreWelcomeWorkspace();
       return;
     }
 

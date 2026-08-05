@@ -453,12 +453,22 @@ export const SYNTAX_THEMES = {
   }
 };
 
+export const BLUEPRINT_SELECTOR_TYPES = [
+  "action", "addon", "app", "area", "assist_pipeline", "attribute",
+  "automation_behavior", "backup_location", "boolean", "choose", "color_rgb",
+  "color_temp", "condition", "config_entry", "constant", "conversation_agent",
+  "country", "date", "datetime", "device", "duration", "entity", "file",
+  "floor", "icon", "label", "language", "location", "media", "number",
+  "numeric_threshold", "object", "qr_code", "select", "serial_port", "state",
+  "statistic", "target", "template", "text", "theme", "time", "trigger",
+];
+
 export const HA_SCHEMA = {
   // Blueprint-specific keys
   blueprintKeys: [
     { text: "blueprint:", type: "key", description: "Blueprint header block" },
     { text: "name:", type: "key", description: "Blueprint name (required)" },
-    { text: "domain:", type: "key", description: "Blueprint domain: automation or script" },
+    { text: "domain:", type: "key", description: "Blueprint domain: automation, script, or template" },
     { text: "description:", type: "key", description: "Blueprint description" },
     { text: "author:", type: "key", description: "Blueprint author" },
     { text: "input:", type: "key", description: "Blueprint inputs block" },
@@ -468,34 +478,45 @@ export const HA_SCHEMA = {
     { text: "homeassistant:", type: "key", description: "HA version requirements" },
     { text: "min_version:", type: "key", description: "Minimum HA version required" },
   ],
-  // Blueprint selector types
-  blueprintSelectors: [
-    { text: "entity:", type: "selector", description: "Entity selector" },
-    { text: "device:", type: "selector", description: "Device selector" },
-    { text: "area:", type: "selector", description: "Area selector" },
-    { text: "target:", type: "selector", description: "Target selector (entity/device/area)" },
-    { text: "number:", type: "selector", description: "Number selector" },
-    { text: "text:", type: "selector", description: "Text selector" },
-    { text: "boolean:", type: "selector", description: "Boolean (toggle) selector" },
-    { text: "select:", type: "selector", description: "Dropdown select selector" },
-    { text: "time:", type: "selector", description: "Time selector" },
-    { text: "date:", type: "selector", description: "Date selector" },
-    { text: "datetime:", type: "selector", description: "Date+time selector" },
-    { text: "color_temp:", type: "selector", description: "Color temperature selector" },
-    { text: "color_rgb:", type: "selector", description: "RGB color selector" },
-    { text: "action:", type: "selector", description: "Action sequence selector" },
-    { text: "object:", type: "selector", description: "Generic object selector" },
-    { text: "template:", type: "selector", description: "Template selector" },
-    { text: "icon:", type: "selector", description: "Icon selector" },
-    { text: "duration:", type: "selector", description: "Duration selector" },
-    { text: "trigger:", type: "selector", description: "Trigger selector" },
-    { text: "condition:", type: "selector", description: "Condition selector" },
-    { text: "theme:", type: "selector", description: "Theme selector" },
-    { text: "floor:", type: "selector", description: "Floor selector" },
-    { text: "label:", type: "selector", description: "Label selector" },
-    { text: "media:", type: "selector", description: "Media selector" },
-    { text: "attribute:", type: "selector", description: "Attribute selector" },
+  blueprintInputKeys: [
+    { text: "name:", type: "key", description: "Input or section display name" },
+    { text: "description:", type: "key", description: "Input or section description" },
+    { text: "default:", type: "key", description: "Default input value" },
+    { text: "selector:", type: "key", description: "Input selector" },
   ],
+  blueprintInputSectionKeys: [
+    { text: "name:", type: "key", description: "Input section display name" },
+    { text: "description:", type: "key", description: "Input section description" },
+    { text: "collapsed:", type: "key", description: "Start this input section collapsed" },
+    { text: "input:", type: "key", description: "Inputs contained in this section" },
+  ],
+  blueprintSelectorKeys: [
+    { text: "multiple:", type: "key", description: "Allow multiple selected values" },
+    { text: "filter:", type: "key", description: "Restrict selectable registry values" },
+    { text: "domain:", type: "key", description: "Restrict values to a domain" },
+    { text: "device_class:", type: "key", description: "Restrict values to a device class" },
+    { text: "integration:", type: "key", description: "Restrict values to an integration" },
+    { text: "min:", type: "key", description: "Minimum numeric value" },
+    { text: "max:", type: "key", description: "Maximum numeric value" },
+    { text: "step:", type: "key", description: "Numeric step" },
+    { text: "unit_of_measurement:", type: "key", description: "Displayed unit" },
+    { text: "mode:", type: "key", description: "Selector display mode" },
+    { text: "options:", type: "key", description: "Allowed select values" },
+    { text: "custom_value:", type: "key", description: "Allow a custom select value" },
+  ],
+  // Blueprint selector types
+  blueprintSelectors: BLUEPRINT_SELECTOR_TYPES.map(selector => ({
+    text: `${selector}:`,
+    type: "selector",
+    description: `${selector.replaceAll("_", " ")} selector`,
+  })),
+  jinjaNames: [
+    "states", "is_state", "is_state_attr", "state_attr", "has_value", "expand",
+    "now", "utcnow", "today_at", "timedelta", "as_datetime", "as_timestamp",
+    "area_entities", "area_devices", "device_entities", "device_attr",
+    "integration_entities", "label_entities", "floor_entities", "closest",
+    "distance", "namespace", "trigger", "this", "repeat", "wait", "response",
+  ].map(name => ({ text: name, type: "template", description: "Home Assistant template name" })),
   // Core configuration keys
   configuration: [
     { text: "homeassistant:", type: "domain", description: "Core Home Assistant configuration" },
@@ -551,12 +572,30 @@ export const HA_SCHEMA = {
     { text: "mode:", type: "key", description: "Automation execution mode" },
     { text: "max:", type: "key", description: "Maximum concurrent runs" },
     { text: "max_exceeded:", type: "key", description: "Behavior when max exceeded" },
-    { text: "trigger:", type: "key", description: "Automation triggers" },
-    { text: "condition:", type: "key", description: "Automation conditions" },
-    { text: "action:", type: "key", description: "Automation actions" },
-    { text: "triggers:", type: "key", description: "Automation triggers (modern syntax)" },
-    { text: "conditions:", type: "key", description: "Automation conditions (modern syntax)" },
-    { text: "actions:", type: "key", description: "Automation actions (modern syntax)" },
+    { text: "initial_state:", type: "key", description: "Initial enabled state after Home Assistant starts" },
+    { text: "variables:", type: "key", description: "Variables available to conditions and actions" },
+    { text: "trigger_variables:", type: "key", description: "Limited templates evaluated when triggers attach" },
+    { text: "trace:", type: "key", description: "Stored trace configuration" },
+    { text: "triggers:", type: "key", description: "Automation triggers" },
+    { text: "conditions:", type: "key", description: "Automation conditions" },
+    { text: "actions:", type: "key", description: "Automation actions" },
+  ],
+  automationLegacy: [
+    { text: "trigger:", type: "key", description: "Automation triggers (legacy key)" },
+    { text: "condition:", type: "key", description: "Automation conditions (legacy key)" },
+    { text: "action:", type: "key", description: "Automation actions (legacy key)" },
+  ],
+  script: [
+    { text: "alias:", type: "key", description: "Script friendly name" },
+    { text: "description:", type: "key", description: "Script description" },
+    { text: "icon:", type: "key", description: "Script icon" },
+    { text: "fields:", type: "key", description: "Script input fields" },
+    { text: "variables:", type: "key", description: "Variables available to the sequence" },
+    { text: "sequence:", type: "key", description: "Script action sequence" },
+    { text: "mode:", type: "key", description: "Script execution mode" },
+    { text: "max:", type: "key", description: "Maximum concurrent runs" },
+    { text: "max_exceeded:", type: "key", description: "Behavior when max is exceeded" },
+    { text: "trace:", type: "key", description: "Stored trace configuration" },
   ],
 
   // Automation modes

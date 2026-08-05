@@ -7,6 +7,7 @@ Delegates to domain-specific handler modules:
   api_sftp.py     — SFTP dispatcher
   api_misc.py     — settings, AI, syntax checkers, utilities
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -24,6 +25,7 @@ from homeassistant.helpers.storage import Store
 
 from .util import json_response, json_message
 from .git_manager import GitManager
+from .ha_metadata import HAMetadataManager
 from .ai_manager import AIManager
 from .file_manager import FileManager
 from .sftp_manager import SftpManager
@@ -49,18 +51,20 @@ _LOGGER = logging.getLogger(__name__)
 # Blueprint Studio is registered as an admin-only panel and exposes config files,
 # git operations, SFTP, terminal helpers, and HA service calls. Keep the backend
 # at the same privilege level as the UI instead of trying to maintain a denylist.
-_ADMIN_ONLY_ACTIONS = frozenset({
-    "call_service",
-    "delete",
-    "delete_multi",
-    "global_replace",
-    "git_force_push",
-    "git_hard_reset",
-    "git_delete_repo",
-    "git_delete_remote_branch",
-    "render_template",
-    "restart_home_assistant",
-})
+_ADMIN_ONLY_ACTIONS = frozenset(
+    {
+        "call_service",
+        "delete",
+        "delete_multi",
+        "global_replace",
+        "git_force_push",
+        "git_hard_reset",
+        "git_delete_repo",
+        "git_delete_remote_branch",
+        "render_template",
+        "restart_home_assistant",
+    }
+)
 
 
 class BlueprintStudioApiView(HomeAssistantView):
@@ -84,20 +88,24 @@ class BlueprintStudioApiView(HomeAssistantView):
         operations: OperationTracker | None = None,
         tickets: TicketManager | None = None,
         coordinator: OperationCoordinator | None = None,
+        metadata: HAMetadataManager | None = None,
     ) -> None:
         """Initialize the view."""
         self.config_dir = config_dir
         self.store = store
         self.data = data
         self.hass = None
-        self.git = git or GitManager(None, config_dir, data, store)
-        self.ai = ai or AIManager(None, data)
         self.file = file or FileManager(None, config_dir)
+        self.git = git or GitManager(None, config_dir, data, store)
+        self.ai = ai or AIManager(None, data, self.file)
+        if self.ai.file_manager is None:
+            self.ai.bind_file_manager(self.file)
         self.sftp = sftp or SftpManager(config_dir)
         self.terminal = terminal
         self.operations = operations
         self.tickets = tickets or TicketManager()
         self.coordinator = coordinator or OperationCoordinator()
+        self.metadata = metadata
         self._active = True
 
     def activate(
@@ -112,6 +120,7 @@ class BlueprintStudioApiView(HomeAssistantView):
         operations: OperationTracker,
         tickets: TicketManager,
         coordinator: OperationCoordinator,
+        metadata: HAMetadataManager,
     ) -> None:
         """Bind this process-lifetime route to the active entry runtime."""
         self.store = store
@@ -124,6 +133,7 @@ class BlueprintStudioApiView(HomeAssistantView):
         self.operations = operations
         self.tickets = tickets
         self.coordinator = coordinator
+        self.metadata = metadata
         self._active = True
 
     def deactivate(self) -> None:
@@ -140,6 +150,7 @@ class BlueprintStudioApiView(HomeAssistantView):
         self.operations = None
         self.tickets = None
         self.coordinator = None
+        self.metadata = None
 
     def _unavailable(self) -> web.Response | None:
         if not self._active:
@@ -170,6 +181,8 @@ class BlueprintStudioApiView(HomeAssistantView):
         self.git.hass = hass
         self.ai.hass = hass
         self.file.hass = hass
+        if self.metadata is not None:
+            self.metadata.hass = hass
         if not self.terminal:
             self.terminal = TerminalManager(hass)
         else:
@@ -180,11 +193,35 @@ class BlueprintStudioApiView(HomeAssistantView):
         progress_id = params.get("progress_id")
         local_progress = self.file.get_zip_progress(progress_id)
         if local_progress.get("status") != "pending":
-            status_code = local_progress.pop("status_code", 200) if "status_code" in local_progress else 200
+            status_code = (
+                local_progress.pop("status_code", 200)
+                if "status_code" in local_progress
+                else 200
+            )
             return json_response(local_progress, status_code=status_code)
         sftp_progress = self.sftp.get_zip_progress(progress_id)
-        status_code = sftp_progress.pop("status_code", 200) if "status_code" in sftp_progress else 200
+        status_code = (
+            sftp_progress.pop("status_code", 200)
+            if "status_code" in sftp_progress
+            else 200
+        )
         return json_response(sftp_progress, status_code=status_code)
+
+    def _cancel_zip_response(self, data) -> web.Response:
+        """Cancel the active producer, or prime both registries before it starts."""
+        progress_id = data.get("progress_id")
+        local_progress = self.file.get_zip_progress(progress_id)
+        sftp_progress = self.sftp.get_zip_progress(progress_id)
+        if local_progress.get("status") != "pending":
+            result = self.file.request_zip_cancel(progress_id)
+        elif sftp_progress.get("status") != "pending":
+            result = self.sftp.request_zip_cancel(progress_id)
+        else:
+            # The browser can request cancellation before its download GET arrives.
+            self.file.request_zip_cancel(progress_id)
+            result = self.sftp.request_zip_cancel(progress_id)
+        status_code = result.pop("status_code", 200)
+        return json_response(result, status_code=status_code)
 
     def _issue_connection_ticket(self, data: dict, user) -> web.Response:
         """Issue an exact-scope ticket for a browser stream or terminal socket."""
@@ -225,21 +262,30 @@ class BlueprintStudioApiView(HomeAssistantView):
         get_handlers = {
             "list_files": lambda r, u, p, h: api_files.list_files(self.file, p, h),
             "list_all": lambda r, u, p, h: api_files.list_all(self.file, p, h),
-            "list_directory": lambda r, u, p, h: api_files.list_directory(self.file, p, h),
+            "list_directory": lambda r, u, p, h: api_files.list_directory(
+                self.file, p, h
+            ),
             "list_git_files": lambda r, u, p, h: api_files.list_git_files(self.file, h),
             "read_file": lambda r, u, p, h: api_files.read_file(self.file, p),
-            "global_search": lambda r, u, p, h: api_files.global_search(self.file, p, h),
+            "global_search": lambda r, u, p, h: api_files.global_search(
+                self.file, p, h
+            ),
             "get_file_stat": lambda r, u, p, h: api_files.get_file_stat(self.file, p),
-            "get_tree_snapshot": lambda r, u, p, h: api_files.get_tree_snapshot(self.file, p, h),
-            "get_settings": lambda r, u, p, h: json_response(self.data.get("settings", {})),
+            "get_tree_snapshot": lambda r, u, p, h: api_files.get_tree_snapshot(
+                self.file, p, h
+            ),
+            "get_settings": lambda r, u, p, h: json_response(
+                self.data.get("settings", {})
+            ),
             "get_version": lambda r, u, p, h: api_misc.get_version(h),
             "get_devices": lambda r, u, p, h: api_misc.get_devices(h),
-            "get_areas":   lambda r, u, p, h: api_misc.get_areas(h),
-            "get_labels":  lambda r, u, p, h: api_misc.get_labels(h),
-            "get_floors":  lambda r, u, p, h: api_misc.get_floors(h),
-            "get_themes":   lambda r, u, p, h: api_misc.get_themes(h),
-            "get_addons":   lambda r, u, p, h: api_misc.get_addons(h),
+            "get_areas": lambda r, u, p, h: api_misc.get_areas(h),
+            "get_labels": lambda r, u, p, h: api_misc.get_labels(h),
+            "get_floors": lambda r, u, p, h: api_misc.get_floors(h),
+            "get_themes": lambda r, u, p, h: api_misc.get_themes(h),
+            "get_addons": lambda r, u, p, h: api_misc.get_addons(h),
             "get_services": lambda r, u, p, h: api_misc.get_services(h),
+            "get_metadata": lambda r, u, p, h: api_misc.get_metadata(self.metadata),
             "zip_progress": lambda r, u, p, h: self._zip_progress_response(p),
             "run_config_check": lambda r, u, p, h: api_misc.run_config_check(h),
             "list_hass_agents": lambda r, u, p, h: api_misc.list_hass_agents(h),
@@ -257,9 +303,14 @@ class BlueprintStudioApiView(HomeAssistantView):
         except Exception as err:
             _LOGGER.error(
                 "GET action %s failed [correlation_id=%s]: %s",
-                action, request.get("blueprint_studio_correlation_id"), err, exc_info=True,
+                action,
+                request.get("blueprint_studio_correlation_id"),
+                err,
+                exc_info=True,
             )
-            return json_message("Action failed. See server logs for details.", status_code=500)
+            return json_message(
+                "Action failed. See server logs for details.", status_code=500
+            )
 
     # ========== POST ==========
 
@@ -306,16 +357,28 @@ class BlueprintStudioApiView(HomeAssistantView):
         if action in api_sftp.SFTP_ACTIONS:
             try:
                 async with self.coordinator.admit(action) as timeout:
-                    operation = api_sftp.sftp_action(self.sftp, action, data, hass, request)
-                    return await asyncio.wait_for(operation, timeout) if timeout else await operation
+                    operation = api_sftp.sftp_action(
+                        self.sftp, action, data, hass, request
+                    )
+                    return (
+                        await asyncio.wait_for(operation, timeout)
+                        if timeout
+                        else await operation
+                    )
             except asyncio.TimeoutError:
                 return json_message("SFTP operation timed out", status_code=504)
 
         post_handlers = {
-            "issue_connection_ticket": lambda d, h, u: self._issue_connection_ticket(d, u),
+            "issue_connection_ticket": lambda d, h, u: self._issue_connection_ticket(
+                d, u
+            ),
             # Settings
-            "save_settings": lambda d, h, u: api_misc.save_settings(d, self.store, h, self.data),
-            "get_device_automations": lambda d, h, u: api_misc.get_device_automations(h, d),
+            "save_settings": lambda d, h, u: api_misc.save_settings(
+                d, self.store, h, self.data
+            ),
+            "get_device_automations": lambda d, h, u: api_misc.get_device_automations(
+                h, d
+            ),
             # Files
             "write_file": lambda d, h, u: api_files.write_file(self.file, d, h),
             "create_file": lambda d, h, u: api_files.create_file(self.file, d),
@@ -325,21 +388,32 @@ class BlueprintStudioApiView(HomeAssistantView):
             "rename": lambda d, h, u: api_files.rename(self.file, d),
             "upload_file": lambda d, h, u: api_files.upload_file(self.file, d),
             "upload_folder": lambda d, h, u: api_files.upload_folder(self.file, d),
-            "prepare_download_multi": lambda d, h, u: api_files.prepare_download_multi(self.file, d),
-            "download_multi": lambda d, h, u: api_files.download_multi(self.file, d, request),
+            "prepare_download_multi": lambda d, h, u: api_files.prepare_download_multi(
+                self.file, d
+            ),
+            "cancel_zip": lambda d, h, u: self._cancel_zip_response(d),
+            "download_multi": lambda d, h, u: api_files.download_multi(
+                self.file, d, request
+            ),
             "delete_multi": lambda d, h, u: api_files.delete_multi(self.file, d),
             "move_multi": lambda d, h, u: api_files.move_multi(self.file, d),
-            "global_search": lambda d, h, u: api_files.post_global_search(self.file, d, h),
+            "global_search": lambda d, h, u: api_files.post_global_search(
+                self.file, d, h
+            ),
             "global_replace": lambda d, h, u: api_files.global_replace(self.file, d, h),
             # Syntax checkers
             "check_yaml": lambda d, h, u: api_misc.check_yaml(self.ai, d, h),
             "check_jinja": lambda d, h, u: api_misc.check_jinja(self.ai, d, h),
             "check_json": lambda d, h, u: api_misc.check_json(self.ai, d, h),
             "check_python": lambda d, h, u: api_misc.check_python(self.ai, d, h),
-            "check_javascript": lambda d, h, u: api_misc.check_javascript(self.ai, d, h),
+            "check_javascript": lambda d, h, u: api_misc.check_javascript(
+                self.ai, d, h
+            ),
             "check_syntax": lambda d, h, u: api_misc.check_syntax(self.ai, d, h),
             # Terminal
-            "terminal_exec": lambda d, h, u: api_terminal.terminal_exec(self.terminal, d, u),
+            "terminal_exec": lambda d, h, u: api_terminal.terminal_exec(
+                self.terminal, d, u
+            ),
             # Git
             "git_status": lambda d, h, u: api_git.git_status(self.git, d),
             "git_log": lambda d, h, u: api_git.git_log(self.git, d),
@@ -355,16 +429,30 @@ class BlueprintStudioApiView(HomeAssistantView):
             "git_delete_repo": lambda d, h, u: api_git.git_delete_repo(self.git),
             "git_repair_index": lambda d, h, u: api_git.git_repair_index(self.git),
             "git_rename_branch": lambda d, h, u: api_git.git_rename_branch(self.git, d),
-            "git_merge_unrelated": lambda d, h, u: api_git.git_merge_unrelated(self.git, d),
+            "git_merge_unrelated": lambda d, h, u: api_git.git_merge_unrelated(
+                self.git, d
+            ),
             "git_force_push": lambda d, h, u: api_git.git_force_push(self.git, d),
-            "git_hard_reset": lambda d, h, u: api_git.git_hard_reset(self.git, self.file, d),
-            "git_delete_remote_branch": lambda d, h, u: api_git.git_delete_remote_branch(self.git, d),
-            "git_checkout_branch": lambda d, h, u: api_git.git_checkout_branch(self.git, d),
+            "git_hard_reset": lambda d, h, u: api_git.git_hard_reset(
+                self.git, self.file, d
+            ),
+            "git_delete_remote_branch": lambda d, h, u: (
+                api_git.git_delete_remote_branch(self.git, d)
+            ),
+            "git_checkout_branch": lambda d, h, u: api_git.git_checkout_branch(
+                self.git, d
+            ),
             "git_create_branch": lambda d, h, u: api_git.git_create_branch(self.git, d),
-            "git_delete_local_branch": lambda d, h, u: api_git.git_delete_local_branch(self.git, d),
+            "git_delete_local_branch": lambda d, h, u: api_git.git_delete_local_branch(
+                self.git, d
+            ),
             "git_merge_branch": lambda d, h, u: api_git.git_merge_branch(self.git, d),
-            "git_get_conflict_files": lambda d, h, u: api_git.git_get_conflict_files(self.git),
-            "git_resolve_conflict": lambda d, h, u: api_git.git_resolve_conflict(self.git, d),
+            "git_get_conflict_files": lambda d, h, u: api_git.git_get_conflict_files(
+                self.git
+            ),
+            "git_resolve_conflict": lambda d, h, u: api_git.git_resolve_conflict(
+                self.git, d
+            ),
             "git_abort": lambda d, h, u: api_git.git_abort(self.git),
             "git_stage": lambda d, h, u: api_git.git_stage(self.git, d),
             "git_unstage": lambda d, h, u: api_git.git_unstage(self.git, d),
@@ -372,40 +460,86 @@ class BlueprintStudioApiView(HomeAssistantView):
             "git_clean_locks": lambda d, h, u: api_git.git_clean_locks(self.git),
             "git_stop_tracking": lambda d, h, u: api_git.git_stop_tracking(self.git, d),
             "git_get_remotes": lambda d, h, u: api_git.git_get_remotes(self.git),
-            "git_get_credentials": lambda d, h, u: api_git.git_get_credentials(self.git),
-            "git_set_credentials": lambda d, h, u: api_git.git_set_credentials(self.git, d),
-            "git_clear_credentials": lambda d, h, u: api_git.git_clear_credentials(self.git),
-            "git_test_connection": lambda d, h, u: api_git.git_test_connection(self.git),
+            "git_get_credentials": lambda d, h, u: api_git.git_get_credentials(
+                self.git, d
+            ),
+            "git_set_credentials": lambda d, h, u: api_git.git_set_credentials(
+                self.git, d
+            ),
+            "git_clear_credentials": lambda d, h, u: api_git.git_clear_credentials(
+                self.git
+            ),
+            "git_test_connection": lambda d, h, u: api_git.git_test_connection(
+                self.git
+            ),
             # Gitea
             "gitea_status": lambda d, h, u: api_git.gitea_status(self.git, d),
             "gitea_pull": lambda d, h, u: api_git.gitea_pull(self.git),
             "gitea_push": lambda d, h, u: api_git.gitea_push(self.git, d),
             "gitea_push_only": lambda d, h, u: api_git.gitea_push_only(self.git),
-            "gitea_get_credentials": lambda d, h, u: api_git.gitea_get_credentials(self.git),
-            "gitea_set_credentials": lambda d, h, u: api_git.gitea_set_credentials(self.git, d),
-            "gitea_clear_credentials": lambda d, h, u: api_git.gitea_clear_credentials(self.git),
-            "gitea_test_connection": lambda d, h, u: api_git.gitea_test_connection(self.git),
+            "gitea_get_credentials": lambda d, h, u: api_git.gitea_get_credentials(
+                self.git
+            ),
+            "gitea_set_credentials": lambda d, h, u: api_git.gitea_set_credentials(
+                self.git, d
+            ),
+            "gitea_clear_credentials": lambda d, h, u: api_git.gitea_clear_credentials(
+                self.git
+            ),
+            "gitea_test_connection": lambda d, h, u: api_git.gitea_test_connection(
+                self.git
+            ),
             "gitea_add_remote": lambda d, h, u: api_git.gitea_add_remote(self.git, d),
-            "gitea_remove_remote": lambda d, h, u: api_git.gitea_remove_remote(self.git),
+            "gitea_remove_remote": lambda d, h, u: api_git.gitea_remove_remote(
+                self.git
+            ),
             "gitea_create_repo": lambda d, h, u: api_git.gitea_create_repo(self.git, d),
             # AI
             "ai_query": lambda d, h, u: api_misc.ai_query(self.ai, d),
+            "ai_preview_context": lambda d, h, u: api_misc.ai_preview_context(
+                self.ai, d
+            ),
             "ai_get_models": lambda d, h, u: api_misc.ai_get_models(self.ai, d),
+            "ai_apply_proposal": lambda d, h, u: api_misc.ai_apply_proposal(self.ai, d),
+            "ai_undo_proposal": lambda d, h, u: api_misc.ai_undo_proposal(self.ai, d),
+            "ai_cancel": lambda d, h, u: api_misc.ai_cancel(self.ai, d),
+            "ai_revise_proposal": lambda d, h, u: api_misc.ai_revise_proposal(
+                self.ai, d
+            ),
+            "ai_reject_proposal": lambda d, h, u: api_misc.ai_reject_proposal(
+                self.ai, d
+            ),
             # GitHub
-            "github_create_repo": lambda d, h, u: api_git.github_create_repo(self.git, d),
-            "github_set_default_branch": lambda d, h, u: api_git.github_set_default_branch(self.git, d),
-            "github_device_flow_start": lambda d, h, u: api_git.github_device_flow_start(self.git, d),
-            "github_device_flow_poll": lambda d, h, u: api_git.github_device_flow_poll(self.git, d),
+            "github_create_repo": lambda d, h, u: api_git.github_create_repo(
+                self.git, d
+            ),
+            "github_set_default_branch": lambda d, h, u: (
+                api_git.github_set_default_branch(self.git, d)
+            ),
+            "github_device_flow_start": lambda d, h, u: (
+                api_git.github_device_flow_start(self.git, d)
+            ),
+            "github_device_flow_poll": lambda d, h, u: api_git.github_device_flow_poll(
+                self.git, d
+            ),
             "github_star": lambda d, h, u: api_git.github_star(self.git),
             "github_follow": lambda d, h, u: api_git.github_follow(self.git),
             # Misc
-            "restart_home_assistant": lambda d, h, u: api_misc.restart_home_assistant(h),
+            "restart_home_assistant": lambda d, h, u: api_misc.restart_home_assistant(
+                h
+            ),
             "get_entities": lambda d, h, u: api_misc.get_entities(h, d),
             "render_template": lambda d, h, u: api_misc.render_template(h, d),
             "call_service": lambda d, h, u: api_misc.call_service(h, d),
-            "convert_to_blueprint": lambda d, h, u: api_misc.convert_to_blueprint(self.ai, d, h),
-            "parse_blueprint_inputs": lambda d, h, u: api_misc.parse_blueprint_inputs(self.ai, d, h),
-            "instantiate_blueprint":  lambda d, h, u: api_misc.instantiate_blueprint(self.ai, d, h),
+            "convert_to_blueprint": lambda d, h, u: api_misc.convert_to_blueprint(
+                self.ai, d, h
+            ),
+            "parse_blueprint_inputs": lambda d, h, u: api_misc.parse_blueprint_inputs(
+                self.ai, d, h
+            ),
+            "instantiate_blueprint": lambda d, h, u: api_misc.instantiate_blueprint(
+                self.ai, d, h
+            ),
             "reload_automations": lambda d, h, u: api_misc.reload_automations(h),
             "reload_yaml": lambda d, h, u: api_misc.reload_yaml(h, d),
         }
@@ -422,22 +556,31 @@ class BlueprintStudioApiView(HomeAssistantView):
                 user.name,
                 action,
             )
-            return json_message("Admin privileges required for this action", status_code=403)
+            return json_message(
+                "Admin privileges required for this action", status_code=403
+            )
 
         try:
             async with self.coordinator.admit(action) as timeout:
                 result = handler(data, hass, user)
                 if not asyncio.iscoroutine(result):
                     return result
-                return await asyncio.wait_for(result, timeout) if timeout else await result
+                return (
+                    await asyncio.wait_for(result, timeout) if timeout else await result
+                )
         except asyncio.TimeoutError:
             return json_message("Operation timed out", status_code=504)
         except Exception as err:
             _LOGGER.error(
                 "POST action %s failed [correlation_id=%s]: %s",
-                action, request.get("blueprint_studio_correlation_id"), err, exc_info=True,
+                action,
+                request.get("blueprint_studio_correlation_id"),
+                err,
+                exc_info=True,
             )
-            return json_message("Action failed. See server logs for details.", status_code=500)
+            return json_message(
+                "Action failed. See server logs for details.", status_code=500
+            )
 
 
 def _ticket_scope(params) -> dict[str, str] | None:
@@ -447,7 +590,14 @@ def _ticket_scope(params) -> dict[str, str] | None:
         "serve_file": ("path",),
         "download_folder": ("path", "progress_id"),
         "download_multi": ("stream_id",),
-        "search_stream": ("query", "case_sensitive", "use_regex", "match_word", "include", "exclude"),
+        "search_stream": (
+            "query",
+            "case_sensitive",
+            "use_regex",
+            "match_word",
+            "include",
+            "exclude",
+        ),
         "sftp_serve_file": ("stream_id",),
         "terminal": (),
     }
@@ -477,7 +627,13 @@ class BlueprintStudioStreamView(HomeAssistantView):
     name = "api:blueprint_studio:stream"
     requires_auth = False
 
-    def __init__(self, file_manager: FileManager, sftp_manager: SftpManager, operations: OperationTracker | None = None, tickets: TicketManager | None = None) -> None:
+    def __init__(
+        self,
+        file_manager: FileManager,
+        sftp_manager: SftpManager,
+        operations: OperationTracker | None = None,
+        tickets: TicketManager | None = None,
+    ) -> None:
         """Initialize the view."""
         self.file = file_manager
         self.sftp = sftp_manager
@@ -485,7 +641,13 @@ class BlueprintStudioStreamView(HomeAssistantView):
         self.tickets = tickets or TicketManager()
         self._active = True
 
-    def activate(self, file_manager: FileManager, sftp_manager: SftpManager, operations: OperationTracker, tickets: TicketManager) -> None:
+    def activate(
+        self,
+        file_manager: FileManager,
+        sftp_manager: SftpManager,
+        operations: OperationTracker,
+        tickets: TicketManager,
+    ) -> None:
         """Bind this route to the active entry runtime."""
         self.file = file_manager
         self.sftp = sftp_manager
@@ -520,10 +682,14 @@ class BlueprintStudioStreamView(HomeAssistantView):
             return web.Response(status=401, text="Invalid or expired ticket")
         grant = self.tickets.validate_grant(request.query.get("grant", ""), scope)
         if grant is None:
-            grant_token = self.tickets.exchange_for_grant(request.query.get("ticket", ""), scope)
+            grant_token = self.tickets.exchange_for_grant(
+                request.query.get("ticket", ""), scope
+            )
             if grant_token is None:
                 return web.Response(status=401, text="Invalid or expired ticket")
-            query = [(key, value) for key, value in request.query.items() if key != "ticket"]
+            query = [
+                (key, value) for key, value in request.query.items() if key != "ticket"
+            ]
             query.append(("grant", grant_token))
             raise web.HTTPFound(location=str(request.rel_url.with_query(query)))
         user = await hass.auth.async_get_user(grant.user_id)
@@ -564,6 +730,18 @@ class BlueprintStudioStreamView(HomeAssistantView):
                     stream_data["auth"],
                     stream_data["path"],
                 )
+            if stream_data.get("type") == "selected_zip":
+                request._blueprint_zip_progress_id = stream_data.get("progress_id")
+                return await api_sftp.sftp_stream_selected_zip(
+                    self.sftp,
+                    hass,
+                    request,
+                    stream_data["host"],
+                    stream_data["port"],
+                    stream_data["username"],
+                    stream_data["auth"],
+                    stream_data.get("paths", []),
+                )
             return await api_sftp.sftp_stream_file(
                 self.sftp,
                 hass,
@@ -576,6 +754,7 @@ class BlueprintStudioStreamView(HomeAssistantView):
             )
         else:
             return web.Response(status=400, text="Unknown streaming action")
+
 
 class BlueprintStudioUploadView(HomeAssistantView):
     """Multipart file upload view — streams directly to disk.
@@ -590,14 +769,24 @@ class BlueprintStudioUploadView(HomeAssistantView):
     name = "api:blueprint_studio:upload"
     requires_auth = True
 
-    def __init__(self, file_manager: FileManager, sftp_manager: SftpManager, operations: OperationTracker | None = None) -> None:
+    def __init__(
+        self,
+        file_manager: FileManager,
+        sftp_manager: SftpManager,
+        operations: OperationTracker | None = None,
+    ) -> None:
         """Initialize the view."""
         self.file = file_manager
         self.sftp = sftp_manager
         self.operations = operations
         self._active = True
 
-    def activate(self, file_manager: FileManager, sftp_manager: SftpManager, operations: OperationTracker) -> None:
+    def activate(
+        self,
+        file_manager: FileManager,
+        sftp_manager: SftpManager,
+        operations: OperationTracker,
+    ) -> None:
         """Bind this route to the active entry runtime."""
         self.file = file_manager
         self.sftp = sftp_manager
@@ -621,7 +810,9 @@ class BlueprintStudioUploadView(HomeAssistantView):
         if not user:
             return web.Response(status=401, text="Unauthorized")
         if not user.is_admin:
-            _LOGGER.warning("Blueprint Studio: non-admin user %s attempted upload access", user.name)
+            _LOGGER.warning(
+                "Blueprint Studio: non-admin user %s attempted upload access", user.name
+            )
             return json_message("Admin privileges required", status_code=403)
 
         hass = request.app["hass"]
@@ -693,7 +884,9 @@ class BlueprintStudioUploadView(HomeAssistantView):
             return json_message("Missing file or path", status_code=400)
 
         try:
-            validate_upload_metadata(file_path, overwrite, extract_zip, mode, connection)
+            validate_upload_metadata(
+                file_path, overwrite, extract_zip, mode, connection
+            )
         except ValidationError as err:
             upload_path.unlink(missing_ok=True)
             return json_message(str(err), status_code=err.status)
@@ -701,10 +894,16 @@ class BlueprintStudioUploadView(HomeAssistantView):
         try:
             if connection:
                 if extract_zip:
-                    return await self._upload_sftp_folder(hass, connection, file_path, upload_path, mode, overwrite)
-                return await self._upload_sftp(hass, connection, file_path, upload_path, overwrite)
+                    return await self._upload_sftp_folder(
+                        hass, connection, file_path, upload_path, mode, overwrite
+                    )
+                return await self._upload_sftp(
+                    hass, connection, file_path, upload_path, overwrite
+                )
             if extract_zip:
-                return await self._upload_local_folder(file_path, upload_path, mode, overwrite)
+                return await self._upload_local_folder(
+                    file_path, upload_path, mode, overwrite
+                )
             return await self._upload_local(hass, file_path, upload_path, overwrite)
         except (asyncio.CancelledError, ConnectionResetError):
             _LOGGER.info("Upload cancelled or client disconnected")
@@ -727,11 +926,15 @@ class BlueprintStudioUploadView(HomeAssistantView):
             return json_message("Missing SFTP connection parameters", status_code=400)
 
         def _write():
-            return self.sftp.create_file_from_path(host, port, username, auth, file_path, upload_path, overwrite)
+            return self.sftp.create_file_from_path(
+                host, port, username, auth, file_path, upload_path, overwrite
+            )
 
         try:
             result = await hass.async_add_executor_job(_write)
-            status_code = result.pop("status_code", 200) if isinstance(result, dict) else 200
+            status_code = (
+                result.pop("status_code", 200) if isinstance(result, dict) else 200
+            )
             return json_response(result, status_code=status_code)
         except Exception as e:
             _LOGGER.error("SFTP upload failed: %s", e)
@@ -739,9 +942,13 @@ class BlueprintStudioUploadView(HomeAssistantView):
 
     async def _upload_local_folder(self, file_path, upload_path, mode, overwrite):
         """Extract a disk-backed ZIP upload to a local folder."""
-        return await self.file.upload_folder_path(file_path, upload_path, mode, overwrite)
+        return await self.file.upload_folder_path(
+            file_path, upload_path, mode, overwrite
+        )
 
-    async def _upload_sftp_folder(self, hass, connection, file_path, upload_path, mode, overwrite):
+    async def _upload_sftp_folder(
+        self, hass, connection, file_path, upload_path, mode, overwrite
+    ):
         """Extract uploaded ZIP bytes to a remote SFTP folder."""
         host = connection.get("host", "")
         port = int(connection.get("port", 22))
@@ -752,11 +959,15 @@ class BlueprintStudioUploadView(HomeAssistantView):
             return json_message("Missing SFTP connection parameters", status_code=400)
 
         def _extract():
-            return self.sftp.upload_folder_path(host, port, username, auth, file_path, upload_path, mode, overwrite)
+            return self.sftp.upload_folder_path(
+                host, port, username, auth, file_path, upload_path, mode, overwrite
+            )
 
         try:
             result = await hass.async_add_executor_job(_extract)
-            status_code = result.pop("status_code", 200) if isinstance(result, dict) else 200
+            status_code = (
+                result.pop("status_code", 200) if isinstance(result, dict) else 200
+            )
             return json_response(result, status_code=status_code)
         except Exception as e:
             _LOGGER.error("SFTP folder upload failed: %s", e)

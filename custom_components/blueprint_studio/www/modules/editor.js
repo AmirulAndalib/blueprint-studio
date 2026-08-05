@@ -2,8 +2,9 @@
 import { state, elements } from './state.js';
 import { eventBus } from './event-bus.js';
 import { validateYaml, validateByFileType } from './file-operations.js';
-import { homeAssistantHint, HA_ENTITIES } from './ha-autocomplete.js';
-import { enableSplitView, disableSplitView } from './split-view.js?v=2.5.75';
+import { homeAssistantHint, HA_ENTITIES } from './ha-autocomplete.js?v=2.5.188';
+import { initCompletionDetails, updateCompletionDetails } from './completion-details.js?v=2.5.188';
+import { enableSplitView, disableSplitView } from './split-view.js?v=2.5.188';
 import { showToast } from './ui.js';
 import { copyToClipboard } from './utils.js';
 
@@ -352,13 +353,15 @@ export function createEditor(container = null, isPrimary = true) {
   }
 
   // Track changes
-  editor.on("change", () => handleEditorChange(editor));
+  editor.on("change", (cm, change) => handleEditorChange(editor, change));
 
   // Track cursor position and scroll
   editor.on("cursorActivity", () => {
+    updateCompletionDetails(editor);
     eventBus.emit('ui:update-status-bar');
     eventBus.emit('settings:save-workspace-state');
   });
+  initCompletionDetails();
 
   editor.on("scroll", () => {
     eventBus.emit('settings:save-workspace-state');
@@ -734,7 +737,7 @@ export function detectIndentation(content, filePath = "") {
  * Handles editor content changes
  * @param {CodeMirror} editor - The editor that changed (optional, defaults to state.editor)
  */
-export function handleEditorChange(editor = null) {
+export function handleEditorChange(editor = null, change = null) {
   const targetEditor = editor || state.editor;
   if (!targetEditor) return;
 
@@ -754,10 +757,12 @@ export function handleEditorChange(editor = null) {
   const currentContent = targetEditor.getValue();
   targetTab.content = currentContent;
   targetTab.modified = currentContent !== targetTab.originalContent;
+  if (targetTab.saveState && targetTab.saveState !== 'saving') targetTab.saveState = '';
 
   eventBus.emit('ui:update-toolbar-state');
   eventBus.emit('ui:refresh-tabs');
   eventBus.emit('ui:refresh-tree');
+  if (change?.origin !== 'setValue') eventBus.emit('validation:stale', { tab: targetTab, editor: targetEditor });
 
   // Handle auto-save
   eventBus.emit('file:trigger-autosave');

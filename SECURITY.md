@@ -123,6 +123,20 @@ paths. Logs and diagnostics exclude credentials, tokens, tickets, private keys,
 file contents, and full paths. See `BACKEND_ARCHITECTURE.md` for runtime and
 transfer ownership details.
 
+AI file output is never written directly. Provider responses can create only
+bounded, immutable proposals, and an authenticated administrator must review and
+explicitly apply the complete proposal. Apply rechecks source hashes and path
+policy, writes atomically, and rolls back an incomplete multi-file commit.
+
+Rule-based generation remains inside Blueprint Studio. Home Assistant
+conversation agents and configured local or cloud endpoints receive only a
+bounded selected/open-file excerpt plus relevant Home Assistant metadata.
+Hidden files are excluded and likely credentials, tokens, passwords, API keys,
+bearer values, private keys, and `!secret` references are replaced before
+submission. Redaction placeholders have no restorable mapping in provider
+output. Diagnostics retain aggregate provider class, outcome, timing, and size
+only; they exclude prompts, file content, paths, endpoints, model IDs, and keys.
+
 When a security vulnerability is identified:
 
 1. A security advisory will be created

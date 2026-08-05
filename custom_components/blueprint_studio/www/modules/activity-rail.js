@@ -62,9 +62,10 @@ export function refreshActivityRail() {
 
   if (elements.activitySftp && state.sftpIntegrationEnabled) {
     const sftpLoading = state.activeSftp.loading;
+    const sftpUnavailable = ["permission", "unavailable", "error"].includes(state.activeSftp.viewStatus);
     const sftpReady = Boolean(state.activeSftp.connectionId)
       && (state.activeSftp.files.length > 0 || state.activeSftp.folders.length > 0);
-    const sftpStatus = sftpLoading ? 'loading' : (sftpReady ? 'ready' : 'empty');
+    const sftpStatus = sftpLoading ? 'loading' : (sftpUnavailable ? 'unavailable' : (sftpReady ? 'ready' : 'empty'));
     setActivityState(elements.activitySftp, sftpStatus);
   } else {
     setActivityState(elements.activitySftp, 'unavailable');

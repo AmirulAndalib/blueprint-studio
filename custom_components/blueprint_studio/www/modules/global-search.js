@@ -1,16 +1,15 @@
 /** GLOBAL-SEARCH.JS | Purpose: * Provides sidebar-based global search and replace functionality across all files. */
 import { state, elements } from './state.js';
-import { HA_ENTITIES } from './ha-autocomplete.js';
+import { HA_ENTITIES } from './ha-autocomplete.js?v=2.5.188';
 import { t } from './translations.js';
 import { fetchWithAuth, urlWithTicket } from './api.js';
 import { eventBus } from './event-bus.js';
 import { API_BASE, STREAM_BASE } from './constants.js';
 import { copyToClipboard } from './utils.js';
 import { refreshActivityRail } from './activity-rail.js';
+import { startOperationFeedback } from './feedback-service.js?v=2.5.188';
 import {
   showToast,
-  showGlobalLoading,
-  hideGlobalLoading,
   showConfirmDialog
 } from './ui.js';
 
@@ -222,36 +221,91 @@ export async function performGlobalReplace() {
 
   if (!confirmed) return;
 
-  try {
-      showGlobalLoading(t("search.replace_loading", { count: fileCount }));
+  const request = Object.freeze({
+      query,
+      replacement,
+      caseSensitive: elements.btnMatchCase?.classList.contains("active") || false,
+      useRegex: elements.btnUseRegex?.classList.contains("active") || false,
+      matchWord: elements.btnMatchWord?.classList.contains("active") || false,
+      include: elements.globalSearchInclude?.value || "",
+      exclude: elements.globalSearchExclude?.value || "",
+      matchCount: results.length,
+      fileCount,
+  });
+  await runGlobalReplace(request);
+}
 
+function restoreGlobalSearchRequest(request) {
+  eventBus.emit("ui:switch-sidebar-view", "search");
+  if (elements.globalSearchInput) elements.globalSearchInput.value = request.query;
+  if (elements.globalReplaceInput) elements.globalReplaceInput.value = request.replacement;
+  if (elements.globalSearchInclude) elements.globalSearchInclude.value = request.include || "";
+  if (elements.globalSearchExclude) elements.globalSearchExclude.value = request.exclude || "";
+  for (const [button, active] of [
+      [elements.btnMatchCase, request.caseSensitive],
+      [elements.btnUseRegex, request.useRegex],
+      [elements.btnMatchWord, request.matchWord],
+  ]) {
+      button?.classList.toggle("active", Boolean(active));
+      button?.setAttribute("aria-pressed", String(Boolean(active)));
+  }
+  elements.globalReplaceContainer?.classList.add("expanded");
+  elements.btnToggleReplaceAll?.classList.add("rotated");
+  elements.btnToggleReplaceAll?.setAttribute("aria-expanded", "true");
+  if (request.include || request.exclude) {
+      elements.globalPatternsContainer?.classList.add("expanded");
+      elements.btnTogglePatterns?.setAttribute("aria-expanded", "true");
+  }
+  setTimeout(() => elements.globalSearchInput?.focus(), 50);
+}
+
+function openGlobalSearchRequest(request) {
+  restoreGlobalSearchRequest(request);
+  triggerGlobalSearch();
+}
+
+async function runGlobalReplace(request) {
+  const operation = startOperationFeedback({
+      label: `Replace "${request.query}"`,
+      icon: "find_replace",
+      scope: "Workspace search",
+      target: request.include || `${request.matchCount} matches in ${request.fileCount} files`,
+      message: `Replacing matches across ${request.fileCount} files...`,
+      retry: () => runGlobalReplace(request),
+      open: () => openGlobalSearchRequest(request),
+      openLabel: "Open",
+      openIcon: "search",
+  });
+
+  try {
       const response = await fetchWithAuth(API_BASE, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
               action: "global_replace",
-              query: query,
-              replacement: replacement,
-              case_sensitive: elements.btnMatchCase?.classList.contains("active"),
-              use_regex: elements.btnUseRegex?.classList.contains("active"),
-              match_word: elements.btnMatchWord?.classList.contains("active"),
-              include: elements.globalSearchInclude?.value || "",
-              exclude: elements.globalSearchExclude?.value || ""
+              query: request.query,
+              replacement: request.replacement,
+              case_sensitive: request.caseSensitive,
+              use_regex: request.useRegex,
+              match_word: request.matchWord,
+              include: request.include,
+              exclude: request.exclude
           }),
       });
 
-      hideGlobalLoading();
-
       if (response.success) {
-          showToast(t("search.replace_success", { count: response.files_updated }), "success");
+          operation.finish(`${response.files_updated || 0} files updated`, {
+              detail: `${request.matchCount} matching results were reviewed`,
+          });
           eventBus.emit("ui:reload-files", { force: true });
-          triggerGlobalSearch();
+          if (state.activeSidebarView === "search" && elements.globalSearchInput?.value === request.query) {
+              triggerGlobalSearch();
+          }
       } else {
-          showToast(t("search.replace_failed", { error: response.message }), "error");
+          operation.fail("Workspace replace failed", response.message || "The replacement was not applied");
       }
   } catch (e) {
-      hideGlobalLoading();
-      showToast(t("search.replace_error", { error: e.message }), "error");
+      operation.fail("Workspace replace failed", e.message);
   }
 }
 
@@ -272,34 +326,59 @@ export async function replaceInFile(path) {
         isDanger: true
     });
 
-    if (!confirmed) return;
+  if (!confirmed) return;
+
+  const request = Object.freeze({
+      query,
+      replacement,
+      path,
+      caseSensitive: elements.btnMatchCase?.classList.contains('active') || false,
+      useRegex: elements.btnUseRegex?.classList.contains('active') || false,
+      matchWord: elements.btnMatchWord?.classList.contains('active') || false,
+  });
+  await runReplaceInFile(request);
+}
+
+async function runReplaceInFile(request) {
+  const operation = startOperationFeedback({
+      label: `Replace in ${request.path.split('/').pop()}`,
+      icon: "find_replace",
+      scope: "Workspace search",
+      target: request.path,
+      message: "Replacing matches in file...",
+      retry: () => runReplaceInFile(request),
+      open: () => openGlobalSearchRequest({ ...request, include: request.path, exclude: "" }),
+      openLabel: "Open",
+      openIcon: "search",
+  });
 
     try {
-        showGlobalLoading("Replacing...");
         const response = await fetchWithAuth(API_BASE, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
                 action: "global_replace",
-                query: query,
-                replacement: replacement,
-                include: path,
-                case_sensitive: elements.btnMatchCase?.classList.contains('active'),
-                use_regex: elements.btnUseRegex?.classList.contains('active'),
-                match_word: elements.btnMatchWord?.classList.contains('active')
+                query: request.query,
+                replacement: request.replacement,
+                include: request.path,
+                case_sensitive: request.caseSensitive,
+                use_regex: request.useRegex,
+                match_word: request.matchWord
             }),
         });
-        hideGlobalLoading();
 
         if (response.success) {
-            showToast("File updated successfully", "success");
-            const tab = state.openTabs.find(t => t.path === path);
-            if (tab) eventBus.emit("file:open", { path, forceReload: true });
-            triggerGlobalSearch();
+            operation.finish(`${request.path.split('/').pop()} updated`);
+            const tab = state.openTabs.find(t => t.path === request.path);
+            if (tab) eventBus.emit("file:open", { path: request.path, forceReload: true });
+            if (state.activeSidebarView === "search" && elements.globalSearchInput?.value === request.query) {
+                triggerGlobalSearch();
+            }
+        } else {
+            operation.fail("File replace failed", response.message || "The replacement was not applied");
         }
     } catch (e) {
-        hideGlobalLoading();
-        showToast(`Replace failed: ${e.message}`, "error");
+        operation.fail("File replace failed", e.message);
     }
 }
 

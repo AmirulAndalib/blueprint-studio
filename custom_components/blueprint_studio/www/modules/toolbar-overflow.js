@@ -43,6 +43,11 @@ export function initToolbarOverflow(root = document) {
   };
 
   const positionMenu = () => {
+    if (document.body.dataset.workspaceMode === 'phone') {
+      menu.style.removeProperty('left');
+      menu.style.removeProperty('top');
+      return;
+    }
     const rect = trigger.getBoundingClientRect();
     const menuRect = menu.getBoundingClientRect();
     const margin = 8;
@@ -57,8 +62,33 @@ export function initToolbarOverflow(root = document) {
 
   const rebuildMenu = () => {
     menu.replaceChildren();
+    const header = document.createElement('div');
+    header.className = 'toolbar-overflow-menu-header';
+    header.setAttribute('role', 'presentation');
+    const heading = document.createElement('span');
+    heading.className = 'toolbar-overflow-menu-heading';
+    heading.textContent = commandParts(trigger).label || 'More commands';
+    const closeButton = document.createElement('button');
+    closeButton.type = 'button';
+    closeButton.className = 'toolbar-overflow-menu-close';
+    closeButton.setAttribute('aria-label', `Close ${heading.textContent.toLowerCase()}`);
+    closeButton.innerHTML = '<span class="ui-icon material-icons" aria-hidden="true">close</span>';
+    closeButton.addEventListener('click', () => closeMenu(true));
+    header.append(heading, closeButton);
+    menu.appendChild(header);
+
     hiddenGroups.forEach((group) => {
-      [...group.querySelectorAll(':scope > button')].filter(commandIsAvailable).forEach((control) => {
+      const controls = [...group.querySelectorAll(':scope > button')].filter(commandIsAvailable);
+      if (!controls.length) return;
+      const groupLabel = group.getAttribute('aria-label');
+      if (groupLabel) {
+        const section = document.createElement('div');
+        section.className = 'toolbar-overflow-menu-section';
+        section.setAttribute('role', 'presentation');
+        section.textContent = groupLabel;
+        menu.appendChild(section);
+      }
+      controls.forEach((control) => {
         const item = document.createElement('button');
         const { label, shortcut } = commandParts(control);
         item.type = 'button';
@@ -163,7 +193,10 @@ export function initToolbarOverflow(root = document) {
     if (!menu.hidden && !menu.contains(event.target) && !trigger.contains(event.target)) closeMenu();
   });
   window.addEventListener('resize', scheduleLayout);
-  window.addEventListener('scroll', () => closeMenu(), true);
+  window.addEventListener('scroll', (event) => {
+    if (menu.contains(event.target)) return;
+    closeMenu();
+  }, true);
 
   const mutations = new MutationObserver((records) => {
     const externalChange = records.some((record) => {

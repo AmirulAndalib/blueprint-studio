@@ -147,8 +147,8 @@ async def git_get_remotes(git_manager):
     return await git_manager.get_remotes()
 
 
-def git_get_credentials(git_manager):
-    return git_manager.get_credentials()
+async def git_get_credentials(git_manager, data):
+    return await git_manager.get_credentials(verify=data.get("verify", False))
 
 
 async def git_set_credentials(git_manager, data):
@@ -186,8 +186,8 @@ async def gitea_push_only(git_manager):
     return await git_manager.push_only(remote="gitea", auth_provider="gitea")
 
 
-def gitea_get_credentials(git_manager):
-    return git_manager.get_credentials(provider="gitea")
+async def gitea_get_credentials(git_manager):
+    return await git_manager.get_credentials(provider="gitea")
 
 
 async def gitea_set_credentials(git_manager, data):

@@ -11,19 +11,79 @@ import {
 } from './ui.js';
 import { isTextFile } from './utils.js';
 import { createZipProgressId, startUploadProgress, startZipProgress } from './zip-progress.js';
+import { startOperationFeedback } from './feedback-service.js?v=2.5.188';
 import {
   isSftpPath,
   parseSftpPath,
   uploadSftpFile,
   refreshSftp,
+  connectToServer,
+  navigateSftp,
   sftpStreamUrl,
+  sftpSelectedZipUrl,
   getSftpConnectionDetails
-} from './sftp.js?v=2.5.75';
+} from './sftp.js?v=2.5.188';
 
 function parentPath(path) {
   const clean = String(path || "").replace(/\/+$/g, "");
   const index = clean.lastIndexOf("/");
   return index > 0 ? clean.slice(0, index) : "";
+}
+
+function escapeMarkup(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  })[character]);
+}
+
+function localConfigPath(path) {
+  const clean = String(path || "").trim().replace(/\/+$/g, "");
+  if (!clean) return "/config";
+  if (clean === "/config" || clean.startsWith("/config/")) return clean;
+  return `/config/${clean.replace(/^\/+/, "")}`;
+}
+
+function localWorkspacePath(path) {
+  const clean = String(path || "").trim().replace(/\/+$/g, "");
+  if (!clean || clean === "/config") return "";
+  if (clean.startsWith("/config/")) return clean.slice("/config/".length);
+  return clean.replace(/^\/+/, "");
+}
+
+async function showUploadDestination({ isSftp, connId, path }) {
+  if (isSftp) {
+    eventBus.emit("ui:switch-sidebar-view", "sftp");
+    if (state.activeSftp.connectionId !== connId) await connectToServer(connId);
+    await navigateSftp(connId, path || "/");
+    return;
+  }
+
+  eventBus.emit("ui:switch-sidebar-view", "explorer");
+  await Promise.all(eventBus.emit("ui:reload-files", { force: true }));
+  const { revealAndOpenFile } = await import('./file-nav-helper.js');
+  await revealAndOpenFile(localWorkspacePath(path), "navigate");
+}
+
+function uploadDestinationMarkup({ isSftp, connId, path }) {
+  if (isSftp) {
+    const connection = state.sftpConnections.find((candidate) => candidate.id === connId);
+    const connectionName = connection?.name || connId;
+    return `<div class="operation-location is-remote"><span class="ui-icon material-icons" aria-hidden="true">cloud_upload</span><span><strong>Remote SFTP · ${escapeMarkup(connectionName)}</strong><small>Destination · ${escapeMarkup(path || "/")}</small></span></div>`;
+  }
+  return `<div class="operation-location is-local"><span class="ui-icon material-icons" aria-hidden="true">home</span><span><strong>Local Home Assistant</strong><small>Destination · ${escapeMarkup(localConfigPath(path))}</small></span></div>`;
+}
+
+async function confirmUploadDestination({ count, isSftp, connId, path, folderArchive = false }) {
+  const itemLabel = folderArchive
+    ? "this ZIP archive"
+    : `${count} ${count === 1 ? "file" : "files"}`;
+  return showConfirmDialog({
+    title: folderArchive ? "Upload Folder?" : "Upload Files?",
+    message: `${uploadDestinationMarkup({ isSftp, connId, path })}Upload ${itemLabel} to this destination?`,
+    confirmText: "Upload",
+    cancelText: t("modal.cancel_button"),
+    isDanger: false,
+  });
 }
 
 async function refreshLocalUploadTarget(path) {
@@ -49,31 +109,87 @@ export async function downloadCurrentFile() {
   await downloadFileByPath(state.activeTab.path);
 }
 
+async function showDownloadSource(request) {
+  const openTab = state.openTabs.find(tab => tab.path === request.path);
+  if (openTab) {
+    eventBus.emit('tab:open', { tab: openTab, noActivate: false });
+    return;
+  }
+  if (request.isSftp) {
+    eventBus.emit('ui:switch-sidebar-view', 'sftp');
+    if (state.activeSftp.connectionId !== request.connId) await connectToServer(request.connId);
+    await navigateSftp(request.connId, parentPath(request.remotePath) || '/');
+    return;
+  }
+  eventBus.emit('ui:switch-sidebar-view', 'explorer');
+  const { revealAndOpenFile } = await import('./file-nav-helper.js');
+  await revealAndOpenFile(request.path, 'navigate');
+}
+
+function downloadRequest(path) {
+  if (!isSftpPath(path)) {
+    return Object.freeze({
+      path,
+      filename: path.split('/').pop(),
+      isSftp: false,
+      scope: 'Local Home Assistant workspace',
+      source: path,
+    });
+  }
+  const { connId, remotePath } = parseSftpPath(path);
+  const connection = state.sftpConnections.find(candidate => candidate.id === connId);
+  return Object.freeze({
+    path,
+    filename: remotePath.split('/').pop(),
+    isSftp: true,
+    connId,
+    remotePath,
+    scope: `SFTP ${connection?.name || connId}`,
+    source: remotePath,
+  });
+}
+
+async function runFileDownload(request) {
+  const operation = startOperationFeedback({
+    label: `Download ${request.filename}`,
+    icon: 'download',
+    scope: request.scope,
+    target: `${request.source} -> Browser downloads`,
+    message: `Preparing ${request.filename}...`,
+    retry: () => runFileDownload(request),
+    open: () => showDownloadSource(request),
+    openLabel: 'Open Source',
+    openIcon: 'open_in_new',
+  });
+  try {
+    const url = request.isSftp
+      ? await sftpStreamUrl(request.connId, request.remotePath)
+      : await downloadFileUrl(request.path);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = request.filename;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    operation.finish(`Download started for ${request.filename}`, {
+      detail: 'The browser owns the download destination and completion state.',
+    });
+    showToast(`Download started for ${request.filename}`, 'success');
+    return true;
+  } catch (error) {
+    const message = error?.message || String(error);
+    operation.fail(`Could not prepare ${request.filename}`, message);
+    showToast(`Failed to download ${request.filename}: ${message}`, 'error');
+    return false;
+  }
+}
+
 /**
  * Downloads a file by its path using streaming URL (local or SFTP)
  */
 export async function downloadFileByPath(path) {
-  const filename = path.split("/").pop();
-  try {
-    let url;
-    if (isSftpPath(path)) {
-      // SFTP: direct stream URL avoids buffering the whole file in browser memory.
-      const { connId, remotePath } = parseSftpPath(path);
-      url = await sftpStreamUrl(connId, remotePath);
-    } else {
-      // Local: use authenticated serve_file URL
-      url = await downloadFileUrl(path);
-    }
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    showToast(`Downloaded ${filename}`, "success");
-  } catch (error) {
-    showToast(`Failed to download ${filename}: ${error.message}`, "error");
-  }
+  if (!path) return false;
+  return runFileDownload(downloadRequest(path));
 }
 
 /**
@@ -121,7 +237,10 @@ export function downloadContent(filename, content, is_base64 = false, mimeType =
 export async function downloadFolder(path) {
   const folderName = path.split('/').filter(Boolean).pop() || "download";
   const progressId = createZipProgressId();
-  const stopProgress = startZipProgress(progressId, `Preparing ${folderName}.zip...`);
+  const stopProgress = startZipProgress(progressId, `Preparing ${folderName}.zip...`, {
+    scope: "Local Home Assistant",
+    target: "This device",
+  });
   try {
     const url = await downloadFolderUrl(path, progressId);
     const a = document.createElement("a");
@@ -131,7 +250,7 @@ export async function downloadFolder(path) {
     a.click();
     document.body.removeChild(a);
   } catch (error) {
-    stopProgress();
+    stopProgress(error.message);
     showToast(t("toast.download_items_fail", { error: error.message }), "error");
   }
 }
@@ -143,9 +262,39 @@ export async function downloadSelectedItems() {
   if (state.selectedItems.size === 0) return;
   const paths = Array.from(state.selectedItems);
   const progressId = createZipProgressId();
-  const stopProgress = startZipProgress(progressId, "Preparing selected items ZIP...");
+  const selectedAreRemote = paths.every(isSftpPath);
+  const stopProgress = startZipProgress(progressId, "Preparing selected items ZIP...", {
+    scope: selectedAreRemote ? "SFTP" : "Local Home Assistant",
+    target: "This device",
+  });
 
   try {
+    const sftpPaths = paths.filter(isSftpPath);
+    if (sftpPaths.length > 0) {
+      if (sftpPaths.length !== paths.length) {
+        throw new Error("Select either local or SFTP items, not both");
+      }
+      const parsedPaths = sftpPaths.map(parseSftpPath);
+      const connectionIds = new Set(parsedPaths.map(({ connId }) => connId));
+      if (connectionIds.size !== 1) {
+        throw new Error("Select SFTP items from one connection at a time");
+      }
+      const connId = parsedPaths[0].connId;
+      const url = await sftpSelectedZipUrl(
+        connId,
+        parsedPaths.map(({ remotePath }) => remotePath),
+        progressId,
+      );
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = "selected-items.zip";
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      eventBus.emit("ui:toggle-selection");
+      return;
+    }
+
     const result = await fetchWithAuth(API_BASE, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -167,8 +316,8 @@ export async function downloadSelectedItems() {
     document.body.removeChild(a);
     eventBus.emit("ui:toggle-selection");
   } catch (error) {
-    stopProgress();
-    showToast(t("toast.delete_items_failed", { error: error.message }), "error");
+    stopProgress(error.message);
+    showToast(t("toast.download_items_fail", { error: error.message }), "error");
   }
 }
 
@@ -298,6 +447,8 @@ function showUploadWarnings(result) {
 export async function processUploads(files, targetFolder = null) {
   if (!files || files.length === 0) return;
 
+  const uploadFiles = Array.from(files);
+
   const isSftp = targetFolder && isSftpPath(targetFolder);
   let connId = null;
   let remoteBaseDir = null;
@@ -315,10 +466,32 @@ export async function processUploads(files, targetFolder = null) {
   
   let processedCount = 0;
   let successCount = 0;
-  const totalFiles = files.length;
-  const progress = startUploadProgress({ label: formatUploadLabel(totalFiles), totalFiles });
+  const totalFiles = uploadFiles.length;
+  const confirmed = await confirmUploadDestination({
+    count: totalFiles,
+    isSftp,
+    connId,
+    path: isSftp ? remoteBaseDir : basePath,
+  });
+  if (!confirmed) return;
 
-  for (const file of files) {
+  const uploadController = new AbortController();
+  const progress = startUploadProgress({
+    label: formatUploadLabel(totalFiles),
+    totalFiles,
+    scope: isSftp ? `SFTP ${connId}` : "Local Home Assistant",
+    target: isSftp ? remoteBaseDir : basePath || "/config",
+    onCancel: () => uploadController.abort(),
+    onRetry: () => processUploads(uploadFiles, targetFolder),
+    onOpen: () => showUploadDestination({
+      isSftp,
+      connId,
+      path: isSftp ? remoteBaseDir : basePath,
+    }),
+  });
+
+  for (const file of uploadFiles) {
+    if (uploadController.signal.aborted) break;
     processedCount++;
     try {
       const isZip = file.name.toLowerCase().endsWith('.zip');
@@ -351,7 +524,7 @@ export async function processUploads(files, targetFolder = null) {
               file,
               processedCount,
               "Uploading ZIP",
-              (onProgress) => uploadFolderMultipartSftp(connDetails, targetPath, file, "merge", false, onProgress)
+              (onProgress) => uploadFolderMultipartSftp(connDetails, targetPath, file, "merge", false, onProgress, uploadController.signal)
             );
             
             if (result && result.status === 409) {
@@ -362,7 +535,7 @@ export async function processUploads(files, targetFolder = null) {
                       file,
                       processedCount,
                       "Uploading ZIP",
-                      (onProgress) => uploadFolderMultipartSftp(connDetails, targetPath, file, mode, true, onProgress)
+                      (onProgress) => uploadFolderMultipartSftp(connDetails, targetPath, file, mode, true, onProgress, uploadController.signal)
                     );
                 } else {
                     continue;
@@ -384,7 +557,7 @@ export async function processUploads(files, targetFolder = null) {
               file,
               processedCount,
               "Uploading ZIP",
-              (onProgress) => uploadFolderMultipart(targetPath, file, "merge", false, onProgress)
+              (onProgress) => uploadFolderMultipart(targetPath, file, "merge", false, onProgress, uploadController.signal)
             );
 
             if (data && data.status === 409) {
@@ -395,7 +568,7 @@ export async function processUploads(files, targetFolder = null) {
                       file,
                       processedCount,
                       "Uploading ZIP",
-                      (onProgress) => uploadFolderMultipart(targetPath, file, mode, true, onProgress)
+                      (onProgress) => uploadFolderMultipart(targetPath, file, mode, true, onProgress, uploadController.signal)
                     );
                 } else {
                     continue;
@@ -427,7 +600,7 @@ export async function processUploads(files, targetFolder = null) {
             file,
             processedCount,
             "Uploading",
-            (onProgress) => uploadFileMultipartSftp(connDetails, remotePath, file, false, onProgress)
+            (onProgress) => uploadFileMultipartSftp(connDetails, remotePath, file, false, onProgress, uploadController.signal)
           );
 
           if (res && res.status === 409) {
@@ -444,7 +617,7 @@ export async function processUploads(files, targetFolder = null) {
                 file,
                 processedCount,
                 "Uploading",
-                (onProgress) => uploadFileMultipartSftp(connDetails, remotePath, file, true, onProgress)
+                (onProgress) => uploadFileMultipartSftp(connDetails, remotePath, file, true, onProgress, uploadController.signal)
               );
             } else {
               continue;
@@ -463,7 +636,7 @@ export async function processUploads(files, targetFolder = null) {
             file,
             processedCount,
             "Uploading",
-            (onProgress) => uploadFileMultipart(filePath, file, false, onProgress)
+            (onProgress) => uploadFileMultipart(filePath, file, false, onProgress, uploadController.signal)
           );
 
           if (res && res.status === 409) {
@@ -480,7 +653,7 @@ export async function processUploads(files, targetFolder = null) {
                 file,
                 processedCount,
                 "Uploading",
-                (onProgress) => uploadFileMultipart(filePath, file, true, onProgress)
+                (onProgress) => uploadFileMultipart(filePath, file, true, onProgress, uploadController.signal)
               );
             } else {
               continue;
@@ -517,7 +690,7 @@ export async function processUploads(files, targetFolder = null) {
         const remotePath = remoteBaseDir === '/' ? `/${file.name}` : `${remoteBaseDir}/${file.name}`;
         
         // Try without overwrite first
-        let res = await uploadSftpFile(connId, remotePath, content, false, isBinaryFile);
+        let res = await uploadSftpFile(connId, remotePath, content, false, isBinaryFile, uploadController.signal);
         
         // If file exists, prompt for overwrite
         if (res && res.status === 409) {
@@ -529,7 +702,7 @@ export async function processUploads(files, targetFolder = null) {
                 isDanger: true
             });
             if (confirm) {
-                res = await uploadSftpFile(connId, remotePath, content, true, isBinaryFile);
+                res = await uploadSftpFile(connId, remotePath, content, true, isBinaryFile, uploadController.signal);
             } else {
                 continue; // Skip this file
             }
@@ -544,7 +717,7 @@ export async function processUploads(files, targetFolder = null) {
         const filePath = basePath ? `${basePath}/${file.name}` : file.name;
         
         // Try without overwrite first
-        let res = await uploadFile(filePath, content, false, isBinaryFile);
+        let res = await uploadFile(filePath, content, false, isBinaryFile, uploadController.signal);
         
         // If file exists, prompt for overwrite
         if (res && res.status === 409) {
@@ -556,7 +729,7 @@ export async function processUploads(files, targetFolder = null) {
                 isDanger: true
             });
             if (confirm) {
-                res = await uploadFile(filePath, content, true, isBinaryFile);
+                res = await uploadFile(filePath, content, true, isBinaryFile, uploadController.signal);
             } else {
                 continue; // Skip this file
             }
@@ -569,11 +742,16 @@ export async function processUploads(files, targetFolder = null) {
         }
       }
     } catch (error) {
+      if (error?.name === "AbortError" || uploadController.signal.aborted) break;
       showToast(`Failed to upload ${file.name}: ${error.message}`, "error");
     }
   }
 
-  if (successCount > 0) {
+  if (uploadController.signal.aborted) {
+    progress.cancel(successCount
+      ? `Cancelled after uploading ${successCount} of ${totalFiles} files`
+      : "Upload cancelled");
+  } else if (successCount > 0) {
     progress.finish(successCount === totalFiles ? "Upload complete" : `Uploaded ${successCount} of ${totalFiles} files`);
     showToast(t("toast.upload_success"), "success");
     if (isSftp) await refreshSftp();
@@ -605,20 +783,50 @@ export async function handleFolderUpload(event) {
     return;
   }
 
-  const progress = startUploadProgress({ label: `Uploading ${file.name}...`, totalFiles: 1 });
+  let targetPath = state._nextFolderUploadTarget;
+  state._nextFolderUploadTarget = null;
+  if (targetPath === null) {
+    targetPath = state.lazyLoadingEnabled ? (state.currentNavigationPath || "") : (state.currentFolderPath || "");
+  }
+  const targetIsSftp = isSftpPath(targetPath);
+  const targetDetails = targetIsSftp ? parseSftpPath(targetPath) : null;
+  const folderName = file.name.replace(/\.zip$/i, '');
+  const uploadTargetPath = buildUploadedFolderPath(
+    targetIsSftp ? targetDetails.remotePath : targetPath,
+    folderName,
+  );
+  const confirmed = await confirmUploadDestination({
+    count: 1,
+    isSftp: targetIsSftp,
+    connId: targetDetails?.connId,
+    path: uploadTargetPath,
+    folderArchive: true,
+  });
+  if (!confirmed) {
+    event.target.value = "";
+    return;
+  }
+
+  const uploadController = new AbortController();
+  const progress = startUploadProgress({
+    label: `Uploading ${file.name}...`,
+    totalFiles: 1,
+    scope: targetIsSftp ? `SFTP ${targetDetails.connId}` : "Local Home Assistant",
+    target: targetIsSftp ? uploadTargetPath : localConfigPath(uploadTargetPath),
+    onCancel: () => uploadController.abort(),
+    onRetry: () => processUploads([file], targetPath),
+    onOpen: () => showUploadDestination({
+      isSftp: targetIsSftp,
+      connId: targetDetails?.connId,
+      path: uploadTargetPath,
+    }),
+  });
 
   try {
-    let targetPath = state._nextFolderUploadTarget;
-    state._nextFolderUploadTarget = null;
-    if (targetPath === null) {
-      targetPath = state.lazyLoadingEnabled ? (state.currentNavigationPath || "") : (state.currentFolderPath || "");
-    }
 
-    if (isSftpPath(targetPath)) {
+    if (targetIsSftp) {
       // SFTP folder upload
-      const { connId, remotePath } = parseSftpPath(targetPath);
-      const folderName = file.name.replace(/\.zip$/i, '');
-      const remoteFolderPath = buildUploadedFolderPath(remotePath, folderName);
+      const { connId } = parseSftpPath(targetPath);
       const connDetails = getSftpConnectionDetails(connId);
       if (!connDetails) {
         progress.fail("SFTP connection not found");
@@ -632,7 +840,7 @@ export async function handleFolderUpload(event) {
         file,
         1,
         "Uploading ZIP",
-        (onProgress) => uploadFolderMultipartSftp(connDetails, remoteFolderPath, file, "merge", false, onProgress)
+        (onProgress) => uploadFolderMultipartSftp(connDetails, uploadTargetPath, file, "merge", false, onProgress, uploadController.signal)
       );
 
       if (result && result.status === 409) {
@@ -643,7 +851,7 @@ export async function handleFolderUpload(event) {
             file,
             1,
             "Uploading ZIP",
-            (onProgress) => uploadFolderMultipartSftp(connDetails, remoteFolderPath, file, mode, true, onProgress)
+            (onProgress) => uploadFolderMultipartSftp(connDetails, uploadTargetPath, file, mode, true, onProgress, uploadController.signal)
           );
         } else {
           progress.remove();
@@ -663,14 +871,12 @@ export async function handleFolderUpload(event) {
       }
     } else {
       // Local folder upload
-      const folderName = file.name.replace(/\.zip$/i, '');
-      const localFolderPath = buildUploadedFolderPath(targetPath, folderName);
       let data = await runUploadWithProgress(
         progress,
         file,
         1,
         "Uploading ZIP",
-        (onProgress) => uploadFolderMultipart(localFolderPath, file, "merge", false, onProgress)
+        (onProgress) => uploadFolderMultipart(uploadTargetPath, file, "merge", false, onProgress, uploadController.signal)
       );
 
       if (data && data.status === 409) {
@@ -681,7 +887,7 @@ export async function handleFolderUpload(event) {
             file,
             1,
             "Uploading ZIP",
-            (onProgress) => uploadFolderMultipart(localFolderPath, file, mode, true, onProgress)
+            (onProgress) => uploadFolderMultipart(uploadTargetPath, file, mode, true, onProgress, uploadController.signal)
           );
         } else {
           progress.remove();
@@ -694,15 +900,19 @@ export async function handleFolderUpload(event) {
         progress.finish("Upload complete");
         showToast(t("toast.upload_success"), "success");
         showUploadWarnings(data);
-        await refreshLocalUploadTarget(localFolderPath);
+        await refreshLocalUploadTarget(uploadTargetPath);
       } else {
         progress.fail("Upload failed");
         showToast(t("toast.upload_folder_fail", { error: data.message || "Unknown error" }), "error");
       }
     }
   } catch (error) {
-    progress.fail("Upload failed");
-    showToast(t("toast.upload_folder_fail", { error: error.message }), "error");
+    if (error?.name === "AbortError" || uploadController.signal.aborted) {
+      progress.cancel("Upload cancelled");
+    } else {
+      progress.fail("Upload failed", error.message);
+      showToast(t("toast.upload_folder_fail", { error: error.message }), "error");
+    }
   } finally {
     event.target.value = "";
   }
@@ -729,19 +939,21 @@ export function readFileAsBase64(file) {
 }
 
 /** Basic single file upload (JSON body — for text files) */
-export async function uploadFile(path, content, overwrite = false, is_base64 = false) {
+export async function uploadFile(path, content, overwrite = false, is_base64 = false, signal = null) {
   return fetchWithAuth(API_BASE, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ action: "upload_file", path, content, overwrite, is_base64 }),
+    signal,
   });
 }
 
-async function sendMultipartUpload(formData, onProgress = null) {
+async function sendMultipartUpload(formData, onProgress = null, signal = null) {
   const token = await getAuthToken();
 
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
+    const abortUpload = () => xhr.abort();
     xhr.open("POST", UPLOAD_BASE, true);
     xhr.withCredentials = true;
     if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
@@ -755,6 +967,7 @@ async function sendMultipartUpload(formData, onProgress = null) {
     };
 
     xhr.onload = () => {
+      signal?.removeEventListener("abort", abortUpload);
       let data = {};
       try {
         data = xhr.responseText ? JSON.parse(xhr.responseText) : {};
@@ -773,8 +986,19 @@ async function sendMultipartUpload(formData, onProgress = null) {
       }
     };
 
-    xhr.onerror = () => reject(new Error("Network error during upload"));
-    xhr.onabort = () => reject(new Error("Upload cancelled"));
+    xhr.onerror = () => {
+      signal?.removeEventListener("abort", abortUpload);
+      reject(new Error("Network error during upload"));
+    };
+    xhr.onabort = () => {
+      signal?.removeEventListener("abort", abortUpload);
+      reject(new DOMException("Upload cancelled", "AbortError"));
+    };
+    if (signal?.aborted) {
+      reject(new DOMException("Upload cancelled", "AbortError"));
+      return;
+    }
+    signal?.addEventListener("abort", abortUpload, { once: true });
     xhr.send(formData);
   });
 }
@@ -783,19 +1007,19 @@ async function sendMultipartUpload(formData, onProgress = null) {
  * Multipart file upload — streams raw binary to /api/blueprint_studio/upload.
  * Bypasses HA's 16MB JSON body limit. Used for binary files (images, video, etc.).
  */
-export async function uploadFileMultipart(path, file, overwrite = false, onProgress = null) {
+export async function uploadFileMultipart(path, file, overwrite = false, onProgress = null, signal = null) {
   const formData = new FormData();
   formData.append("path", path);
   formData.append("overwrite", overwrite ? "true" : "false");
   formData.append("file", file);
 
-  return await sendMultipartUpload(formData, onProgress);
+  return await sendMultipartUpload(formData, onProgress, signal);
 }
 
 /**
  * Multipart ZIP folder upload — sends raw ZIP bytes and asks backend to extract.
  */
-export async function uploadFolderMultipart(path, file, mode = "merge", overwrite = false, onProgress = null) {
+export async function uploadFolderMultipart(path, file, mode = "merge", overwrite = false, onProgress = null, signal = null) {
   const formData = new FormData();
   formData.append("path", path);
   formData.append("overwrite", overwrite ? "true" : "false");
@@ -803,14 +1027,14 @@ export async function uploadFolderMultipart(path, file, mode = "merge", overwrit
   formData.append("mode", mode);
   formData.append("file", file);
 
-  return await sendMultipartUpload(formData, onProgress);
+  return await sendMultipartUpload(formData, onProgress, signal);
 }
 
 /**
  * Multipart SFTP upload — sends raw binary + connection details to /api/blueprint_studio/upload.
  * Bypasses HA's 16MB JSON body limit for SFTP binary uploads.
  */
-export async function uploadFileMultipartSftp(conn, remotePath, file, overwrite = false, onProgress = null) {
+export async function uploadFileMultipartSftp(conn, remotePath, file, overwrite = false, onProgress = null, signal = null) {
   const formData = new FormData();
   formData.append("path", remotePath);
   formData.append("overwrite", overwrite ? "true" : "false");
@@ -822,13 +1046,13 @@ export async function uploadFileMultipartSftp(conn, remotePath, file, overwrite 
   }));
   formData.append("file", file);
 
-  return await sendMultipartUpload(formData, onProgress);
+  return await sendMultipartUpload(formData, onProgress, signal);
 }
 
 /**
  * Multipart SFTP ZIP folder upload — sends raw ZIP bytes and asks backend to extract.
  */
-export async function uploadFolderMultipartSftp(conn, remotePath, file, mode = "merge", overwrite = false, onProgress = null) {
+export async function uploadFolderMultipartSftp(conn, remotePath, file, mode = "merge", overwrite = false, onProgress = null, signal = null) {
   const formData = new FormData();
   formData.append("path", remotePath);
   formData.append("overwrite", overwrite ? "true" : "false");
@@ -842,7 +1066,7 @@ export async function uploadFolderMultipartSftp(conn, remotePath, file, mode = "
   }));
   formData.append("file", file);
 
-  return await sendMultipartUpload(formData, onProgress);
+  return await sendMultipartUpload(formData, onProgress, signal);
 }
 
 /** Handles file input change */

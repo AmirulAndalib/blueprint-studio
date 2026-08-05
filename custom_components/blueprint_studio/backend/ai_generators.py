@@ -7,7 +7,7 @@ import re
 def build_data_block(values: dict, domain: str, ind: str) -> str:
     """Build data block from extracted values."""
     if not values:
-        return f"\n{ind}    data: {{}}"
+        return ""
 
     data_lines = []
     for key, value in values.items():
@@ -18,13 +18,13 @@ def build_data_block(values: dict, domain: str, ind: str) -> str:
 
     if data_lines:
         return f"\n{ind}    data:\n" + "\n".join(data_lines)
-    return f"\n{ind}    data: {{}}"
+    return ""
 
 
 def build_conditions_yaml(conditions: list[dict], ind: str) -> str:
     """Build conditions YAML block."""
     if not conditions:
-        return f"{ind}  conditions: []"
+        return ""
 
     cond_lines = [f"{ind}  conditions:"]
     for cond in conditions:
@@ -98,16 +98,14 @@ def generate_multi_intent_automation(uid, name, domain, actions, entities, times
 {ind}        id: 'on'
 {ind}      sequence:
 {ind}      - action: {domain}.{actions['on']}
-{ind}        metadata: {{}}
 {ind}        {target_yaml}{on_data}
 {ind}    - conditions:
 {ind}      - condition: trigger
 {ind}        id: 'off'
 {ind}      sequence:
 {ind}      - action: {domain}.{actions['off']}
-{ind}        metadata: {{}}
 {ind}        {target_yaml}
-{ind}        data: {{}}"""
+"""
 
     return f"""{hdr}- id: '{uid}'
 {ind}  alias: {name}
@@ -172,13 +170,11 @@ def generate_single_intent_automation(uid, name, domain, actions, entities, trig
 
     actions_yaml_lines = [f"{ind}  actions:"]
     actions_yaml_lines.append(f"{ind}  - action: {domain}.{action_name}")
-    actions_yaml_lines.append(f"{ind}    metadata: {{}}")
     actions_yaml_lines.append(f"{ind}    {target_yaml}{data_block}")
 
     for add_action in additional_actions:
         if add_action["type"] == "notify":
             actions_yaml_lines.append(f"{ind}  - action: notify.notify")
-            actions_yaml_lines.append(f"{ind}    metadata: {{}}")
             actions_yaml_lines.append(f"{ind}    data:")
             actions_yaml_lines.append(f"{ind}      message: \"{add_action['message']}\"")
         elif add_action["type"] == "delay":
@@ -190,12 +186,10 @@ def generate_single_intent_automation(uid, name, domain, actions, entities, trig
             actions_yaml_lines.append(f"{ind}      seconds: {seconds}")
         elif add_action["type"] == "scene":
             actions_yaml_lines.append(f"{ind}  - action: scene.turn_on")
-            actions_yaml_lines.append(f"{ind}    metadata: {{}}")
             actions_yaml_lines.append(f"{ind}    target:")
             actions_yaml_lines.append(f"{ind}      entity_id: {add_action['scene_id']}")
         elif add_action["type"] == "script":
             actions_yaml_lines.append(f"{ind}  - action: script.turn_on")
-            actions_yaml_lines.append(f"{ind}    metadata: {{}}")
             actions_yaml_lines.append(f"{ind}    target:")
             actions_yaml_lines.append(f"{ind}      entity_id: {add_action['script_id']}")
         elif add_action["type"] == "wait_template":
@@ -207,9 +201,7 @@ def generate_single_intent_automation(uid, name, domain, actions, entities, trig
             actions_yaml_lines.append(f"{ind}      count: {add_action['count']}")
             actions_yaml_lines.append(f"{ind}      sequence:")
             actions_yaml_lines.append(f"{ind}      - action: {domain}.{action_name}")
-            actions_yaml_lines.append(f"{ind}        metadata: {{}}")
             actions_yaml_lines.append(f"{ind}        {target_yaml}")
-            actions_yaml_lines.append(f"{ind}        data: {{}}")
 
     actions_yaml = "\n".join(actions_yaml_lines)
 
@@ -334,9 +326,7 @@ def generate_multi_domain_automation(uid, name, domain_intents, trigger_info, co
             target_block = f"target:\n{ind}      entity_id:\n{entity_list}"
 
         action_lines.append(f"{ind}  - action: {domain}.{action}")
-        action_lines.append(f"{ind}    metadata: {{}}")
         action_lines.append(f"{ind}    {target_block}")
-        action_lines.append(f"{ind}    data: {{}}")
 
     actions_yaml = "\n".join(action_lines)
 

@@ -2,7 +2,7 @@
 import { getAuthToken } from './api.js';
 import { API_BASE } from './constants.js';
 import { formatBytes } from './utils.js';
-import { removeOperationFeedback, updateOperationFeedback } from './feedback-service.js';
+import { removeOperationFeedback, updateOperationFeedback } from './feedback-service.js?v=2.5.188';
 
 function createTransferProgressId(prefix) {
   if (window.crypto?.randomUUID) return window.crypto.randomUUID();
@@ -44,6 +44,10 @@ function updateProgressUi(progressId, progress, options = {}) {
     message,
     detail: progress?.current_file,
     percent: Number.isFinite(percent) ? percent : undefined,
+    scope: options.scope,
+    target: options.target,
+    failureDetail: options.failureDetail,
+    actions: options.actions,
   });
 }
 
@@ -68,49 +72,128 @@ async function fetchProgress(progressId) {
   }
 }
 
-export function startZipProgress(progressId, label = "Preparing ZIP download...") {
+async function cancelZip(progressId) {
+  const token = await getAuthToken();
+  const headers = { "Content-Type": "application/json" };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const response = await fetch(API_BASE, {
+    method: "POST",
+    headers,
+    credentials: "same-origin",
+    body: JSON.stringify({ action: "cancel_zip", progress_id: progressId }),
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok || !result?.success) {
+    throw new Error(result?.message || `Cancellation failed (HTTP ${response.status})`);
+  }
+  return result;
+}
+
+export function startZipProgress(progressId, label = "Preparing ZIP download...", operation = {}) {
   let stopped = false;
   let timeoutId = null;
+  let cancellationRequested = false;
 
-  updateProgressUi(progressId, { status: "pending", files_done: 0, bytes_done: 0 }, { label, icon: "folder_zip" });
+  const presentation = { label, icon: "folder_zip", ...operation };
+  const cancelAction = [{
+    label: "Cancel",
+    icon: "close",
+    callback: async () => {
+      if (cancellationRequested || stopped) return;
+      cancellationRequested = true;
+      presentation.actions = [];
+      updateProgressUi(progressId, {
+        status: "cancelling",
+        message: "Cancelling ZIP generation...",
+      }, { ...presentation, icon: "pending", actions: [] });
+      try {
+        await cancelZip(progressId);
+      } catch (error) {
+        stop(error.message || "Could not cancel ZIP download");
+      }
+    },
+  }];
+  presentation.actions = cancelAction;
+  updateProgressUi(progressId, { status: "pending", files_done: 0, bytes_done: 0 }, presentation);
 
   async function poll() {
     if (stopped) return;
     try {
       const progress = await fetchProgress(progressId);
       if (!progress) {
-        updateProgressUi(progressId, { status: "pending", files_done: 0, bytes_done: 0 }, { label, icon: "folder_zip" });
+        updateProgressUi(progressId, { status: "pending", files_done: 0, bytes_done: 0 }, presentation);
         timeoutId = setTimeout(poll, 800);
         return;
       }
-      updateProgressUi(progressId, progress, { label, icon: "folder_zip" });
+      updateProgressUi(progressId, progress, presentation);
       if (progress.status === "done") {
-        timeoutId = setTimeout(stop, 1200);
+        stop();
         return;
       }
-      if (progress.status === "error") {
-        timeoutId = setTimeout(stop, 1800);
+      if (progress.status === "error" || progress.status === "cancelled") {
+        stop();
         return;
       }
     } catch (_) {
-      updateProgressUi(progressId, { status: "pending", files_done: 0, bytes_done: 0 }, { label, icon: "folder_zip" });
+      updateProgressUi(progressId, { status: "pending", files_done: 0, bytes_done: 0 }, presentation);
     }
     timeoutId = setTimeout(poll, 800);
   }
 
-  function stop() {
+  function stop(errorMessage = "") {
     stopped = true;
     if (timeoutId) clearTimeout(timeoutId);
-    removeOperationFeedback(progressId);
+    if (errorMessage) {
+      updateProgressUi(progressId, { status: "error", message: errorMessage }, { ...presentation, icon: "error", actions: [] });
+    }
   }
 
   timeoutId = setTimeout(poll, 500);
   return stop;
 }
 
-export function startUploadProgress({ label = "Uploading...", totalFiles = 1 } = {}) {
+export function startUploadProgress({
+  label = "Uploading...",
+  totalFiles = 1,
+  scope = "",
+  target = "",
+  onCancel = null,
+  onRetry = null,
+  onOpen = null,
+  openLabel = "Show",
+  openIcon = "folder_open",
+} = {}) {
   const progressId = createTransferProgressId("upload");
   let timeoutId = null;
+  let cancellationRequested = false;
+  const retryAction = typeof onRetry === "function"
+    ? [{ label: "Retry", icon: "refresh", primary: true, callback: onRetry }]
+    : [];
+  const openAction = typeof onOpen === "function"
+    ? [{ label: openLabel, icon: openIcon, callback: onOpen }]
+    : [];
+  const terminalActions = (includeRetry = false) => [
+    ...(includeRetry ? retryAction : []),
+    ...openAction,
+  ];
+
+  const cancelAction = typeof onCancel === "function"
+    ? [{
+        label: "Cancel",
+        icon: "close",
+        callback: async () => {
+          if (cancellationRequested) return;
+          cancellationRequested = true;
+          updateProgressUi(progressId, {
+            status: "running",
+            files_done: 0,
+            total_files: totalFiles,
+            message: "Cancelling upload request...",
+          }, { label, icon: "pending", scope, target, actions: [] });
+          await onCancel();
+        },
+      }]
+    : [];
 
   updateProgressUi(progressId, {
     status: "pending",
@@ -120,7 +203,7 @@ export function startUploadProgress({ label = "Uploading...", totalFiles = 1 } =
     bytes_total: 0,
     percent: 0,
     message: "Waiting for upload to start...",
-  }, { label, icon: "upload_file" });
+  }, { label, icon: "upload_file", scope, target, actions: cancelAction });
 
   function clearRemoveTimer() {
     if (timeoutId) {
@@ -141,7 +224,7 @@ export function startUploadProgress({ label = "Uploading...", totalFiles = 1 } =
       percent,
       current_file: fileName,
       message,
-    }, { label, icon: "upload_file" });
+    }, { label, icon: "upload_file", scope, target, actions: cancellationRequested ? [] : cancelAction });
   }
 
   function finish(message = "Upload complete") {
@@ -152,19 +235,35 @@ export function startUploadProgress({ label = "Uploading...", totalFiles = 1 } =
       bytes_done: 0,
       percent: 100,
       message,
-    }, { label, icon: "check_circle" });
-    timeoutId = setTimeout(() => removeOperationFeedback(progressId), 1400);
+    }, { label, icon: "check_circle", scope, target, actions: terminalActions() });
   }
 
-  function fail(message = "Upload failed") {
+  function fail(message = "Upload failed", failureDetail = message) {
     updateProgressUi(progressId, {
       status: "error",
       files_done: 0,
       total_files: totalFiles,
       bytes_done: 0,
       message,
-    }, { label, icon: "error" });
-    timeoutId = setTimeout(() => removeOperationFeedback(progressId), 2200);
+    }, { label, icon: "error", scope, target, failureDetail, actions: terminalActions(true) });
+  }
+
+  function cancel(message = "Upload cancelled") {
+    cancellationRequested = true;
+    updateProgressUi(progressId, {
+      status: "cancelled",
+      files_done: 0,
+      total_files: totalFiles,
+      bytes_done: 0,
+      message,
+    }, {
+      label,
+      icon: "cancel",
+      scope,
+      target,
+      failureDetail: "The browser request was stopped. Files completed before cancellation remain at the destination.",
+      actions: terminalActions(true),
+    });
   }
 
   function remove() {
@@ -172,5 +271,5 @@ export function startUploadProgress({ label = "Uploading...", totalFiles = 1 } =
     removeOperationFeedback(progressId);
   }
 
-  return { update, finish, fail, remove };
+  return { update, finish, fail, cancel, remove, isCancellationRequested: () => cancellationRequested };
 }

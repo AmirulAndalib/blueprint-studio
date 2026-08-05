@@ -2,7 +2,7 @@
 import { state, elements } from './state.js';
 import { t } from './translations.js';
 import { eventBus } from './event-bus.js';
-import { 
+import {
   resetModalToDefault, 
   showToast, 
   showModal, 
@@ -12,6 +12,12 @@ import {
   activateSharedModal,
   deactivateSharedModal
 } from './ui.js';
+
+function escapeMarkup(value) {
+  return String(value ?? '').replace(/[&<>"']/g, (character) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  })[character]);
+}
 
 /**
  * Shows a generic input modal and returns the user's input
@@ -279,7 +285,7 @@ export async function promptCopy(path, isFolder) {
       if (!confirm) return;
     }
     
-    eventBus.emit('file:copy', { oldPath: path, newPath, overwrite: true });
+    eventBus.emit('file:copy', { oldPath: path, newPath, overwrite: true, isFolder });
   }
 }
 
@@ -377,7 +383,7 @@ export async function duplicateItem(path, isFolder) {
   }
 
   const newPath = parentPath ? `${parentPath}/${newName}` : newName;
-  eventBus.emit('file:copy', { oldPath: path, newPath });
+  eventBus.emit('file:copy', { oldPath: path, newPath, isFolder });
 }
 
 /**
@@ -387,16 +393,17 @@ export async function duplicateItem(path, isFolder) {
  */
 export async function promptDelete(path, isFolder) {
   const name = path.split("/").pop();
+  const location = `<div class="operation-location is-local"><span class="ui-icon material-icons" aria-hidden="true">home</span><span><strong>Local Home Assistant</strong><small>/config/${escapeMarkup(path)}</small></span></div>`;
   const result = await showConfirmDialog({
     title: isFolder ? t("modal.delete_folder_title") : t("modal.delete_file_title"),
-    message: isFolder ? t("modal.delete_folder_message", { name }) : t("modal.delete_message", { name }),
+    message: `${location}${isFolder ? t("modal.delete_folder_message", { name }) : t("modal.delete_message", { name })}`,
     confirmText: t("modal.delete_button"),
     cancelText: t("modal.cancel_button"),
     isDanger: true,
   });
 
   if (result) {
-    eventBus.emit('file:delete', { path });
+    eventBus.emit('file:delete', { path, isFolder });
   }
 }
 

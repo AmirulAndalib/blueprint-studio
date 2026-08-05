@@ -8,8 +8,6 @@ import {
   activateSharedModal,
   deactivateSharedModal,
   showToast,
-  showGlobalLoading,
-  hideGlobalLoading,
   resetModalToDefault,
   showConfirmDialog,
   showModal
@@ -18,6 +16,7 @@ import { formatBytes } from './utils.js';
 import { t } from './translations.js';
 import {
   gitStatus,
+  gitInit,
   gitStage,
   gitUnstage,
   gitGetRemotes,
@@ -31,50 +30,50 @@ import {
   stageSelectedGiteaFiles as stageSelectedGiteaFilesImpl,
   stageAllGiteaFiles as stageAllGiteaFilesImpl,
   unstageAllGiteaFiles as unstageAllGiteaFilesImpl
-} from './gitea-ui.js?v=2.5.75';
+} from './gitea-ui.js?v=2.5.188';
+import {
+  clearCommitMessage,
+  getCommitMessage,
+  updateCommitComposer,
+} from './source-control-view.js?v=2.5.188';
 import { setButtonLoading } from './ui.js';
+import { getGitActionConfirmation } from './git-action-confirmation.js?v=2.5.188';
+import { startOperationFeedback } from './feedback-service.js?v=2.5.188';
+
+function startGiteaOperation(label, icon, message, retry, target = giteaState.currentBranch || 'Current branch') {
+  return startOperationFeedback({
+    label,
+    icon,
+    message,
+    scope: 'Gitea repository',
+    target,
+    retry,
+    openLabel: 'Source Control',
+    openIcon: 'account_tree',
+    open: () => eventBus.emit('ui:switch-sidebar-view', 'source-control'),
+  });
+}
+
+function giteaEndpointLabel(url) {
+  try {
+    const parsed = new URL(String(url));
+    return `${parsed.host}${parsed.pathname}`.replace(/\/$/, '') || 'Gitea endpoint';
+  } catch (_error) {
+    return 'Gitea endpoint';
+  }
+}
 
 // ============================================
 // Gitea Repository Initialization
 // ============================================
 
 export async function giteaInit(skipConfirm = false) {
-  if (!skipConfirm) {
-    const confirmed = await showConfirmDialog({
-      title: t("modal.new_folder_title"),
-      message: t("modal.new_folder_hint"),
-      confirmText: t("modal.confirm_button"),
-      cancelText: t("modal.cancel_button")
-    });
+  const initialized = await gitInit(skipConfirm);
+  if (!initialized) return false;
 
-    if (!confirmed) return false;
-  }
-
-  try {
-    showToast(t("toast.git_init_success"), "success");
-    const data = await fetchWithAuth(API_BASE, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "git_init" }),
-    });
-
-    if (data.success) {
-      showToast(t("toast.git_init_success"), "success");
-      await fetchWithAuth(API_BASE, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "git_rename_branch", old_name: "master", new_name: "main" }),
-      });
-      giteaState.isInitialized = true;
-      await giteaStatus();
-      return true;
-    } else {
-      showToast(t("toast.git_init_failed") + ": " + (data.message || "Unknown error"), "error");
-    }
-  } catch (error) {
-    showToast(t("toast.git_init_failed") + ": " + error.message, "error");
-  }
-  return false;
+  giteaState.isInitialized = true;
+  await giteaStatus(false, true);
+  return true;
 }
 
 // ============================================
@@ -82,7 +81,9 @@ export async function giteaInit(skipConfirm = false) {
 // ============================================
 
 export async function giteaPush() {
+  let operation;
   try {
+    operation = startGiteaOperation('Push to Gitea', 'cloud_upload', 'Uploading local commits...', giteaPush);
     setButtonLoading(elements.btnGiteaPush, true);
     showToast(t("toast.git_push_started"), "info");
 
@@ -95,8 +96,9 @@ export async function giteaPush() {
     if (pushData.success) {
       setButtonLoading(elements.btnGiteaPush, false);
       showToast(t("toast.git_push_success"), "success");
-      await giteaStatus();
-      return;
+      operation.finish('Push complete');
+      await giteaStatus(false, true);
+      return true;
     }
 
     const errorMessage = pushData.message || pushData.error || "Unknown error";
@@ -110,7 +112,10 @@ export async function giteaPush() {
         hint: errorMessage,
       });
 
-      if (!commitMessage) return;
+      if (!commitMessage) {
+        operation.cancel('Push cancelled before commit');
+        return false;
+      }
 
       setButtonLoading(elements.btnGiteaPush, true);
       showToast(t("toast.git_commit_started"), "info");
@@ -127,21 +132,31 @@ export async function giteaPush() {
       setButtonLoading(elements.btnGiteaPush, false);
 
       if (data.success) {
+        operation.finish('Commit and push complete');
         showToast(t("toast.git_push_success"), "success");
-        await giteaStatus();
+        await giteaStatus(false, true);
+        return true;
       } else {
-        showToast(t("toast.gitea_push_failed", { error: data.message || data.error }), "error");
+        const message = data.message || data.error || 'Push failed';
+        operation.fail('Push failed', message);
+        showToast(t("toast.gitea_push_failed", { error: message }), "error");
       }
     } else if (errorMessage.includes("No commits to push")) {
       setButtonLoading(elements.btnGiteaPush, false);
       showToast(t("toast.gitea_no_commits"), "warning");
+      operation.finish('No commits to push', { icon: 'info' });
+      return true;
     } else {
       setButtonLoading(elements.btnGiteaPush, false);
       showToast(t("toast.gitea_push_failed", { error: errorMessage }), "error");
+      operation.fail('Push failed', errorMessage);
     }
+    return false;
   } catch (error) {
     setButtonLoading(elements.btnGiteaPush, false);
     showToast(t("toast.gitea_push_failed", { error: error.message }), "error");
+    operation?.fail('Push failed', error.message);
+    return false;
   }
 }
 
@@ -159,6 +174,8 @@ export async function giteaPull() {
 
   if (!confirmed) return;
 
+  const operation = startGiteaOperation('Pull from Gitea', 'cloud_download', 'Downloading remote changes...', giteaPull);
+
   try {
     setButtonLoading(elements.btnGiteaPull, true);
     showToast(t("toast.git_pull_started"), "info");
@@ -172,16 +189,24 @@ export async function giteaPull() {
     setButtonLoading(elements.btnGiteaPull, false);
 
     if (data.success) {
+      operation.finish('Pull complete');
       showToast(t("toast.git_pull_success"), "success");
       eventBus.emit('ui:reload-files');
-      await giteaStatus();
+      await giteaStatus(false, true);
       if (state.activeTab) {
         eventBus.emit('file:open', { path: state.activeTab.path, forceReload: true });
       }
+      return true;
     }
+    const message = data.message || data.error || 'Pull failed';
+    operation.fail('Pull failed', message);
+    showToast(t("toast.gitea_pull_failed", { error: message }), "error");
+    return false;
   } catch (error) {
     setButtonLoading(elements.btnGiteaPull, false);
     showToast(t("toast.gitea_pull_failed", { error: error.message }), "error");
+    operation.fail('Pull failed', error.message);
+    return false;
   }
 }
 
@@ -193,23 +218,10 @@ export async function giteaCommit() {
   const stagedCount = giteaState.files.staged.length;
   if (stagedCount === 0) return;
 
-  let defaultMessage = "Update via Blueprint Studio";
-  if (stagedCount === 1) {
-    const filename = giteaState.files.staged[0].split("/").pop();
-    defaultMessage = `Update ${filename}`;
-  } else if (stagedCount > 1) {
-    const filename = giteaState.files.staged[0].split("/").pop();
-    defaultMessage = `Update ${filename} and ${stagedCount - 1} others`;
-  }
-
-  const commitMessage = await showModal({
-    title: t("sidebar.commit"),
-    placeholder: "Commit message",
-    value: defaultMessage,
-    hint: `Committing ${stagedCount} staged file(s)`,
-  });
-
+  const commitMessage = getCommitMessage('gitea');
   if (!commitMessage) return;
+
+  const operation = startGiteaOperation('Commit staged changes', 'commit', 'Creating local commit...', giteaCommit);
 
   try {
     showToast(t("toast.git_commit_started"), "info");
@@ -220,11 +232,20 @@ export async function giteaCommit() {
     });
 
     if (data.success) {
+      operation.finish('Commit created');
       showToast(t("toast.git_commit_success"), "success");
-      await giteaStatus();
+      clearCommitMessage('gitea');
+      await giteaStatus(false, true);
+      updateCommitComposer('gitea', giteaState);
+      return true;
     }
+    const message = data.message || data.error || 'Commit failed';
+    operation.fail('Commit failed', message);
+    return false;
   } catch (error) {
     showToast(t("toast.gitea_commit_failed", { error: error.message }), "error");
+    operation.fail('Commit failed', error.message);
+    return false;
   }
 }
 
@@ -235,12 +256,12 @@ export async function giteaCommit() {
 export async function giteaStage(files) {
   // Reuse gitStage but refresh gitea status
   await gitStage(files);
-  await giteaStatus();
+  await giteaStatus(false, true);
 }
 
 export async function giteaUnstage(files) {
   await gitUnstage(files);
-  await giteaStatus();
+  await giteaStatus(false, true);
 }
 
 // ============================================
@@ -268,6 +289,7 @@ export async function unstageAllGiteaFiles() {
 // ============================================
 
 export async function giteaAbort() {
+  const branch = giteaState.currentBranch || 'Current branch';
   const confirmed = await showConfirmDialog({
     title: t("gitea.abort_title"),
     message: t("gitea.abort_message"),
@@ -276,23 +298,35 @@ export async function giteaAbort() {
     isDanger: true
   });
 
-  if (confirmed) {
-    try {
-      showGlobalLoading(t("modal.confirm") + "...");
-      const data = await fetchWithAuth(API_BASE, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "git_abort" }),
-      });
-      hideGlobalLoading();
-      if (data.success) {
-        showToast(t("toast.gitea_abort_success"), "success");
-        await giteaStatus();
-      }
-    } catch (error) {
-      hideGlobalLoading();
-      showToast(t("toast.gitea_abort_failed", { error: error.message }), "error");
+  if (!confirmed) return false;
+
+  const operation = startGiteaOperation(
+    'Abort Gitea Git operation',
+    'cancel',
+    'Aborting merge or rebase...',
+    giteaAbort,
+    branch,
+  );
+  try {
+    const data = await fetchWithAuth(API_BASE, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "git_abort" }),
+    });
+    if (!data.success) {
+      const message = data.message || data.error || 'Unknown abort error';
+      operation.fail('Could not abort Gitea Git operation', message);
+      showToast(t("toast.gitea_abort_failed", { error: message }), "error");
+      return false;
     }
+    operation.finish('Merge or rebase aborted');
+    showToast(t("toast.gitea_abort_success"), "success");
+    await giteaStatus(false, true);
+    return true;
+  } catch (error) {
+    operation.fail('Could not abort Gitea Git operation', error.message);
+    showToast(t("toast.gitea_abort_failed", { error: error.message }), "error");
+    return false;
   }
 }
 
@@ -301,31 +335,41 @@ export async function giteaAbort() {
 // ============================================
 
 export async function giteaForcePush() {
-  const confirmed = await showConfirmDialog({
-    title: t("gitea.force_push_title"),
-    message: t("gitea.force_push_message"),
-    confirmText: t("sidebar.commit"),
-    cancelText: t("modal.cancel_button"),
-    isDanger: true
-  });
+  const branch = giteaState.currentBranch || 'Current branch';
+  const confirmed = await showConfirmDialog(getGitActionConfirmation('force-push', {
+    provider: 'Gitea',
+    currentBranch: branch,
+  }));
 
-  if (confirmed) {
-    try {
-      showGlobalLoading(t("modal.confirm") + "...");
-      const data = await fetchWithAuth(API_BASE, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "git_force_push", remote: "gitea" }),
-      });
-      hideGlobalLoading();
-      if (data.success) {
-        showToast(t("toast.git_push_success"), "success");
-        await giteaStatus();
-      }
-    } catch (error) {
-      hideGlobalLoading();
-      showToast(t("toast.gitea_push_failed", { error: error.message }), "error");
+  if (!confirmed) return false;
+
+  const operation = startGiteaOperation(
+    'Force push to Gitea',
+    'cloud_upload',
+    'Replacing the remote branch...',
+    giteaForcePush,
+    `${branch} -> gitea/${branch}`,
+  );
+  try {
+    const data = await fetchWithAuth(API_BASE, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "git_force_push", remote: "gitea" }),
+    });
+    if (!data.success) {
+      const message = data.message || data.error || 'Unknown force-push error';
+      operation.fail('Force push to Gitea failed', message);
+      showToast(t("toast.gitea_push_failed", { error: message }), "error");
+      return false;
     }
+    operation.finish('Gitea branch replaced');
+    showToast(t("toast.git_push_success"), "success");
+    await giteaStatus(false, true);
+    return true;
+  } catch (error) {
+    operation.fail('Force push to Gitea failed', error.message);
+    showToast(t("toast.gitea_push_failed", { error: error.message }), "error");
+    return false;
   }
 }
 
@@ -334,38 +378,222 @@ export async function giteaForcePush() {
 // ============================================
 
 export async function giteaHardReset() {
-  const confirmed = await showConfirmDialog({
-    title: t("gitea.hard_reset_title"),
-    message: t("gitea.hard_reset_message"),
-    confirmText: t("toolbar.refresh"),
-    cancelText: t("modal.cancel_button"),
-    isDanger: true
-  });
+  const branch = giteaState.currentBranch || 'Current branch';
+  const confirmed = await showConfirmDialog(getGitActionConfirmation('hard-reset', {
+    provider: 'Gitea',
+    currentBranch: branch,
+  }));
 
-  if (confirmed) {
-    try {
-      showGlobalLoading(t("modal.confirm") + "...");
-      const data = await fetchWithAuth(API_BASE, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "git_hard_reset", remote: "gitea", branch: giteaState.currentBranch }),
-      });
-      hideGlobalLoading();
-      if (data.success) {
-        showToast(t("toast.git_reset_success"), "success");
-        eventBus.emit('ui:reload-files');
-        await giteaStatus();
-      }
-    } catch (error) {
-      hideGlobalLoading();
-      showToast(t("toast.gitea_error", { error: error.message }), "error");
+  if (!confirmed) return false;
+
+  const operation = startGiteaOperation(
+    'Reset from Gitea',
+    'restore',
+    'Replacing local files from the remote branch...',
+    giteaHardReset,
+    `gitea/${branch} -> ${branch}`,
+  );
+  try {
+    const data = await fetchWithAuth(API_BASE, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "git_hard_reset", remote: "gitea", branch }),
+    });
+    if (!data.success) {
+      const message = data.message || data.error || 'Unknown hard-reset error';
+      operation.fail('Reset from Gitea failed', message);
+      showToast(t("toast.gitea_error", { error: message }), "error");
+      return false;
     }
+    operation.finish('Local branch reset from Gitea');
+    showToast(t("toast.git_reset_success"), "success");
+    eventBus.emit('ui:reload-files');
+    await giteaStatus(false, true);
+    return true;
+  } catch (error) {
+    operation.fail('Reset from Gitea failed', error.message);
+    showToast(t("toast.gitea_error", { error: error.message }), "error");
+    return false;
   }
 }
 
 // ============================================
 // Gitea Settings Modal
 // ============================================
+
+export async function giteaAddRemote(url) {
+  const remoteUrl = String(url || '');
+  const operation = startOperationFeedback({
+    label: 'Configure Gitea remote',
+    icon: 'cloud_sync',
+    message: 'Saving Gitea remote...',
+    scope: 'Local Git repository',
+    target: `gitea -> ${giteaEndpointLabel(remoteUrl)}`,
+    retry: () => giteaAddRemote(remoteUrl),
+    openLabel: 'Source Control',
+    openIcon: 'account_tree',
+    open: () => eventBus.emit('ui:switch-sidebar-view', 'source-control'),
+  });
+  try {
+    const data = await fetchWithAuth(API_BASE, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'gitea_add_remote', url: remoteUrl }),
+    });
+    if (!data.success) throw new Error(data.message || data.error || 'Gitea remote configuration failed');
+    operation.finish('Gitea remote configured');
+    try {
+      const parsed = new URL(remoteUrl);
+      localStorage.setItem('giteaServerUrl', `${parsed.protocol}//${parsed.host}`);
+    } catch (_error) {}
+    showToast(t("toast.git_remote_saved"), 'success');
+    await giteaStatus(false, true);
+    return true;
+  } catch (error) {
+    operation.fail('Could not configure Gitea remote', error.message);
+    showToast(t("toast.gitea_error", { error: error.message }), 'error');
+    return false;
+  }
+}
+
+export async function giteaRemoveRemote(name) {
+  const remoteName = String(name || 'gitea');
+  const confirmed = await showConfirmDialog({
+    title: t("gitea.remove_remote_title"),
+    message: t("gitea.remove_remote_message", { name: remoteName }),
+    confirmText: t("modal.delete_button"),
+    cancelText: t("modal.cancel_button"),
+    isDanger: true,
+  });
+  if (!confirmed) return false;
+  const operation = startOperationFeedback({
+    label: `Remove ${remoteName} remote`,
+    icon: 'link_off',
+    message: 'Removing local remote...',
+    scope: 'Local Git repository',
+    target: remoteName,
+    retry: () => giteaRemoveRemote(remoteName),
+    openLabel: 'Source Control',
+    openIcon: 'account_tree',
+    open: () => eventBus.emit('ui:switch-sidebar-view', 'source-control'),
+  });
+  try {
+    const data = await fetchWithAuth(API_BASE, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'git_remove_remote', name: remoteName }),
+    });
+    if (!data.success) throw new Error(data.message || data.error || 'Remote removal failed');
+    operation.finish(`${remoteName} remote removed`);
+    showToast(data.message, 'success');
+    await giteaStatus(false, true);
+    return true;
+  } catch (error) {
+    operation.fail(`Could not remove ${remoteName} remote`, error.message);
+    showToast(t("gitea.remove_remote_error", { error: error.message }), 'error');
+    return false;
+  }
+}
+
+export async function giteaSaveCredentials(username, token, rememberMe = true) {
+  const account = String(username || '').trim() || 'Gitea account';
+  const server = giteaEndpointLabel(localStorage.getItem('giteaServerUrl') || '');
+  const operation = startOperationFeedback({
+    label: 'Save Gitea credentials',
+    icon: 'key',
+    message: 'Saving Gitea credentials...',
+    scope: 'Gitea authentication',
+    target: `${account} -> ${server}`,
+    openLabel: 'Gitea Settings',
+    openIcon: 'settings',
+    open: () => eventBus.emit('git:show-gitea-settings'),
+  });
+  try {
+    const data = await fetchWithAuth(API_BASE, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'gitea_set_credentials', username: account, token, remember_me: rememberMe }),
+    });
+    if (!data.success) throw new Error(data.message || data.error || 'Credential save was rejected');
+    operation.finish('Gitea credentials saved', {
+      detail: rememberMe ? 'Credentials saved for future sessions' : 'Credentials available for this session',
+    });
+    showToast(t("toast.git_creds_saved"), 'success');
+    return true;
+  } catch (error) {
+    operation.fail('Could not save Gitea credentials', error.message, {
+      detail: 'The token was not retained for Retry. Reopen Gitea Settings to try again.',
+    });
+    showToast(t("toast.gitea_error", { error: error.message }), 'error');
+    return false;
+  }
+}
+
+export async function giteaClearCredentials() {
+  const confirmed = await showConfirmDialog({
+    title: 'Sign Out from Gitea?',
+    message: 'Saved Gitea credentials will be removed. Repository files, commits, and remotes are unchanged.',
+    confirmText: 'Sign Out',
+    cancelText: t("modal.cancel_button"),
+    isDanger: true,
+  });
+  if (!confirmed) return false;
+  const operation = startOperationFeedback({
+    label: 'Sign out from Gitea',
+    icon: 'logout',
+    message: 'Removing saved Gitea credentials...',
+    scope: 'Gitea authentication',
+    target: giteaEndpointLabel(localStorage.getItem('giteaServerUrl') || ''),
+    retry: giteaClearCredentials,
+    openLabel: 'Gitea Settings',
+    openIcon: 'settings',
+    open: () => eventBus.emit('git:show-gitea-settings'),
+  });
+  try {
+    const data = await fetchWithAuth(API_BASE, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'gitea_clear_credentials' }),
+    });
+    if (!data.success) throw new Error(data.message || data.error || 'Credential removal was rejected');
+    operation.finish('Signed out from Gitea');
+    showToast(t("toast.git_signout"), 'success');
+    return true;
+  } catch (error) {
+    operation.fail('Could not sign out from Gitea', error.message);
+    showToast(t("toast.gitea_error", { error: error.message }), 'error');
+    return false;
+  }
+}
+
+export async function giteaTestConnection() {
+  const operation = startOperationFeedback({
+    label: 'Test Gitea connection',
+    icon: 'network_check',
+    message: 'Contacting Gitea remote...',
+    scope: 'Gitea remote',
+    target: `gitea -> ${giteaEndpointLabel(localStorage.getItem('giteaServerUrl') || '')}`,
+    retry: giteaTestConnection,
+    openLabel: 'Gitea Settings',
+    openIcon: 'settings',
+    open: () => eventBus.emit('git:show-gitea-settings'),
+  });
+  try {
+    const data = await fetchWithAuth(API_BASE, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'gitea_test_connection' }),
+    });
+    if (!data.success) throw new Error(data.message || data.error || 'Connection test was rejected');
+    operation.finish('Gitea connection verified');
+    showToast(t("toast.git_conn_success"), 'success');
+    return true;
+  } catch (error) {
+    operation.fail('Gitea connection failed', error.message);
+    showToast(t("toast.git_conn_failed") + ': ' + error.message, 'error');
+    return false;
+  }
+}
 
 export async function showGiteaSettings() {
   // Get current remotes
@@ -534,33 +762,8 @@ export async function showGiteaSettings() {
   removeRemoteBtns.forEach(btn => {
     btn.addEventListener('click', async (e) => {
       const remoteName = e.currentTarget.dataset.remoteName;
-      const confirmed = await showConfirmDialog({
-        title: t("gitea.remove_remote_title"),
-        message: t("gitea.remove_remote_message", { name: remoteName }),
-        confirmText: t("modal.delete_button"),
-        cancelText: t("modal.cancel_button"),
-        isDanger: true
-      });
-
-      if (confirmed) {
-        try {
-          const data = await fetchWithAuth(API_BASE, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ action: "gitea_remove_remote", name: remoteName }),
-          });
-
-          if (data.success) {
-            showToast(data.message, "success");
-            // Refresh settings modal
-            setTimeout(() => showGiteaSettings(), 300);
-          } else {
-            showToast(t("gitea.remove_remote_failed", { error: data.message }), "error");
-          }
-        } catch (error) {
-          showToast(t("gitea.remove_remote_error", { error: error.message }), "error");
-        }
-      }
+      const removed = await giteaRemoveRemote(remoteName);
+      if (removed) setTimeout(() => showGiteaSettings(), 300);
     });
   });
 
@@ -568,24 +771,7 @@ export async function showGiteaSettings() {
     const url = document.getElementById("gitea-repo-url").value;
     if (!url) return showToast(t("toast.gitea_url_required"), "error");
 
-    const result = await fetchWithAuth(API_BASE, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "gitea_add_remote", url: url }),
-    });
-    if (result.success) {
-      showToast(t("toast.git_remote_saved"), "success");
-
-      // Extract and save the base server URL from the repo URL
-      try {
-        const urlObj = new URL(url);
-        const baseUrl = `${urlObj.protocol}//${urlObj.host}`;
-        localStorage.setItem("giteaServerUrl", baseUrl);
-      } catch (e) {
-        // If URL parsing fails, ignore it
-      }
-    }
-    else showToast(t("toast.gitea_error", { error: result.error }), "error");
+    await giteaAddRemote(url);
   });
 
   document.getElementById("btn-save-gitea-credentials")?.addEventListener("click", async () => {
@@ -594,37 +780,17 @@ export async function showGiteaSettings() {
     if (!username) return showToast(t("gitea.username") + " " + t("toast.validation_error"), "error");
     if (!token && !hasCredentials) return showToast(t("gitea.token_placeholder") + " " + t("toast.validation_error"), "error");
 
-    const result = await fetchWithAuth(API_BASE, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "gitea_set_credentials", username, token }),
-    });
-    if (result.success) {
-      showToast(t("toast.git_creds_saved"), "success");
-      closeGiteaSettings();
-    } else {
-      showToast(t("toast.gitea_error", { error: result.message }), "error");
-    }
+    const saved = await giteaSaveCredentials(username, token);
+    if (saved) closeGiteaSettings();
   });
 
   document.getElementById("btn-gitea-signout")?.addEventListener("click", async () => {
-    await fetchWithAuth(API_BASE, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "gitea_clear_credentials" }),
-    });
-    showToast(t("toast.git_signout"), "success");
-    closeGiteaSettings();
+    const signedOut = await giteaClearCredentials();
+    if (signedOut) closeGiteaSettings();
   });
 
   document.getElementById("btn-test-gitea-connection")?.addEventListener("click", async () => {
-    const result = await fetchWithAuth(API_BASE, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "gitea_test_connection" }),
-    });
-    if (result.success) showToast(t("toast.git_conn_success"), "success");
-    else showToast(t("toast.git_conn_failed") + ": " + result.error, "error");
+    await giteaTestConnection();
   });
 
   document.getElementById("btn-create-gitea-repo")?.addEventListener("click", async () => {
@@ -671,8 +837,39 @@ export async function showGiteaSettings() {
 // ============================================
 
 export async function giteaCreateRepo(repoName, description, isPrivate, giteaUrl) {
+  const request = Object.freeze({
+    repoName: String(repoName || '').trim(),
+    description: String(description || ''),
+    isPrivate: Boolean(isPrivate),
+    giteaUrl: String(giteaUrl || '').trim(),
+  });
+  let serverLabel = 'Gitea server';
   try {
-    if (!giteaUrl) {
+    serverLabel = `Gitea ${new URL(request.giteaUrl).host}`;
+  } catch (_error) {
+    // The backend owns URL validation; keep invalid input out of the visible scope.
+  }
+  const visibility = request.isPrivate ? 'Private' : 'Public';
+  const operation = startOperationFeedback({
+    label: 'Create Gitea repository',
+    icon: 'add_circle',
+    message: 'Creating remote repository...',
+    scope: serverLabel,
+    target: `${request.repoName} (${visibility})`,
+    retry: () => giteaCreateRepo(
+      request.repoName,
+      request.description,
+      request.isPrivate,
+      request.giteaUrl,
+    ),
+    openLabel: 'Source Control',
+    openIcon: 'account_tree',
+    open: () => eventBus.emit('ui:switch-sidebar-view', 'source-control'),
+  });
+
+  try {
+    if (!request.giteaUrl) {
+      operation.fail('Repository creation failed', 'A Gitea server URL is required.');
       showToast(t("toast.gitea_url_required"), "error");
       return null;
     }
@@ -683,14 +880,15 @@ export async function giteaCreateRepo(repoName, description, isPrivate, giteaUrl
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         action: "gitea_create_repo",
-        repo_name: repoName,
-        description: description,
-        is_private: isPrivate,
-        gitea_url: giteaUrl
+        repo_name: request.repoName,
+        description: request.description,
+        is_private: request.isPrivate,
+        gitea_url: request.giteaUrl
       }),
     });
 
     if (data.success) {
+      operation.finish('Repository created');
       showToast(data.message, "success");
 
       // Show link to new repo
@@ -706,10 +904,13 @@ export async function giteaCreateRepo(repoName, description, isPrivate, giteaUrl
 
       return data;
     } else {
-      showToast(t("toast.gitea_create_repo_failed", { error: data.message || "Unknown error" }), "error");
+      const message = data.message || data.error || "Unknown error";
+      operation.fail('Repository creation failed', message);
+      showToast(t("toast.gitea_create_repo_failed", { error: message }), "error");
       return null;
     }
   } catch (error) {
+    operation.fail('Repository creation failed', error.message);
     showToast(t("toast.gitea_create_repo_failed", { error: error.message }), "error");
     return null;
   }
@@ -720,7 +921,19 @@ export async function giteaCreateRepo(repoName, description, isPrivate, giteaUrl
 // ============================================
 
 export async function giteaStatus(shouldFetch = false, silent = false) {
-  if (!state.giteaIntegrationEnabled) return;
+  if (!state.giteaIntegrationEnabled) return false;
+
+  const operation = silent ? null : startOperationFeedback({
+    label: shouldFetch ? 'Fetch Gitea status' : 'Refresh Gitea status',
+    icon: 'sync',
+    scope: 'Gitea repository',
+    target: giteaState.currentBranch || 'Workspace',
+    message: shouldFetch ? 'Fetching remote references and workspace status...' : 'Reading workspace status...',
+    retry: () => giteaStatus(shouldFetch),
+    openLabel: 'Source Control',
+    openIcon: 'account_tree',
+    open: () => eventBus.emit('ui:switch-sidebar-view', 'source-control'),
+  });
 
   try {
     if (!silent) {
@@ -741,6 +954,7 @@ export async function giteaStatus(shouldFetch = false, silent = false) {
     }
 
     if (data.success) {
+      giteaState.lastError = "";
       // Store previous change list string to check for meaningful changes
       const currentChangesList = JSON.stringify(data.files);
       const hasMeaningfulChange = state._lastGiteaChanges && state._lastGiteaChanges !== currentChangesList;
@@ -761,7 +975,8 @@ export async function giteaStatus(shouldFetch = false, silent = false) {
         deleted: [],
         untracked: [],
         staged: [],
-        unstaged: []
+        unstaged: [],
+        ignored: []
       };
 
       giteaState.totalChanges = [
@@ -790,12 +1005,29 @@ export async function giteaStatus(shouldFetch = false, silent = false) {
           showToast(t("toast.gitea_tree_clean"), "success");
         }
       }
+      operation?.finish(data.has_changes
+        ? `${giteaState.totalChanges} workspace ${giteaState.totalChanges === 1 ? 'change' : 'changes'}`
+        : 'Workspace is clean', {
+        detail: `Branch: ${giteaState.currentBranch}${shouldFetch ? '\nRemote references fetched.' : ''}`,
+      });
+      return true;
+    } else {
+      giteaState.lastError = data.message || data.error || "Gitea status failed";
+      eventBus.emit('git:refresh');
+      operation?.fail('Could not refresh Gitea status', giteaState.lastError);
+      if (!silent) showToast(t("toast.gitea_error", { error: giteaState.lastError }), "error");
+      return false;
     }
   } catch (error) {
+    giteaState.lastError = error.message || "Gitea status failed";
+    eventBus.emit('git:refresh');
+    operation?.fail('Could not refresh Gitea status', giteaState.lastError);
     if (!silent) {
-      if (elements.btnGiteaStatus) elements.btnGiteaStatus.classList.remove("pulsing");
       showToast(t("toast.gitea_error", { error: error.message }), "error");
     }
+    return false;
+  } finally {
+    if (!silent && elements.btnGiteaStatus) elements.btnGiteaStatus.classList.remove("pulsing");
   }
 }
 

@@ -6,7 +6,6 @@ import re
 import yaml
 import json
 import ast
-import time
 
 from aiohttp import web
 
@@ -138,7 +137,10 @@ def _is_in_triggers_context(lines: list[str], current_line_num: int) -> bool:
     return False
 
 
-def _validate_entity_id(entity_id: str, line_num: int, original_line: str) -> dict | None:
+def _validate_entity_id(
+    entity_id: str, line_num: int, original_line: str,
+    known_domains: set[str] | None = None,
+) -> dict | None:
     """Validate entity_id format. Returns error dict if invalid, None if valid."""
     if entity_id.startswith('!') or entity_id.startswith('*') or entity_id.startswith('&'):
         return None
@@ -161,7 +163,7 @@ def _validate_entity_id(entity_id: str, line_num: int, original_line: str) -> di
         }
 
     domain = entity_id.split('.')[0]
-    if domain not in HA_KNOWN_DOMAINS:
+    if domain not in HA_KNOWN_DOMAINS and domain not in (known_domains or set()):
         return {
             "line": line_num,
             "type": "invalid_domain",
@@ -177,19 +179,6 @@ def _validate_entity_id(entity_id: str, line_num: int, original_line: str) -> di
 def _validate_automation(item: dict, lines: list[str]) -> list[dict]:
     """Validate automation-specific rules."""
     errors = []
-
-    if 'id' not in item and 'alias' not in item:
-        for line_num, line in enumerate(lines, 1):
-            if line.strip().startswith('- '):
-                errors.append({
-                    "line": line_num,
-                    "type": "missing_automation_id",
-                    "message": "Automation missing both 'id:' and 'alias:' fields",
-                    "solution": "Add 'id:' (required) or 'alias:' (recommended)",
-                    "example": "- id: '1738012345678'\n  alias: My Automation",
-                    "original": line.strip()
-                })
-                break
 
     if 'trigger' not in item and 'triggers' not in item:
         for line_num, line in enumerate(lines, 1):
@@ -395,7 +384,9 @@ def _check_entity_id_in_data(lines: list[str], warnings: list[dict]) -> None:
             })
 
 
-def check_yaml(content: str, strict_mode: bool = True) -> web.Response:
+def check_yaml(
+    content: str, strict_mode: bool = True, known_domains: set[str] | None = None
+) -> web.Response:
     """Check for YAML syntax errors and provide smart solutions."""
     syntax_errors = []
     best_practice_warnings = []
@@ -505,7 +496,7 @@ def check_yaml(content: str, strict_mode: bool = True) -> web.Response:
         if entity_match:
             entity_id = entity_match.group(1).strip('"\'')
             if not _is_yaml_block_scalar_indicator(entity_id):
-                error = _validate_entity_id(entity_id, line_num, line)
+                error = _validate_entity_id(entity_id, line_num, line, known_domains)
                 if error:
                     if error["type"] == "malformed_entity_id":
                         syntax_errors.append(error)
@@ -561,10 +552,7 @@ def check_yaml(content: str, strict_mode: bool = True) -> web.Response:
                     continue
                 auto_errors = _validate_automation(item, lines)
                 for error in auto_errors:
-                    if error["type"] == "missing_automation_id":
-                        best_practice_warnings.append(error)
-                    else:
-                        syntax_errors.append(error)
+                    syntax_errors.append(error)
 
                 if 'alias' in item and 'id' not in item:
                     alias_value = item['alias']
@@ -573,9 +561,9 @@ def check_yaml(content: str, strict_mode: bool = True) -> web.Response:
                             best_practice_warnings.append({
                                 "line": line_num,
                                 "type": "missing_id",
-                                "message": f"Automation '{alias_value}' missing unique 'id:' field",
+                                "message": f"Automation '{alias_value}' has no optional unique 'id:' field",
                                 "solution": YAML_ERROR_PATTERNS["missing_id"]["solution"],
-                                "example": f"- id: '{int(time.time() * 1000)}'\n  alias: {alias_value}",
+                                "example": f"- id: 'stable_unique_id'\n  alias: {alias_value}",
                                 "original": line.strip()
                             })
                             break
@@ -838,16 +826,18 @@ def check_blueprint(content: str) -> web.Response:
     })
 
 
-def check_syntax(content: str, file_path: str = "") -> web.Response:
+def check_syntax(
+    content: str, file_path: str = "", known_domains: set[str] | None = None
+) -> web.Response:
     """Universal syntax checker - detects file type and applies correct validator."""
     file_type = _detect_file_type(file_path, content)
 
     if file_type == 'yaml-blueprint':
         return check_blueprint(content)
     elif file_type == 'yaml-homeassistant':
-        return check_yaml(content, strict_mode=True)
+        return check_yaml(content, strict_mode=True, known_domains=known_domains)
     elif file_type == 'yaml-esphome':
-        return check_yaml(content, strict_mode=False)
+        return check_yaml(content, strict_mode=False, known_domains=known_domains)
     elif file_type == 'json':
         return check_json(content)
     elif file_type == 'python':
@@ -855,7 +845,7 @@ def check_syntax(content: str, file_path: str = "") -> web.Response:
     elif file_type == 'javascript':
         return check_javascript(content)
     else:
-        return check_yaml(content, strict_mode=False)
+        return check_yaml(content, strict_mode=False, known_domains=known_domains)
 
 
 def check_jinja(content: str) -> web.Response:

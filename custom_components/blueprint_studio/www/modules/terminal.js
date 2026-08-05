@@ -5,15 +5,16 @@ import { eventBus } from './event-bus.js';
 import { loadScript } from './utils.js';
 import { API_BASE } from './constants.js';
 import { showToast, showModal, showConfirmDialog } from './ui.js';
-import { saveSettings } from './settings.js?v=2.5.75';
-import { setOverflowTooltip } from './tooltip.js?v=2.5.75';
+import { saveSettings } from './settings.js?v=2.5.188';
+import { setOverflowTooltip } from './tooltip.js?v=2.5.188';
 import { t } from './translations.js';
 import { issueConnectionTicket } from './api.js';
 import {
     constrainTerminalHeight,
     getTerminalMaxHeight,
     TERMINAL_MIN_HEIGHT,
-} from './workspace-layout.js';
+} from './workspace-layout.js?v=2.5.188';
+import { captureEditorViewports, scheduleEditorViewportRestore } from './editor-viewport.js?v=2.5.188';
 
 let term = null;
 let fitAddon = null;
@@ -29,6 +30,45 @@ let terminalScope = null;
 let reconnectBtn = null;
 let reconnectTimer = null;
 let activeTerminalScope = 'Local';
+let terminalMayBeActive = false;
+let terminalInputBuffer = '';
+let terminalOutputTail = '';
+
+function trackTerminalInput(data) {
+    for (const char of data) {
+        if (char === '\u0003') {
+            terminalMayBeActive = false;
+            terminalInputBuffer = '';
+        } else if (char === '\r' || char === '\n') {
+            if (terminalInputBuffer.trim()) terminalMayBeActive = true;
+            terminalInputBuffer = '';
+        } else if (char === '\u007f') {
+            terminalInputBuffer = terminalInputBuffer.slice(0, -1);
+        } else if (char >= ' ' && char !== '\u007f') {
+            terminalInputBuffer += char;
+        }
+    }
+}
+
+function trackTerminalOutput(data) {
+    terminalOutputTail = `${terminalOutputTail}${data}`.slice(-600);
+    const plainText = terminalOutputTail
+        .replace(/\x1b\[[0-?]*[ -\/]*[@-~]/g, '')
+        .replace(/\r/g, '');
+    if (/(?:^|\n)[^\n]*[#$>]\s*$/.test(plainText)) {
+        terminalMayBeActive = false;
+    }
+}
+
+async function confirmTerminalHide() {
+    if (!terminalMayBeActive) return true;
+    return Boolean(await showConfirmDialog({
+        title: 'Hide active terminal?',
+        message: 'A command may still be running. Hiding the terminal will keep the session connected and will not stop the command.',
+        confirmText: 'Hide Terminal',
+        cancelText: 'Keep Open',
+    }));
+}
 
 function insertTerminalIntoBody() {
   const statusBar = document.querySelector('.status-bar');
@@ -331,6 +371,7 @@ export async function initTerminal() {
         await connectSocket();
 
         term.onData(data => {
+            trackTerminalInput(data);
             if (socket && socket.readyState === WebSocket.OPEN) {
                 socket.send(data);
             }
@@ -394,6 +435,9 @@ async function connectSocket(options = {}) {
     socket.binaryType = 'arraybuffer';
 
     socket.onopen = () => {
+        terminalMayBeActive = false;
+        terminalInputBuffer = '';
+        terminalOutputTail = '';
         setTerminalConnectionState('connected', 'Connected', 'Local');
         // Reset cursor key mode left over from the previous session.
         // \x1b[?1l disables application cursor key mode (DECCKM off) so arrow
@@ -424,9 +468,11 @@ async function connectSocket(options = {}) {
 
     socket.onmessage = (event) => {
         if (typeof event.data === 'string') {
+            trackTerminalOutput(event.data);
             term.write(event.data);
         } else {
             const text = new TextDecoder().decode(event.data);
+            trackTerminalOutput(text);
             term.write(text);
         }
     };
@@ -465,11 +511,13 @@ export function isTerminalFocused() {
 
 function safeFit() {
     if (!fitAddon) return;
+    const restoreTerminalFocus = isTerminalFocused();
     try {
         const dims = fitAddon.proposeDimensions();
         if (dims && dims.cols && dims.rows) {
             fitAddon.fit();
             sendResize();
+            if (restoreTerminalFocus) term.focus();
         }
     } catch (e) {
         // Renderer not ready yet — ignore
@@ -539,11 +587,12 @@ export async function toggleTerminal(forceState = null) {
         return;
     }
 
-    if (forceState !== null) {
-        state.terminalVisible = forceState;
-    } else if (wasInitialized || !state.terminalVisible) {
-        state.terminalVisible = !state.terminalVisible;
-    }
+    const editorSnapshots = captureEditorViewports();
+    const nextVisible = forceState !== null
+        ? forceState
+        : (wasInitialized || !state.terminalVisible ? !state.terminalVisible : state.terminalVisible);
+    if (!nextVisible && state.terminalVisible && !await confirmTerminalHide()) return;
+    state.terminalVisible = nextVisible;
 
     if (terminalContainer) {
         terminalContainer.classList.toggle('hidden', !state.terminalVisible);
@@ -555,12 +604,15 @@ export async function toggleTerminal(forceState = null) {
         }
     }
     saveSettings();
+    scheduleEditorViewportRestore(editorSnapshots);
 }
 
 export async function runCommand(cmd) {
     if (!term) await initTerminal();
     if (!state.terminalVisible && !isTerminalInTab) eventBus.emit('terminal:toggle', true);
     if (socket && socket.readyState === WebSocket.OPEN) {
+        terminalMayBeActive = Boolean(cmd.trim());
+        terminalInputBuffer = '';
         socket.send(cmd + '\r');
     }
 }

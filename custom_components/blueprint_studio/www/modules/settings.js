@@ -15,7 +15,7 @@ import {
   TERMINAL_DEFAULT_HEIGHT,
   SPLIT_MIN_PERCENT,
   SPLIT_MAX_PERCENT,
-} from './workspace-layout.js';
+} from './workspace-layout.js?v=2.5.188';
 
 const SETTINGS_CLIENT_ID_KEY = `${STORAGE_KEY}_client_id`;
 const LOCAL_SETTINGS_RECOVERY_WINDOW_MS = 2 * 60 * 1000;
@@ -266,6 +266,9 @@ export async function loadSettings() {
     // AI Settings - with migration from old structure
     state.aiIntegrationEnabled = settings.aiIntegrationEnabled ?? false;
     state.aiChatHistory = settings.aiChatHistory || [];
+    state.aiTaskMode = settings.aiTaskMode || "ask";
+    state.aiIncludeFileContext = settings.aiIncludeFileContext ?? true;
+    state.aiIncludeMetadata = settings.aiIncludeMetadata ?? true;
     state.aiSidebarVisible = settings.aiSidebarVisible || false;
 
     // Migrate old aiProvider to new aiType structure
@@ -294,7 +297,7 @@ export async function loadSettings() {
     // Local AI settings
     state.localAiProvider = settings.localAiProvider || "ollama";
     state.ollamaUrl = settings.ollamaUrl || "http://localhost:11434";
-    state.ollamaModel = settings.ollamaModel || "codellama:7b";
+    state.ollamaModel = settings.ollamaModel || "";
     state.lmStudioUrl = settings.lmStudioUrl || "http://localhost:1234";
     state.lmStudioModel = settings.lmStudioModel || "";
     state.customAiUrl = settings.customAiUrl || "";
@@ -303,7 +306,7 @@ export async function loadSettings() {
 
     // Cloud AI settings
     state.cloudProvider = settings.cloudProvider || settings.aiProvider || "gemini";
-    state.aiModel = settings.aiModel || "gemini-2.0-flash-exp";
+    state.aiModel = settings.aiModel || "";
     state.geminiApiKey = settings.geminiApiKey || "";
     state.openaiApiKey = settings.openaiApiKey || "";
     state.openaiBaseUrl = settings.openaiBaseUrl || "";
@@ -380,6 +383,9 @@ export async function saveSettings() {
       giteaCollapsedGroups: Array.from(giteaState.collapsedGroups),
       aiIntegrationEnabled: state.aiIntegrationEnabled,
       aiChatHistory: (state.aiChatHistory || []).slice(-20), // Keep last 20 messages
+      aiTaskMode: state.aiTaskMode,
+      aiIncludeFileContext: state.aiIncludeFileContext,
+      aiIncludeMetadata: state.aiIncludeMetadata,
       aiSidebarVisible: state.aiSidebarVisible,
       aiType: state.aiType,
       aiProvider: state.aiProvider, // Legacy, for migration

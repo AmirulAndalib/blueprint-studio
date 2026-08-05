@@ -130,7 +130,7 @@ Tired of juggling external editors, SSH, or add-ons just to tweak your Home Assi
 ## ✨ Features
 
 ### Editor Features 🎨
-- **AI Studio Copilot (v2.0)** - Senior Home Assistant Configuration Expert with **Real Entity Awareness**, **7 Intelligent Scene Presets** (morning, evening, movie, reading, romantic, party, relax), **Advanced Script Generation** with multi-step sequences, delays & notifications, **Jinja Template Validation**, and **30+ Device Domains** with 100+ synonyms. Supports **Gemini 3** & **GPT-5** or runs entirely local by default 🧠
+- **AI Studio Copilot** - Home Assistant-aware deterministic generation and optional Home Assistant, local, or cloud AI providers. Generated edits are parsed, validated, and shown as before/after proposals that require an explicit Apply action 🧠
 - **Syntax Highlighting** - Support for YAML, JSON, Python, JavaScript, HTML, CSS, Markdown, and Shell scripts 🌈
 - **Code Folding** - Collapse and expand code sections for better focus 📜
 - **Line Numbers** - Easy navigation with line numbers 🔢
@@ -362,14 +362,16 @@ Blueprint Studio requires **no configuration**! After installation:
 **New in v2.5.0! Senior Home Assistant Configuration Expert with advanced intelligence.**
 
 1. **Enable in Settings**: Go to **Settings** and toggle **"AI Studio Copilot"**.
-2. **Choose Provider**: Select between **Local (Private)**, **Google Gemini**, or **OpenAI**.
-3. **Smart Discovery**: The AI knows your real entity IDs! Just ask to "Turn on the living room lights."
+2. **Choose Processing**: Use built-in rule-based generation, a Home Assistant conversation agent, a configured local endpoint, or a supported cloud provider. Available model IDs are fetched from the provider rather than fixed by Blueprint Studio.
+3. **Grounded Discovery**: Relevant installed entities and actions are selected from the running Home Assistant instance. Unknown references remain explicit instead of being silently invented.
 4. **Intelligent Scene Generation**: Create scenes with natural language - "Create a morning scene for bedroom" generates 100% brightness at 4000K cool white. Supports 7 presets: morning, evening, movie, reading, romantic, party, relax.
 5. **Advanced Script Generation**: Create multi-step scripts with delays, notifications, and mode detection (single, parallel, restart, queued). Say "Turn on lights, wait 5 minutes, then turn them off."
 6. **Jinja Template Support**: Edit `.jinja`, `.jinja2`, and `.j2` files with syntax validation and error detection.
 7. **YAML Error Detection**: Automatically detects 7+ common YAML errors (legacy syntax, indentation, missing colons) with line-by-line solutions.
 8. **Multi-File Support**: Generate code specifically for `automations.yaml`, `scripts.yaml`, or `scenes.yaml`.
-9. **Context Aware**: The Copilot analyzes your open file to provide targeted help and perfectly formatted YAML code blocks.
+9. **Reviewed Changes**: File edits remain immutable proposals until you inspect the before/after values and explicitly apply them. Stale or unsafe targets are rejected.
+
+Autocomplete and validation run independently of an AI provider. Deterministic generation stays inside Blueprint Studio. Home Assistant agents, local endpoints, and cloud providers receive only the bounded selected excerpt and relevant metadata shown by the composer boundary; likely secrets and hidden-file content are removed first.
 
 📖 **See Full Guides**: [AI_CAPABILITIES.md](./AI_CAPABILITIES.md) • [SCENE_SCRIPT_GUIDE.md](./SCENE_SCRIPT_GUIDE.md)
 
@@ -607,6 +609,9 @@ All settings are available in the Settings modal (gear icon) with a new tabbed i
 
 **Q: Is the AI Copilot always on?**
 A: No. For privacy and performance, the AI Copilot is disabled by default. You can enable it in the Settings modal when you need help. 🧠
+
+**Q: Does autocomplete or validation send my files to an AI provider?**
+A: No. YAML context, autocomplete, and validation remain local. Only an AI request explicitly sent to a Home Assistant agent, configured model endpoint, or cloud provider crosses that provider boundary, using a bounded and redacted excerpt.
 
 **Q: Does Blueprint Studio support GitHub integration?**
 A: Yes! Blueprint Studio v1.2.0+ includes full GitHub integration with OAuth Device Flow, persistent credentials, and visual Git operations (stage, commit, push, pull). 🔗

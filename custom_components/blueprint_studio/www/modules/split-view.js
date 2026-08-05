@@ -6,11 +6,76 @@ import {
   constrainSplitPercent,
   SPLIT_MAX_PERCENT,
   SPLIT_MIN_PERCENT,
-} from './workspace-layout.js';
+} from './workspace-layout.js?v=2.5.188';
+import { captureEditorViewports, scheduleEditorViewportRestore } from './editor-viewport.js?v=2.5.188';
 
 // Drag-and-drop state
 let draggedTabIndex = null;
 let draggedTabPane = null;
+let responsiveSplitObserver = null;
+
+export const SPLIT_DUAL_PANE_MIN_WIDTH = 720;
+
+function splitContainerWidth() {
+  return document.getElementById('split-container')?.getBoundingClientRect().width || window.innerWidth;
+}
+
+export function isResponsiveSinglePaneSplit() {
+  return Boolean(state.splitView?.enabled && state.splitView.responsiveSinglePane);
+}
+
+function syncResponsiveSplitPresentation() {
+  const splitContainer = document.getElementById('split-container');
+  if (!splitContainer) return;
+  if (!isResponsiveSinglePaneSplit()) {
+    delete splitContainer.dataset.splitPresentation;
+    delete splitContainer.dataset.activePane;
+    return;
+  }
+  splitContainer.dataset.splitPresentation = 'single';
+  splitContainer.dataset.activePane = state.splitView.activePane === 'secondary' ? 'secondary' : 'primary';
+}
+
+export function updateResponsiveSplitView(width = splitContainerWidth()) {
+  if (!state.splitView) return;
+  const editorSnapshots = captureEditorViewports();
+  const wasSinglePane = state.splitView.responsiveSinglePane;
+  state.splitView.responsiveSinglePane = Boolean(
+    state.splitView.enabled && Number(width) < SPLIT_DUAL_PANE_MIN_WIDTH
+  );
+  syncResponsiveSplitPresentation();
+
+  const resizeHandle = document.getElementById('split-resize-handle');
+  if (state.splitView.enabled && !state.splitView.responsiveSinglePane) {
+    if (resizeHandle) resizeHandle.style.display = 'block';
+    updatePaneSizes(state.splitView.primaryPaneSize);
+  } else if (resizeHandle) {
+    resizeHandle.style.display = 'none';
+  }
+
+  if (wasSinglePane !== state.splitView.responsiveSinglePane) {
+    eventBus.emit('ui:refresh-tabs');
+    state.primaryEditor?.refresh();
+    state.secondaryEditor?.refresh();
+    scheduleEditorViewportRestore(editorSnapshots);
+    eventBus.emit('terminal:fit');
+  }
+  updateSplitViewButtons();
+}
+
+export function initResponsiveSplitView() {
+  const splitContainer = document.getElementById('split-container');
+  if (!splitContainer || responsiveSplitObserver) return;
+  if (typeof ResizeObserver === 'function') {
+    responsiveSplitObserver = new ResizeObserver((entries) => {
+      updateResponsiveSplitView(entries[0]?.contentRect.width);
+    });
+    responsiveSplitObserver.observe(splitContainer);
+  } else {
+    window.addEventListener('resize', () => updateResponsiveSplitView());
+  }
+  updateResponsiveSplitView();
+}
 
 /**
  * Updates split view button visibility based on split view state
@@ -39,8 +104,10 @@ export function updateSplitViewButtons() {
         if (btnSplitVertical) btnSplitVertical.style.display = "none";
         if (btnSplitClose) btnSplitClose.style.display = "inline-flex";
     } else {
-        // Split is not active - show enable button, hide close button
-        if (btnSplitVertical) btnSplitVertical.style.display = "inline-flex";
+        // Avoid creating two unreadable panes; restored splits use the adaptive presentation.
+        if (btnSplitVertical) {
+          btnSplitVertical.style.display = splitContainerWidth() >= SPLIT_DUAL_PANE_MIN_WIDTH ? "inline-flex" : "none";
+        }
         if (btnSplitClose) btnSplitClose.style.display = "none";
     }
 }
@@ -101,6 +168,7 @@ export function enableSplitView(orientation = 'vertical', skipInitialization = f
 
   // Update pane sizes
   updatePaneSizes(state.splitView.primaryPaneSize);
+  updateResponsiveSplitView();
 
   // Initialize resize handle
   initSplitResize();
@@ -157,6 +225,8 @@ export function disableSplitView() {
   // Clear split view state only AFTER disabling flag so UI renders correctly
   state.splitView.enabled = false;
   state.splitView.activePane = 'primary';
+  state.splitView.responsiveSinglePane = false;
+  syncResponsiveSplitPresentation();
   
   // Update DOM
   const primaryPane = document.getElementById('primary-pane');
@@ -243,6 +313,10 @@ export function setActivePaneFromPosition(pane) {
   }
 
   updatePaneActiveState();
+  if (isResponsiveSinglePaneSplit()) {
+    eventBus.emit('ui:refresh-tabs');
+    window.requestAnimationFrame(() => state.editor?.refresh());
+  }
 }
 
 /**
@@ -421,6 +495,7 @@ export function getActivePaneEditor() {
 export function updatePaneSizes(primaryPercent) {
   const nextPrimaryPercent = constrainSplitPercent(primaryPercent);
   state.splitView.primaryPaneSize = nextPrimaryPercent;
+  if (isResponsiveSinglePaneSplit()) return;
   const secondaryPercent = 100 - nextPrimaryPercent;
 
   const primaryPane = document.getElementById('primary-pane');
@@ -456,9 +531,11 @@ export function initSplitResize() {
   let isResizing = false;
   let startPos = 0;
   let startPrimarySize = 0;
+  let editorSnapshots = [];
 
   const handleMouseDown = (e) => {
     isResizing = true;
+    editorSnapshots = captureEditorViewports();
     startPos = e.clientX;
     startPrimarySize = state.splitView.primaryPaneSize;
     document.body.style.cursor = 'col-resize';
@@ -499,6 +576,7 @@ export function initSplitResize() {
     // Refresh both editors
     if (state.primaryEditor) state.primaryEditor.refresh();
     if (state.secondaryEditor) state.secondaryEditor.refresh();
+    scheduleEditorViewportRestore(editorSnapshots);
   };
 
   const handleKeyDown = (event) => {
@@ -510,10 +588,12 @@ export function initSplitResize() {
     else if (event.key === 'End') nextSize = SPLIT_MAX_PERCENT;
     else return;
     event.preventDefault();
+    const snapshots = captureEditorViewports();
     updatePaneSizes(nextSize);
     eventBus.emit('settings:save');
     state.primaryEditor?.refresh();
     state.secondaryEditor?.refresh();
+    scheduleEditorViewportRestore(snapshots);
   };
 
   // Add new listeners
@@ -536,6 +616,8 @@ export function updatePaneActiveState() {
     if (secondaryPane) secondaryPane.classList.remove('active');
     return;
   }
+
+  syncResponsiveSplitPresentation();
 
   if (primaryPane) {
     if (state.splitView.activePane === 'primary') {

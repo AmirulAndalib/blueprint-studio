@@ -5,11 +5,10 @@ import { eventBus } from './event-bus.js';
 import { t } from './translations.js';
 import { 
   showToast, 
-  showGlobalLoading, 
-  hideGlobalLoading, 
   showConfirmDialog 
 } from './ui.js';
-import { saveSettings } from './settings.js?v=2.5.75';
+import { saveSettings } from './settings.js?v=2.5.188';
+import { getActiveOperationSummary, startOperationFeedback } from './feedback-service.js?v=2.5.188';
 
 // Import PWA auth - will be available after main.js loads it
 let pwaAuth = null;
@@ -111,9 +110,9 @@ export async function fetchWithAuth(url, options = {}) {
     if (response.status === 409) {
         try {
             const result = await response.json();
-            return { ...result, status: 409 };
+            return { ...result, status: 409, httpStatus: 409 };
         } catch (e) {
-            return { success: false, message: "Conflict", status: 409 };
+            return { success: false, message: "Conflict", status: 409, httpStatus: 409 };
         }
     }
 
@@ -127,7 +126,11 @@ export async function fetchWithAuth(url, options = {}) {
 
   const result = await response.json();
   if (Array.isArray(result)) return result;
-  return { ...result, status: response.status };
+  return {
+    ...result,
+    status: result.status ?? response.status,
+    httpStatus: response.status,
+  };
 }
 
 /**
@@ -253,7 +256,6 @@ async function _subscribeToUpdates(conn, retries = 0) {
   try {
     _wsUnsubscribe = await conn.subscribeMessage(
       async (event) => {
-        console.log('[BPS-ws] message received:', event?.action, event?.path);
         if (event && event.action === "ai_edit") {
           try {
             const { showAiDiffModal } = await import('./git-diff.js');
@@ -397,48 +399,87 @@ export async function downloadFolderUrl(path, progressId = "") {
  * RESTARTS HOME ASSISTANT
  */
 export async function restartHomeAssistant() {
+    const unsavedTabs = state.openTabs.filter(tab => tab.modified);
+    const activeOperations = getActiveOperationSummary();
+    const unsavedList = unsavedTabs.length
+        ? `<div class="instance-operation-impact"><strong>${unsavedTabs.length} unsaved file${unsavedTabs.length === 1 ? "" : "s"}</strong><ul>${unsavedTabs.map(tab => `<li>${escapeDialogText(tab.path || tab.name || "Untitled")}</li>`).join("")}</ul></div>`
+        : '<div class="instance-operation-impact is-clear"><strong>No unsaved files</strong></div>';
+    const operationList = activeOperations.length
+        ? `<div class="instance-operation-impact"><strong>${activeOperations.length} active operation${activeOperations.length === 1 ? "" : "s"}</strong><ul>${activeOperations.map(operation => `<li>${escapeDialogText([operation.label, operation.scope, operation.target].filter(Boolean).join(" · "))}</li>`).join("")}</ul></div>`
+        : '<div class="instance-operation-impact is-clear"><strong>No active operations</strong></div>';
     const confirmed = await showConfirmDialog({
         title: t("modal.restart_ha_title"),
-        message: t("modal.restart_ha_message"),
+        message: `<div class="operation-location is-remote"><span class="ui-icon material-icons" aria-hidden="true">dns</span><span><strong>Home Assistant instance</strong><small>Instance-wide restart</small></span></div><p>${escapeDialogText(t("modal.restart_ha_message"))}</p><div class="instance-operation-impact-list">${unsavedList}${operationList}</div><p>Terminal sessions and in-progress work may disconnect during the restart.</p>`,
         confirmText: t("modal.restart_ha_confirm"),
         cancelText: t("modal.cancel"),
         isDanger: true
     });
 
-    if (confirmed) {
-        // Save current state before restart
+    if (!confirmed) return false;
+
+    const operation = startOperationFeedback({
+        label: "Restart Home Assistant",
+        icon: "restart_alt",
+        message: "Saving Blueprint Studio state...",
+        scope: "Home Assistant instance",
+        target: "Instance-wide restart",
+        retry: restartHomeAssistant,
+        openLabel: "Developer Tools",
+        openIcon: "construction",
+        open: () => eventBus.emit("ha:dev-tools", { tab: "config" }),
+    });
+
+    try {
         await saveSettings();
-
-        try {
-            const data = await fetchWithAuth(API_BASE, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ action: "restart_home_assistant" }),
-            });
-            if (data.success) {
-                showGlobalLoading("Restarting Home Assistant...");
-
-                // Function to check if HA is back online
-                const checkOnline = async () => {
-                    try {
-                        const data = await fetchWithAuth(`${API_BASE}?action=get_version`);
-                        if (data) {
-                            setTimeout(() => {
-                                window.location.reload();
-                            }, 2000);
-                            return;
-                        }
-                    } catch (e) {}
-                    setTimeout(checkOnline, 2000);
-                };
-                
-                setTimeout(checkOnline, 5000);
-            } else {
-                showToast(t("toast.restart_ha_fail", { error: data.error || "Unknown error" }), "error");
-            }
-        } catch (error) {
-            showToast(t("toast.restart_ha_error"), "error");
-            console.error(error);
+        operation.update({ message: "Requesting Home Assistant restart...", percent: 20 });
+        const data = await fetchWithAuth(API_BASE, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "restart_home_assistant" }),
+        });
+        if (!data?.success) {
+            const message = data?.message || data?.error || "Home Assistant rejected the restart request";
+            operation.fail("Restart request was rejected", message);
+            showToast(t("toast.restart_ha_fail", { error: message }), "error");
+            return false;
         }
+
+        operation.update({ message: "Restart accepted; waiting for Home Assistant...", percent: 45 });
+        const startedAt = Date.now();
+        let observedOffline = false;
+        const waitUntilReady = async () => {
+            try {
+                const version = await fetchWithAuth(`${API_BASE}?action=get_version&_t=${Date.now()}`);
+                if (observedOffline && version) return version;
+            } catch (_error) {
+                observedOffline = true;
+                operation.update({ message: "Home Assistant is restarting...", percent: 70 });
+            }
+            if (Date.now() - startedAt >= 120000) {
+                throw new Error("Home Assistant did not become ready within 2 minutes");
+            }
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            return waitUntilReady();
+        };
+
+        await waitUntilReady();
+        operation.finish("Home Assistant is online; reloading Blueprint Studio", {
+            detail: "The restart completed and the instance API is responding.",
+        });
+        setTimeout(() => window.location.reload(), 1000);
+        return true;
+    } catch (error) {
+        operation.fail("Home Assistant restart could not be confirmed", error.message);
+        showToast(`${t("toast.restart_ha_error")}: ${error.message}`, "error");
+        console.error(error);
+        return false;
     }
+}
+
+function escapeDialogText(value) {
+    return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
 }

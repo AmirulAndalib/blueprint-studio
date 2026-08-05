@@ -1,6 +1,6 @@
 /** SETTINGS-SYNC.JS | Purpose: * Handles real-time synchronization of settings between the PWA and the */
 
-import { loadSettings, saveSettings } from './settings.js?v=2.5.75';
+import { loadSettings, saveSettings } from './settings.js?v=2.5.188';
 import { state } from './state.js';
 import { fetchWithAuth } from './api.js';
 import { API_BASE } from './constants.js';

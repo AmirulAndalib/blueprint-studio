@@ -7,15 +7,17 @@ import { fetchWithAuth, urlWithTicket } from './api.js';
 import { API_BASE, STREAM_BASE, IMAGE_EXTENSIONS } from './constants.js';
 import {
   showToast,
-  showGlobalLoading,
-  hideGlobalLoading,
   showConfirmDialog
 } from './ui.js';
 import { getFileIcon, formatBytes, isMobile, isTouchDevice } from './utils.js';
-import { saveSettings } from './settings.js?v=2.5.75';
-import { setOverflowTooltip } from './tooltip.js?v=2.5.75';
-import { isItemSelected } from './selection.js';
+import { saveSettings } from './settings.js?v=2.5.188';
+import { setOverflowTooltip } from './tooltip.js?v=2.5.188';
+import { isItemSelected, updateSelectionCount } from './selection.js';
 import { refreshActivityRail } from './activity-rail.js';
+import { classifyTreeError, renderTreeViewState } from './tree-view-state.js?v=2.5.188';
+import { captureTreeViewContext, scheduleTreeViewContextRestore } from './tree-view-context.js?v=2.5.188';
+import { configureTreeKeyboard, markTreeItem } from './tree-keyboard.js?v=2.5.188';
+import { startOperationFeedback } from './feedback-service.js?v=2.5.188';
 
 // Timer for debounced rendering
 export let fileTreeRenderTimer = null;
@@ -57,6 +59,14 @@ export function updateExplorerSearchUI(count = null) {
     elements.btnContentSearch.setAttribute("aria-pressed", state.contentSearchEnabled ? "true" : "false");
   }
 
+  if (elements.fileSearch) {
+    const searchLabel = state.contentSearchEnabled
+      ? t("sidebar.search_content_placeholder")
+      : t("sidebar.search_names_placeholder");
+    elements.fileSearch.placeholder = searchLabel;
+    elements.fileSearch.setAttribute("aria-label", searchLabel);
+  }
+
   updateExplorerFilterIcon();
   refreshActivityRail();
 
@@ -94,6 +104,16 @@ export function updateExplorerFilterIcon() {
 
   elements.fileFilterIcon.textContent = icons[filter] || "filter_list";
   elements.fileFilterIcon.classList.toggle("active", filter !== "all");
+
+  const filterLabel = document.getElementById("file-filter-label");
+  const labels = {
+    all: t("filter.all_files"),
+    yaml: t("filter.yaml"),
+    python: t("filter.python"),
+    images: t("filter.images"),
+    modified: t("filter.modified"),
+  };
+  if (filterLabel) filterLabel.textContent = labels[filter] || labels.all;
 }
 
 /**
@@ -310,10 +330,37 @@ export function renderFileTree() {
         return;
     }
 
+  const treeContext = captureTreeViewContext(elements.fileTree);
+  scheduleTreeViewContextRestore(elements.fileTree, treeContext);
+  configureTreeKeyboard(elements.fileTree, {
+    label: t("tree.local_label"),
+    onRename: (item) => startInlineExplorerRename(item.dataset.path, item.dataset.isFolder === "true"),
+  });
+
   let renderedSearchCount = null;
 
   // Clear current tree
   elements.fileTree.innerHTML = "";
+
+  const localTreeState = state.localTreeViewState || { status: "idle", error: "" };
+  if (localTreeState.status === "loading") {
+    renderTreeViewState(elements.fileTree, {
+      status: "loading",
+      title: t("tree.loading_local"),
+      copy: t("tree.loading_copy"),
+    });
+    return;
+  }
+  if (["permission", "unavailable", "error"].includes(localTreeState.status)) {
+    renderTreeViewState(elements.fileTree, {
+      status: localTreeState.status,
+      title: t(localTreeState.status === "permission" ? "tree.permission_title" : "tree.unavailable_title"),
+      copy: localTreeState.error || t("tree.unavailable_local_copy"),
+      retryLabel: t("common.retry"),
+      onRetry: () => eventBus.emit('ui:reload-files', { force: true }),
+    });
+    return;
+  }
 
   // If search query is active and content search is disabled, use flat list filtered by search
   if (state.searchQuery && !state.contentSearchEnabled && !state.lazyLoadingEnabled) {
@@ -426,6 +473,14 @@ export function renderFileTree() {
       renderTreeLevel(state.fileTree, fragment, 0);
     }
     elements.fileTree.appendChild(fragment);
+    if (!state.searchQuery && !elements.fileTree.querySelector(".tree-item[data-path]")) {
+      renderTreeViewState(elements.fileTree, {
+        status: "empty",
+        title: t("tree.empty_title"),
+        copy: t("tree.empty_local_copy"),
+        append: true,
+      });
+    }
     if (state.searchQuery) {
       renderedSearchCount = elements.fileTree.querySelectorAll(".tree-item[data-path]").length;
       renderExplorerSearchEmptyState(renderedSearchCount);
@@ -442,13 +497,19 @@ export function renderFileTree() {
 
   if (!currentData) {
     if (state.failedDirectories.has(currentPath)) {
-      const errorItem = document.createElement("div");
-      errorItem.className = "loading-item";
-      errorItem.innerHTML = `
-        <span class="ui-icon ui-icon--tone-error material-icons">error_outline</span>
-        <span class="tree-name">${t("toast.load_folder_error", { error: "Unable to load folder" })}</span>
-      `;
-      elements.fileTree.appendChild(errorItem);
+      const error = state.directoryErrors.get(currentPath) || t("tree.unavailable_local_copy");
+      const status = classifyTreeError(error);
+      renderTreeViewState(elements.fileTree, {
+        status,
+        title: t(status === "permission" ? "tree.permission_title" : "tree.unavailable_title"),
+        copy: error,
+        retryLabel: t("common.retry"),
+        onRetry: () => {
+          state.failedDirectories.delete(currentPath);
+          state.directoryErrors.delete(currentPath);
+          loadDirectory(currentPath);
+        },
+      });
       return;
     }
 
@@ -514,6 +575,16 @@ export function renderFileTree() {
     elements.fileTree.appendChild(fragment);
   }
 
+  if (!state.searchQuery && !isInlineCreateForLevel(currentPath)
+      && currentData.folders.length === 0 && currentData.files.length === 0) {
+    renderTreeViewState(elements.fileTree, {
+      status: "empty",
+      title: t("tree.empty_title"),
+      copy: t("tree.empty_local_copy"),
+      append: true,
+    });
+  }
+
   renderedSearchCount = state.searchQuery
     ? itemsToRender.filter((item) => !item.isBack && !item.isInlineEdit).length
     : null;
@@ -556,6 +627,10 @@ function _createTreeItemFromMeta(itemMeta) {
   
   const treeItem = createTreeItem(name, 0, isFolder, false, path, false,
     isSymlink ? (symlinkTarget || "") : null);
+
+  if (isFolder && !isBack) {
+    treeItem.dataset.treeActivateEvent = isTouchDevice() ? "click" : "dblclick";
+  }
 
   if (isBack) {
     treeItem.classList.add("back-item");
@@ -688,18 +763,34 @@ export function renderTreeLevel(tree, container, depth) {
 
     fragment.appendChild(item);
 
-    if (isExpanded && !isLoading) {
+    if (isExpanded && state.failedDirectories.has(folderPath)) {
+      const error = state.directoryErrors.get(folderPath) || t("tree.unavailable_local_copy");
+      const status = classifyTreeError(error);
+      renderTreeViewState(fragment, {
+        status,
+        title: t(status === "permission" ? "tree.permission_title" : "tree.unavailable_title"),
+        copy: error,
+        retryLabel: t("common.retry"),
+        onRetry: () => {
+          state.failedDirectories.delete(folderPath);
+          state.directoryErrors.delete(folderPath);
+          loadDirectory(folderPath);
+        },
+        append: true,
+        compact: true,
+      });
+    } else if (isExpanded && !isLoading) {
       // Only render children if expanded and not currently loading
       const childFolders = Object.keys(folderData).filter(k => !k.startsWith('_'));
       const childFiles = folderData._files || [];
       if (childFolders.length === 0 && childFiles.length === 0 && !isInlineCreateForLevel(folderPath)) {
-        const emptyItem = document.createElement('div');
-        emptyItem.className = 'tree-item';
-        emptyItem.style.setProperty('--depth', depth + 1);
-        emptyItem.style.color = 'var(--text-secondary)';
-        emptyItem.style.pointerEvents = 'none';
-        emptyItem.innerHTML = '<div class="tree-chevron hidden"></div><span class="tree-name" style="font-style:italic">(empty)</span>';
-        fragment.appendChild(emptyItem);
+        renderTreeViewState(fragment, {
+          status: "empty",
+          title: t("tree.empty_title"),
+          copy: t("tree.empty_local_copy"),
+          append: true,
+          compact: true,
+        });
       } else {
         renderTreeLevel(folderData, fragment, depth + 1);
       }
@@ -764,8 +855,6 @@ export function renderTreeLevel(tree, container, depth) {
  * Handle dropping multiple files/folders
  */
 export async function handleFileDropMulti(sourcePaths, targetFolder) {
-  const targetFolderDisplay = targetFolder || t("modal.config_folder");
-
   // Filter out redundant moves (already in target folder)
   const pathsToMove = sourcePaths.filter(path => {
     const lastSlash = path.lastIndexOf("/");
@@ -774,43 +863,117 @@ export async function handleFileDropMulti(sourcePaths, targetFolder) {
   });
 
   if (pathsToMove.length === 0) return;
+  return confirmFileDropMulti(Object.freeze({
+    paths: Object.freeze([...pathsToMove]),
+    destination: targetFolder || '',
+  }));
+}
+
+function moveDestinationLabel(destination) {
+  return destination || t("modal.config_folder");
+}
+
+async function openMoveDestination(destination) {
+  eventBus.emit('ui:switch-sidebar-view', 'explorer');
+  if (!destination) return;
+  const { revealAndOpenFile } = await import('./file-nav-helper.js');
+  await revealAndOpenFile(destination, 'navigate');
+}
+
+function updateMovedTabs(moved) {
+  let changed = false;
+  for (const entry of moved) {
+    const prefix = `${entry.source.replace(/\/+$/, '')}/`;
+    for (const tab of state.openTabs) {
+      if (tab.path === entry.source) {
+        tab.path = entry.destination;
+        tab.name = entry.destination.split('/').pop();
+        changed = true;
+      } else if (tab.path.startsWith(prefix)) {
+        tab.path = `${entry.destination}/${tab.path.slice(prefix.length)}`;
+        changed = true;
+      }
+    }
+  }
+  if (changed) eventBus.emit('ui:refresh-tabs');
+}
+
+async function confirmFileDropMulti(request) {
+  const targetFolderDisplay = moveDestinationLabel(request.destination);
+  const singleItem = request.paths.length === 1;
 
   const confirmed = await showConfirmDialog({
-    title: t("modal.move_multi_title"),
-    message: t("modal.move_multi_message", { count: pathsToMove.length, target: targetFolderDisplay }),
-    confirmText: t("modal.move_multi_confirm"),
+    title: t(singleItem ? "modal.move_item_title" : "modal.move_multi_title"),
+    message: singleItem
+      ? t("modal.move_item_message", { name: request.paths[0].split('/').pop(), target: targetFolderDisplay })
+      : t("modal.move_multi_message", { count: request.paths.length, target: targetFolderDisplay }),
+    confirmText: t(singleItem ? "modal.move_confirm" : "modal.move_multi_confirm"),
     cancelText: t("modal.cancel_button")
   });
+  if (!confirmed) return false;
+  return runFileDropMulti(request);
+}
 
-  if (confirmed) {
-    try {
-      showGlobalLoading(`Moving ${pathsToMove.length} items...`);
+async function runFileDropMulti(request) {
+  let retryPaths = request.paths;
+  const sourcePreview = request.paths.slice(0, 3).join(', ');
+  const target = `${request.paths.length} items: ${sourcePreview}${request.paths.length > 3 ? ` and ${request.paths.length - 3} more` : ''} -> ${moveDestinationLabel(request.destination)}`;
+  const operation = startOperationFeedback({
+    label: `Move ${request.paths.length} selected ${request.paths.length === 1 ? 'item' : 'items'}`,
+    icon: 'drive_file_move',
+    scope: 'Local Home Assistant workspace',
+    target,
+    message: `Moving items to ${moveDestinationLabel(request.destination)}...`,
+    retry: () => confirmFileDropMulti(Object.freeze({
+      paths: Object.freeze([...retryPaths]),
+      destination: request.destination,
+    })),
+    open: () => openMoveDestination(request.destination),
+    openLabel: 'Open Destination',
+    openIcon: 'folder_open',
+  });
+  try {
+    const response = await fetchWithAuth(API_BASE, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "move_multi",
+        paths: request.paths,
+        destination: request.destination
+      }),
+    });
+    if (!response.success) throw new Error(response.message || response.error || 'Move request failed');
 
-      await fetchWithAuth(API_BASE, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "move_multi",
-          paths: pathsToMove,
-          destination: targetFolder
-        }),
-      });
+    const moved = Array.isArray(response.moved) ? response.moved : [];
+    const skipped = Array.isArray(response.skipped) ? response.skipped : [];
+    updateMovedTabs(moved);
+    moved.forEach(entry => state.selectedItems.delete(entry.source));
+    retryPaths = Object.freeze(skipped.map(entry => entry.path));
+    if (state.selectionMode && state.selectedItems.size === 0) eventBus.emit('ui:toggle-selection');
+    else updateSelectionCount();
+    eventBus.emit('ui:reload-files', { force: true });
+    eventBus.emit('git:refresh');
 
-      hideGlobalLoading();
-      showToast(t("toast.moved_items", { count: pathsToMove.length }), "success");
-
-      // Exit selection mode and refresh
-      if (state.selectionMode) {
-        eventBus.emit('ui:toggle-selection');
-      }
-      eventBus.emit('ui:reload-files', { force: true });
-
-      // Refresh git status if enabled
-      eventBus.emit('git:refresh');
-    } catch (error) {
-      hideGlobalLoading();
-      showToast(t("toast.move_items_failed", { error: error.message }), "error");
+    if (skipped.length) {
+      const detail = [
+        moved.length ? `Moved:\n- ${moved.map(entry => `${entry.source} -> ${entry.destination}`).join('\n- ')}` : 'No items were moved.',
+        `Skipped:\n- ${skipped.map(entry => `${entry.path}: ${entry.reason}`).join('\n- ')}`,
+        moved.length ? 'Completed moves were not rolled back.' : '',
+      ].filter(Boolean).join('\n\n');
+      operation.fail(`Moved ${moved.length} of ${request.paths.length} items`, detail);
+      showToast(t("toast.move_items_failed", { error: skipped[0].reason }), "error");
+      return false;
     }
+
+    operation.finish(`Moved ${moved.length} ${moved.length === 1 ? 'item' : 'items'}`, {
+      detail: moved.map(entry => `${entry.source} -> ${entry.destination}`).join(' · '),
+    });
+    showToast(t("toast.moved_items", { count: moved.length }), "success");
+    return true;
+  } catch (error) {
+    operation.fail('Could not move selected items', error.message);
+    showToast(t("toast.move_items_failed", { error: error.message }), "error");
+    return false;
   }
 }
 
@@ -836,37 +999,62 @@ export async function handleFileDrop(sourcePath, targetFolder) {
 
   if (currentFolder === targetFolderNormalized) return;
 
+  return confirmFileDrop(Object.freeze({
+    source: sourcePath,
+    destination: newPath,
+    targetFolder: targetFolderNormalized,
+  }));
+}
+
+async function confirmFileDrop(request) {
   const confirmed = await showConfirmDialog({
     title: t("modal.move_item_title"),
-    message: t("modal.move_item_message", { name: fileName, target: targetFolderNormalized || t("modal.config_folder") }),
+    message: t("modal.move_item_message", { name: request.source.split('/').pop(), target: moveDestinationLabel(request.targetFolder) }),
     confirmText: t("modal.move_confirm"),
     cancelText: t("modal.cancel_button")
   });
+  if (!confirmed) return false;
+  return runFileDrop(request);
+}
 
-  if (confirmed) {
-    try {
-      showGlobalLoading("Moving...");
-      const data = await fetchWithAuth(API_BASE, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "rename",
-          source: sourcePath,
-          destination: newPath
-        }),
-      });
-
-      if (data.success) {
-        showToast(t("toast.moved_successfully"), "success");
-        eventBus.emit('ui:reload-files');
-      } else {
-        showToast(t("toast.move_failed", { error: data.message }), "error");
-      }
-    } catch (error) {
-      showToast(t("toast.move_error", { error: error.message }), "error");
-    } finally {
-      hideGlobalLoading();
+async function runFileDrop(request) {
+  const operation = startOperationFeedback({
+    label: `Move ${request.source.split('/').pop()}`,
+    icon: 'drive_file_move',
+    scope: 'Local Home Assistant workspace',
+    target: `${request.source} -> ${request.destination}`,
+    message: `Moving to ${moveDestinationLabel(request.targetFolder)}...`,
+    retry: () => confirmFileDrop(request),
+    open: () => openMoveDestination(request.targetFolder),
+    openLabel: 'Open Destination',
+    openIcon: 'folder_open',
+  });
+  try {
+    const data = await fetchWithAuth(API_BASE, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "rename",
+        source: request.source,
+        destination: request.destination
+      }),
+    });
+    if (!data.success) {
+      const message = data.message || data.error || 'Move request failed';
+      operation.fail('Could not move item', message);
+      showToast(t("toast.move_failed", { error: message }), "error");
+      return false;
     }
+    updateMovedTabs([{ source: request.source, destination: request.destination }]);
+    operation.finish(`Moved to ${request.destination}`);
+    showToast(t("toast.moved_successfully"), "success");
+    eventBus.emit('ui:reload-files');
+    eventBus.emit('git:refresh');
+    return true;
+  } catch (error) {
+    operation.fail('Could not move item', error.message);
+    showToast(t("toast.move_error", { error: error.message }), "error");
+    return false;
   }
 }
 
@@ -911,8 +1099,14 @@ export function createTreeItem(name, depth, isFolder, isExpanded, itemPath = nul
   item.className = inlineRename ? "tree-item inline-edit-item" : "tree-item";
   item.style.setProperty("--depth", depth);
   item.draggable = !inlineRename;
+  item.tabIndex = -1;
   item.dataset.path = itemPath;
   item.dataset.isFolder = isFolder ? "true" : "false";
+  markTreeItem(item, {
+    folder: isFolder,
+    expanded: isFolder && state.treeCollapsableMode ? isExpanded : null,
+    activateEvent: "click",
+  });
 
   // Checkbox for selection mode
   const checkbox = document.createElement("input");
@@ -1728,6 +1922,7 @@ export async function loadDirectory(path) {
   try {
     state.loadingDirectories.add(path);
     state.failedDirectories.delete(path);
+    state.directoryErrors.delete(path);
 
     // Show loading indicator
     renderFileTree(); // Re-render to show spinner
@@ -1742,7 +1937,7 @@ export async function loadDirectory(path) {
       console.error(`Failed to load directory ${path}:`, result.error);
       // Directory no longer exists — clean up stale state
       state.failedDirectories.add(path);
-      state.expandedFolders.delete(path);
+      state.directoryErrors.set(path, result.error);
       state.loadedDirectories.delete(path);
       return;
     }
@@ -1753,6 +1948,7 @@ export async function loadDirectory(path) {
       files: result.files || []
     });
     state.failedDirectories.delete(path);
+    state.directoryErrors.delete(path);
 
 
     // Update file tree structure (add loaded items)
@@ -1780,6 +1976,7 @@ export async function loadDirectory(path) {
   } catch (error) {
     console.error(`Error loading directory ${path}:`, error);
     state.failedDirectories.add(path);
+    state.directoryErrors.set(path, error.message || String(error));
     showToast(t("toast.load_folder_error", { error: error.message }), "error");
   } finally {
     state.loadingDirectories.delete(path);

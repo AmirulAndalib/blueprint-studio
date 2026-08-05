@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="color-scheme" content="light dark">
@@ -142,7 +142,7 @@
       <button class="ui-button ui-icon-button toolbar-btn" id="btn-show-hidden" title="Show hidden folders">
         <span class="ui-icon material-icons">visibility_off</span>
       </button>
-      <button class="ui-button ui-icon-button toolbar-btn" id="btn-toggle-select" title="Select Files">
+      <button class="ui-button ui-icon-button toolbar-btn" id="btn-toggle-select" title="Select Files" aria-label="Select files" aria-pressed="false" aria-controls="selection-toolbar">
         <span class="ui-icon material-icons">checklist</span>
       </button>
       <button class="ui-button ui-icon-button toolbar-btn" id="btn-collapse-all-folders" title="Collapse All Folders">
@@ -171,6 +171,9 @@
     <div class="toolbar-group toolbar-group--validation" role="group" aria-label="Validation and Blueprint commands" data-toolbar-priority="1">
       <button class="ui-button ui-icon-button toolbar-btn" id="btn-validate" title="Validate YAML">
         <span class="ui-icon material-icons">check_circle</span>
+      </button>
+      <button class="ui-button ui-icon-button toolbar-btn" id="btn-problems" title="Show Problems" aria-label="Problems" aria-controls="problems-panel" aria-expanded="false">
+        <span class="ui-icon material-icons">rule</span>
       </button>
       <button class="ui-button ui-icon-button toolbar-btn hidden" id="btn-use-blueprint" title="Use Blueprint">
         <span class="ui-icon material-icons">architecture</span>
@@ -230,6 +233,12 @@
 
     <div class="toolbar-spacer"></div>
 
+    <div class="toolbar-group toolbar-group--document-actions" role="group" aria-label="Active document actions">
+      <button class="ui-button ui-icon-button toolbar-btn" id="editor-actions-trigger" title="Active document actions" aria-label="Active document actions" aria-haspopup="menu" aria-controls="editor-actions-menu" aria-expanded="false" disabled>
+        <span class="ui-icon material-icons" aria-hidden="true">more_vert</span>
+      </button>
+    </div>
+
     <div class="toolbar-group toolbar-group--preview workspace-initially-hidden" id="group-markdown" role="group" aria-label="Document preview" data-toolbar-priority="4">
       <button class="ui-button ui-icon-button toolbar-btn" id="btn-markdown-preview" title="Toggle Markdown Preview">
         <span class="ui-icon material-icons">visibility</span>
@@ -280,6 +289,7 @@
   </div>
 
   <div class="ui-menu toolbar-overflow-menu" id="toolbar-overflow-menu" role="menu" aria-label="More toolbar commands" hidden></div>
+  <div class="ui-menu editor-actions-menu" id="editor-actions-menu" role="menu" aria-label="Active document actions" hidden></div>
 
   <!-- Hidden file input for upload -->
   <input class="hidden" type="file" id="file-upload-input" multiple>
@@ -315,6 +325,23 @@
       </div>
 
       <div class="sidebar-content">
+        <div class="selection-toolbar hidden" id="selection-toolbar" role="region" aria-label="Selection actions" hidden>
+          <div class="selection-summary">
+            <span class="selection-mode-label" id="selection-mode-label">Selection mode</span>
+            <span class="selection-count" id="selection-count" aria-live="polite" aria-atomic="true">0 items selected</span>
+          </div>
+          <div class="selection-actions">
+            <button class="ui-button ui-icon-button selection-btn" id="btn-download-selected" type="button" title="Download selected" aria-label="Download selected items" disabled>
+              <span class="ui-icon material-icons">download</span>
+            </button>
+            <button class="ui-button ui-icon-button selection-btn selection-btn--danger" id="btn-delete-selected" type="button" title="Delete selected" aria-label="Delete selected items" disabled>
+              <span class="ui-icon material-icons">delete</span>
+            </button>
+            <button class="ui-button ui-icon-button selection-btn" id="btn-cancel-selection" type="button" title="Exit selection mode" aria-label="Exit selection mode">
+              <span class="ui-icon material-icons">close</span>
+            </button>
+          </div>
+        </div>
         <div id="view-source-control" class="sidebar-view hidden">
           <div class="sidebar-header">
             <span data-overflow-tooltip>Source Control</span>
@@ -330,47 +357,38 @@
       <div class="search-container explorer-search-container">
         <div class="explorer-search-row">
           <div class="explorer-search-input-wrap">
-            <input type="text" class="ui-input search-input" id="file-search" placeholder="Search all files..." aria-label="Search all files" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+            <input type="text" class="ui-input search-input" id="file-search" placeholder="Search file names" aria-label="Search all files" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
             <span class="explorer-search-count" id="file-search-count" aria-live="polite"></span>
             <button class="explorer-search-clear" id="file-search-clear" title="Clear search" aria-label="Clear search" type="button">
               <span class="ui-icon material-icons">close</span>
             </button>
           </div>
+        </div>
+        <div class="explorer-search-options">
+          <div class="ui-segmented-control explorer-search-modes" role="group" aria-label="Explorer search scope">
+            <button class="ui-segmented-control__item explorer-search-mode active" id="btn-filename-search" data-search-mode="filename" type="button" title="Match File Names" aria-label="Match File Names" aria-pressed="true">
+              <span class="ui-icon material-icons">drive_file_rename_outline</span>
+              <span class="explorer-search-mode-label">Names</span>
+            </button>
+            <button class="ui-segmented-control__item explorer-search-mode" id="btn-content-search" data-search-mode="content" type="button" title="Match File Content" aria-label="Match File Content" aria-pressed="false">
+              <span class="ui-icon material-icons">text_snippet</span>
+              <span class="explorer-search-mode-label">Content</span>
+            </button>
+          </div>
           <label class="file-filter-control" title="Filter files">
             <span class="ui-icon material-icons file-filter-icon" id="file-filter-icon">filter_list</span>
+            <span class="file-filter-label" id="file-filter-label">All files</span>
+            <span class="ui-icon material-icons file-filter-chevron" aria-hidden="true">arrow_drop_down</span>
             <select class="ui-select file-filter-select" id="file-filter" aria-label="Filter files">
-              <option value="all">All</option>
+              <option value="all">All files</option>
               <option value="yaml">YAML</option>
               <option value="python">Python</option>
               <option value="images">Images</option>
               <option value="modified">Modified</option>
             </select>
           </label>
-          <div class="ui-segmented-control explorer-search-modes" role="group" aria-label="Search mode">
-            <button class="ui-segmented-control__item explorer-search-mode active" id="btn-filename-search" data-search-mode="filename" type="button" title="Match File Names" aria-label="Match File Names" aria-pressed="true">
-              <span class="ui-icon material-icons">drive_file_rename_outline</span>
-            </button>
-            <button class="ui-segmented-control__item explorer-search-mode" id="btn-content-search" data-search-mode="content" type="button" title="Match File Content" aria-label="Match File Content" aria-pressed="false">
-              <span class="ui-icon material-icons">text_snippet</span>
-            </button>
-          </div>
         </div>
       </div>
-      <div class="selection-toolbar workspace-initially-hidden" id="selection-toolbar">
-        <span class="selection-count" id="selection-count">0 selected</span>
-        <div class="selection-actions">
-            <button class="ui-button ui-icon-button selection-btn" id="btn-download-selected" title="Download Selected">
-                <span class="ui-icon material-icons">download</span>
-            </button>
-            <button class="ui-button ui-icon-button selection-btn" id="btn-delete-selected" title="Delete Selected">
-                <span class="ui-icon material-icons">delete</span>
-            </button>
-            <button class="ui-button ui-icon-button selection-btn" id="btn-cancel-selection" title="Cancel Selection">
-                <span class="ui-icon material-icons">close</span>
-            </button>
-        </div>
-      </div>
-
       <!-- Git Changes Panel -->
       <div class="git-panel" id="git-panel">
         <div class="git-panel-header">
@@ -405,11 +423,19 @@
             <p>No changes detected</p>
           </div>
         </div>
-        <div class="git-panel-footer">
-          <button class="btn-stage-all" id="btn-stage-selected" title="Stage: Prepare selected changes for upload">Stage</button>
-          <button class="btn-stage-all" id="btn-stage-all" title="Stage All: Prepare all changes for upload">Stage All</button>
-          <button class="btn-unstage-all" id="btn-unstage-all" title="Unstage: Undo preparation for upload">Unstage</button>
-          <button class="btn-commit" id="btn-commit-staged" title="Commit: Save your prepared changes locally as a checkpoint" disabled>Commit</button>
+        <div class="git-panel-footer source-control-commit-composer">
+          <div class="source-control-bulk-actions">
+            <button class="ui-button btn-stage-all" id="btn-stage-selected" title="Stage selected files">Stage selected</button>
+            <button class="ui-button btn-stage-all" id="btn-stage-all" title="Stage all unstaged files">Stage all</button>
+            <button class="ui-button btn-unstage-all" id="btn-unstage-all" title="Unstage all staged files">Unstage all</button>
+          </div>
+          <label class="source-control-commit-label" for="commit-message">Commit message</label>
+          <textarea class="source-control-commit-input" id="commit-message" rows="2" maxlength="500" placeholder="Describe the staged changes"></textarea>
+          <div class="source-control-commit-meta">
+            <span id="commit-summary">0 staged files</span>
+            <span id="commit-validation" role="status" aria-live="polite">Stage at least one file to commit.</span>
+          </div>
+          <button class="ui-button btn-commit" id="btn-commit-staged" title="Commit staged files locally" disabled>Commit staged files</button>
         </div>
       </div>
 
@@ -445,11 +471,19 @@
             <p>No changes detected</p>
           </div>
         </div>
-        <div class="git-panel-footer">
-          <button class="btn-stage-all" id="btn-gitea-stage-selected" title="Stage: Prepare selected changes for upload">Stage</button>
-          <button class="btn-stage-all" id="btn-gitea-stage-all" title="Stage All: Prepare all changes for upload">Stage All</button>
-          <button class="btn-unstage-all" id="btn-gitea-unstage-all" title="Unstage: Undo preparation for upload">Unstage</button>
-          <button class="btn-commit" id="btn-gitea-commit-staged" title="Commit: Save your prepared changes locally as a checkpoint" disabled>Commit</button>
+        <div class="git-panel-footer source-control-commit-composer">
+          <div class="source-control-bulk-actions">
+            <button class="ui-button btn-stage-all" id="btn-gitea-stage-selected" title="Stage selected files">Stage selected</button>
+            <button class="ui-button btn-stage-all" id="btn-gitea-stage-all" title="Stage all unstaged files">Stage all</button>
+            <button class="ui-button btn-unstage-all" id="btn-gitea-unstage-all" title="Unstage all staged files">Unstage all</button>
+          </div>
+          <label class="source-control-commit-label" for="gitea-commit-message">Commit message</label>
+          <textarea class="source-control-commit-input" id="gitea-commit-message" rows="2" maxlength="500" placeholder="Describe the staged changes"></textarea>
+          <div class="source-control-commit-meta">
+            <span id="gitea-commit-summary">0 staged files</span>
+            <span id="gitea-commit-validation" role="status" aria-live="polite">Stage at least one file to commit.</span>
+          </div>
+          <button class="ui-button btn-commit" id="btn-gitea-commit-staged" title="Commit staged files locally" disabled>Commit staged files</button>
         </div>
       </div>
 
@@ -481,7 +515,7 @@
         </button>
       </div>
 
-      <div class="file-tree" id="file-tree"></div>
+      <div class="file-tree" id="file-tree" role="tree" aria-label="Local file explorer"></div>
 
        </div> <!-- End View Explorer -->
 
@@ -507,7 +541,7 @@
                <span id="sftp-view-state-copy">Add or select a connection to browse remote files.</span>
              </div>
              <div id="sftp-breadcrumb" class="sftp-breadcrumb workspace-initially-hidden"></div>
-             <div class="sftp-file-tree workspace-initially-hidden" id="sftp-file-tree"></div>
+             <div class="sftp-file-tree workspace-initially-hidden" id="sftp-file-tree" role="tree" aria-label="Remote file explorer"></div>
            </div>
        </div>
 
@@ -526,8 +560,8 @@
           <div class="search-container global-search-container">
               <!-- Search Mode Tabs -->
               <div class="ui-tabs search-mode-tabs" role="tablist" aria-label="Search scope">
-                  <div class="ui-tab search-mode-tab active" data-mode="all" role="tab" tabindex="0" aria-selected="true" aria-controls="global-search-results">All</div>
-                  <div class="ui-tab search-mode-tab" data-mode="files" role="tab" tabindex="-1" aria-selected="false" aria-controls="global-search-results">Files</div>
+                  <div class="ui-tab search-mode-tab active" data-mode="all" role="tab" tabindex="0" aria-selected="true" aria-controls="global-search-results">Workspace</div>
+                  <div class="ui-tab search-mode-tab" data-mode="files" role="tab" tabindex="-1" aria-selected="false" aria-controls="global-search-results">File content</div>
                   <div class="ui-tab search-mode-tab" data-mode="entities" role="tab" tabindex="-1" aria-selected="false" aria-controls="global-search-results">Entities</div>
               </div>
 
@@ -535,7 +569,7 @@
               <div class="global-search-query-row">
                   <span class="ui-icon material-icons global-replace-toggle" id="btn-toggle-replace-all" role="button" tabindex="0" aria-label="Replace options" aria-controls="global-replace-container" aria-expanded="false">chevron_right</span>
                   <div class="global-search-input-wrap">
-                      <input type="text" class="search-input global-search-query-input" id="global-search-input" placeholder="Search" autocomplete="off">
+                      <input type="text" class="search-input global-search-query-input" id="global-search-input" placeholder="Search workspace" aria-label="Search workspace content and entities" autocomplete="off">
                       <span id="global-search-loading" class="ui-icon material-icons global-search-loading-icon spinning-centered" aria-hidden="true">sync</span>
                   </div>
                   <div class="global-search-modifiers">
@@ -582,8 +616,29 @@
       <div class="split-container" id="split-container">
         <!-- Primary Pane -->
         <div class="editor-pane primary-pane" id="primary-pane" data-pane="primary">
-          <div class="tabs-container primary-tabs-container" id="primary-tabs-container"></div>
+          <div class="tabs-bar">
+            <div class="tabs-container primary-tabs-container" id="primary-tabs-container" role="tablist" aria-label="Open files in primary editor"></div>
+            <button class="tab-list-trigger" id="primary-tab-list-trigger" type="button" aria-label="List open files in primary editor" aria-haspopup="menu" aria-expanded="false" aria-controls="primary-tab-list-menu">
+              <span class="ui-icon material-icons" aria-hidden="true">keyboard_arrow_down</span>
+            </button>
+            <div class="ui-menu tab-list-menu" id="primary-tab-list-menu" role="menu" hidden></div>
+          </div>
           <div class="editor-container" id="editor-container">
+            <div class="editor-operation-result" id="editor-operation-result" role="status" aria-live="polite" hidden></div>
+            <div class="validation-announcer" id="validation-announcer" role="status" aria-live="polite" aria-atomic="true"></div>
+            <section class="problems-panel" id="problems-panel" aria-label="Problems" data-status="idle" hidden>
+              <div class="problems-panel-header">
+                <div><strong>Problems</strong><span id="problems-status">Validation unavailable</span></div>
+                <button class="ui-button ui-icon-button" id="btn-close-problems" type="button" aria-label="Close Problems"><span class="ui-icon material-icons" aria-hidden="true">close</span></button>
+              </div>
+              <div class="problems-panel-tools"><span id="problems-summary">No problems found</span><input id="problems-search" type="search" placeholder="Filter problems" aria-label="Filter problems"></div>
+              <div class="problems-list" id="problems-list"></div>
+            </section>
+            <aside class="completion-details" id="completion-details" aria-label="Completion details" hidden>
+              <div class="completion-details-header"><strong id="completion-details-title">Completion details</strong><button class="ui-button ui-icon-button" id="btn-close-completion-details" type="button" aria-label="Close completion details"><span class="ui-icon material-icons" aria-hidden="true">close</span></button></div>
+              <span id="completion-details-source"></span>
+              <div id="completion-details-body"></div>
+            </aside>
             <canvas id="minimap" class="editor-minimap workspace-initially-hidden"></canvas>
             <div class="asset-preview" id="asset-preview"></div>
             <div class="search-widget" id="search-widget">
@@ -623,6 +678,10 @@
               <h2>Blueprint Studio</h2>
                     <p>Get started by opening an existing file, or:</p>
                     <div class="welcome-actions">
+                        <button class="btn-secondary" id="btn-welcome-open-files">
+                            <span class="ui-icon material-icons welcome-action-icon">folder_open</span>
+                            Open Files
+                        </button>
                         <button class="btn-primary" id="btn-welcome-new-file">
                             <span class="ui-icon material-icons welcome-action-icon">add_circle_outline</span>
                             Create New File
@@ -632,28 +691,19 @@
                             Upload File
                         </button>
                     </div>
-                    <!-- Existing shortcuts section -->
-                    <div class="welcome-shortcuts">
-                <h3>Keyboard Shortcuts</h3>
-                <div class="shortcut-grid">
-                <div class="shortcut-item">
-                  <span class="shortcut-key">Ctrl+S</span>
-                  <span>Save file</span>
-                </div>
-                <div class="shortcut-item">
-                  <span class="shortcut-key">Ctrl+F</span>
-                  <span>Search</span>
-                </div>
-                <div class="shortcut-item">
-                  <span class="shortcut-key">Ctrl+G</span>
-                  <span>Go to line</span>
-                </div>
-                <div class="shortcut-item">
-                  <span class="shortcut-key">Ctrl+/</span>
-                  <span>Toggle comment</span>
-                </div>
-                </div>
-              </div>
+                    <div class="welcome-workspace">
+                      <section class="welcome-recent" aria-labelledby="welcome-recent-title">
+                        <h3 id="welcome-recent-title">Recent files</h3>
+                        <div class="welcome-recent-list" id="welcome-recent-list"></div>
+                      </section>
+                      <section class="welcome-recovery" id="welcome-connection-recovery" aria-labelledby="welcome-recovery-title">
+                        <h3 id="welcome-recovery-title">Remote workspace</h3>
+                        <button class="welcome-recovery-action" id="btn-welcome-recover-connection" type="button">
+                          <span class="ui-icon material-icons" aria-hidden="true">cloud_sync</span>
+                          <span class="welcome-recovery-copy"><strong>Browse SFTP</strong><small>Open remote connections</small></span>
+                        </button>
+                      </section>
+                    </div>
             </div>
           </div>
         </div>
@@ -665,8 +715,15 @@
 
         <!-- Secondary Pane -->
         <div class="editor-pane secondary-pane workspace-initially-hidden" id="secondary-pane" data-pane="secondary">
-          <div class="tabs-container secondary-tabs-container" id="secondary-tabs-container"></div>
+          <div class="tabs-bar">
+            <div class="tabs-container secondary-tabs-container" id="secondary-tabs-container" role="tablist" aria-label="Open files in secondary editor"></div>
+            <button class="tab-list-trigger" id="secondary-tab-list-trigger" type="button" aria-label="List open files in secondary editor" aria-haspopup="menu" aria-expanded="false" aria-controls="secondary-tab-list-menu">
+              <span class="ui-icon material-icons" aria-hidden="true">keyboard_arrow_down</span>
+            </button>
+            <div class="ui-menu tab-list-menu" id="secondary-tab-list-menu" role="menu" hidden></div>
+          </div>
           <div class="editor-container" id="secondary-editor-container">
+            <div class="editor-operation-result" id="secondary-editor-operation-result" role="status" aria-live="polite" hidden></div>
             <canvas id="secondary-minimap" class="editor-minimap workspace-initially-hidden"></canvas>
             <div class="asset-preview" id="secondary-asset-preview"></div>
             <div class="search-widget" id="secondary-search-widget">
@@ -717,9 +774,37 @@
         </div>
       </div>
       <div class="ai-content">
+        <div class="ai-task-modes" id="ai-task-modes" role="group" aria-label="AI task mode">
+          <button type="button" class="ui-segmented-control-item active" data-ai-mode="ask" aria-pressed="true">Ask</button>
+          <button type="button" class="ui-segmented-control-item" data-ai-mode="explain" aria-pressed="false">Explain</button>
+          <button type="button" class="ui-segmented-control-item" data-ai-mode="generate" aria-pressed="false">Generate</button>
+          <button type="button" class="ui-segmented-control-item" data-ai-mode="fix" aria-pressed="false">Fix</button>
+          <button type="button" class="ui-segmented-control-item" data-ai-mode="refactor" aria-pressed="false">Refactor</button>
+        </div>
         <div class="ai-chat-messages" id="ai-chat-messages">
           <div class="ai-message ai-message-assistant">
             Hello! I'm your AI Copilot. I can help you generate automations, fix YAML errors, or explain Home Assistant configurations. How can I help you today?
+          </div>
+        </div>
+        <details class="ai-context-tray" id="ai-context-tray">
+          <summary><span class="ui-icon material-icons" aria-hidden="true">attachment</span><span id="ai-context-summary">Request context</span></summary>
+          <div class="ai-context-controls">
+            <label class="ui-checkbox-label"><input type="checkbox" id="ai-include-file-context" checked><span>Active document or selection</span></label>
+            <label class="ui-checkbox-label"><input type="checkbox" id="ai-include-metadata" checked><span>Relevant Home Assistant metadata</span></label>
+          </div>
+          <dl class="ai-context-list" id="ai-context-list"></dl>
+          <div class="ai-context-preview" id="ai-context-preview" aria-live="polite"></div>
+        </details>
+        <details class="ai-proposal-history hidden" id="ai-proposal-history">
+          <summary><span class="ui-icon material-icons" aria-hidden="true">history</span><span>Proposal history</span></summary>
+          <div class="ai-proposal-history-list" id="ai-proposal-history-list"></div>
+        </details>
+        <div class="ai-processing-boundary" id="ai-processing-boundary" role="status"></div>
+        <div class="ai-request-status" id="ai-request-status" data-state="idle" role="status" aria-live="polite">
+          <span id="ai-request-status-text">Ready</span>
+          <div class="ai-request-actions">
+            <button type="button" class="ui-icon-button hidden" id="btn-ai-cancel" aria-label="Cancel AI request" title="Cancel request"><span class="ui-icon material-icons" aria-hidden="true">stop</span></button>
+            <button type="button" class="ui-icon-button hidden" id="btn-ai-retry" aria-label="Retry AI request" title="Retry request"><span class="ui-icon material-icons" aria-hidden="true">refresh</span></button>
           </div>
         </div>
         <div class="ai-input-container">
@@ -739,6 +824,7 @@
       <span class="ui-icon material-icons status-connection-icon">cloud_done</span>
       <span>Connected</span>
     </div>
+    <div class="status-item hidden" id="status-repository"></div>
     <div class="status-spacer"></div>
     <div class="status-item" id="status-position">
       <span>Ln 1, Col 1</span>
@@ -942,7 +1028,7 @@
 
   <!-- Donation Modal -->
   <div class="modal-overlay" id="modal-donation-overlay">
-    <div class="modal donation-modal" role="dialog" aria-modal="true" aria-labelledby="donation-modal-title">
+    <div class="modal donation-modal modal--tall-sheet" role="dialog" aria-modal="true" aria-labelledby="donation-modal-title">
       <div class="modal-header">
         <div class="modal-title" id="donation-modal-title">Support Development</div>
         <button class="modal-close" id="btn-close-donation" type="button" aria-label="Close support development dialog">
@@ -1020,7 +1106,7 @@
 
   <!-- Support Modal -->
   <div class="modal-overlay" id="modal-support-overlay">
-    <div class="modal support-modal" role="dialog" aria-modal="true" aria-labelledby="support-modal-title">
+    <div class="modal support-modal modal--tall-sheet" role="dialog" aria-modal="true" aria-labelledby="support-modal-title">
       <div class="modal-header">
         <div class="modal-title" id="support-modal-title">Help & Support</div>
         <button class="modal-close" id="btn-close-support" type="button" aria-label="Close help and support dialog">
@@ -1265,6 +1351,38 @@
       <script>
         // Service Worker Registration for PWA
         if ('serviceWorker' in navigator) {
+          let updateReloadTimer = null;
+          let updateNoticeShown = false;
+          const canReloadForUpdate = () => {
+            const tabs = window.state?.openTabs;
+            const modalOverlay = document.getElementById('modal-overlay');
+            return Array.isArray(tabs)
+              && !tabs.some(tab => tab.modified)
+              && !modalOverlay?.classList.contains('visible');
+          };
+          const notifyUpdateReady = (version = '') => {
+            if (updateNoticeShown || !window.showToast) return;
+            updateNoticeShown = true;
+            const versionLabel = version ? ` to v${version}` : '';
+            window.showToast(`Blueprint Studio updated${versionLabel}. Save your work and refresh.`, 'info', 10000);
+          };
+          const scheduleUpdateReload = (delay, version = '') => {
+            if (updateReloadTimer !== null) return;
+            if (!canReloadForUpdate()) {
+              notifyUpdateReady(version);
+              return;
+            }
+            updateReloadTimer = setTimeout(() => {
+              updateReloadTimer = null;
+              if (!canReloadForUpdate()) {
+                notifyUpdateReady(version);
+                return;
+              }
+              window.__blueprintStudioUpdateReload = true;
+              window.location.reload();
+            }, delay);
+          };
+
           window.addEventListener('load', () => {
             navigator.serviceWorker.register('/blueprint_studio/service-worker.js?v={{VERSION}}', {
               scope: '/blueprint_studio/',
@@ -1285,42 +1403,16 @@
                   installingWorker.onstatechange = () => {
                     // When the new worker is installed and ready
                     if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                      
-                      // Check if we can safely auto-refresh
-                      const hasUnsavedChanges = window.state && 
-                                               window.state.openTabs && 
-                                               window.state.openTabs.some(t => t.modified);
-                      
-                      const modalOverlay = document.getElementById("modal-overlay");
-                      const isModalOpen = modalOverlay && modalOverlay.classList.contains("visible");
-                      
-                      if (!hasUnsavedChanges && !isModalOpen) {
-                        /*console.log*/ void('[PWA] Auto-refreshing to apply update...');
-                        // Short delay to ensure cache is fully ready
-                        setTimeout(() => window.location.reload(), 1000);
-                      } else {
-                        /*console.log*/ void('[PWA] Update ready, but unsaved changes detected.');
-                        if (window.showToast) {
-                          window.showToast("A new version is ready. Please save your work and refresh.", "info", 10000);
-                        }
-                      }
+                      // The shared scheduler rechecks unsaved work immediately
+                      // before reload, after the new cache has settled.
+                      scheduleUpdateReload(1000);
                     }
                   };
                 };
 
                 // Listen for the new service worker taking control
-                let refreshing = false;
                 navigator.serviceWorker.addEventListener('controllerchange', () => {
-                  if (refreshing) return;
-                  refreshing = true;
-                  // Only reload if no unsaved changes
-                  const hasUnsaved = window.state && window.state.openTabs && window.state.openTabs.some(t => t.modified);
-                  const modalOverlay = document.getElementById("modal-overlay");
-                  const isModalOpen = modalOverlay && modalOverlay.classList.contains("visible");
-                  
-                  if (!hasUnsaved && !isModalOpen) {
-                    window.location.reload();
-                  }
+                  scheduleUpdateReload(0);
                 });
               })
               .catch(err => console.error('✗ Service Worker registration failed:', err));
@@ -1333,46 +1425,15 @@
               const currentVersion = window.__BS_VERSION__ || '0';
               if (newVersion !== currentVersion) {
                 /*console.log*/ void('[PWA] Version update: ' + currentVersion + ' → ' + newVersion);
-                const hasUnsaved = window.state && window.state.openTabs && window.state.openTabs.some(t => t.modified);
-                if (!hasUnsaved) {
-                  setTimeout(() => window.location.reload(), 500);
-                } else if (window.showToast) {
-                  window.showToast('Blueprint Studio updated to v' + newVersion + '. Save your work and refresh.', 'info', 10000);
-                }
+                scheduleUpdateReload(500, newVersion);
               }
             }
           });
         }
 
-        // PWA Install Prompt Handler
-        let deferredPrompt;
-        window.addEventListener('beforeinstallprompt', (e) => {
-          // Prevent the mini-infobar from appearing on mobile
-          e.preventDefault();
-          // Stash the event so it can be triggered later
-          deferredPrompt = e;
-          /*console.log*/ void('✓ PWA install prompt ready');
-
-          // Optionally, show your own install button here
-          // Example: document.getElementById('install-button').style.display = 'block';
-        });
-
         window.addEventListener('appinstalled', () => {
           /*console.log*/ void('✓ PWA installed successfully');
-          deferredPrompt = null;
         });
-
-        // Function to trigger install prompt (call this from your UI)
-        window.showInstallPrompt = async () => {
-          if (!deferredPrompt) {
-            /*console.log*/ void('No install prompt available');
-            return;
-          }
-          deferredPrompt.prompt();
-          const { outcome } = await deferredPrompt.userChoice;
-          /*console.log*/ void(`Install prompt outcome: ${outcome}`);
-          deferredPrompt = null;
-        };
       </script>
 
       <script>window.__BS_VERSION__ = '{{VERSION}}';</script>

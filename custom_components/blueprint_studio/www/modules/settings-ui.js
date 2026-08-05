@@ -1,6 +1,6 @@
 /** SETTINGS-UI.JS | Purpose: * Provides the settings panel UI for configuring all Blueprint Studio options. */
 import { state, elements } from './state.js';
-import { saveSettings } from './settings.js?v=2.5.75';
+import { saveSettings } from './settings.js?v=2.5.188';
 import { fetchWithAuth } from './api.js';
 import { eventBus } from './event-bus.js';
 import { API_BASE, THEME_PRESETS, ACCENT_COLORS, SYNTAX_THEMES } from './constants.js';
@@ -13,9 +13,104 @@ import {
 } from './ui.js';
 import { updateStatusBar } from './status-bar.js';
 import { t, initTranslations } from './translations.js';
-import { showAddConnectionDialog, showEditConnectionDialog, deleteConnection } from './sftp.js?v=2.5.75';
+import { showAddConnectionDialog, showEditConnectionDialog, deleteConnection } from './sftp.js?v=2.5.188';
+import { startOperationFeedback } from './feedback-service.js?v=2.5.188';
 
 const CUSTOM_MODEL_OPTION_VALUE = "__custom__";
+
+export async function resetApplicationData(options = {}, startStep = 0, skipConfirm = false) {
+  const request = Object.freeze({
+    clearCredentials: Boolean(options.clearCredentials),
+    deleteRepository: Boolean(options.deleteRepository),
+  });
+  const selected = [
+    'browser settings and preferences',
+    request.clearCredentials ? 'GitHub and Gitea credentials' : '',
+    request.deleteRepository ? 'local .git repository metadata' : '',
+  ].filter(Boolean);
+
+  if (!skipConfirm) {
+    const confirmed = await showConfirmDialog({
+      title: startStep > 0 ? 'Resume Application Reset?' : 'Reset Application?',
+      message: `<p>This will reset ${selected.join(', ')}.</p><p>Configuration files remain unchanged. Completed reset steps cannot be rolled back.</p>`,
+      confirmText: startStep > 0 ? 'Resume Reset' : 'Reset Application',
+      cancelText: 'Cancel',
+      isDanger: true,
+    });
+    if (!confirmed) return false;
+  }
+
+  const steps = [
+    ...(request.clearCredentials ? [
+      { action: 'git_clear_credentials', running: 'Removing GitHub credentials...', complete: 'GitHub credentials removed' },
+      { action: 'gitea_clear_credentials', running: 'Removing Gitea credentials...', complete: 'Gitea credentials removed' },
+    ] : []),
+    ...(request.deleteRepository ? [
+      { action: 'git_delete_repo', running: 'Deleting local Git repository metadata...', complete: 'Local Git repository metadata deleted' },
+    ] : []),
+    {
+      action: 'save_settings',
+      request: { settings: { onboardingCompleted: false } },
+      running: 'Resetting server settings...',
+      complete: 'Server settings reset',
+    },
+  ];
+  let resumeStep = Math.min(Math.max(0, startStep), steps.length - 1);
+  const completedSteps = [];
+  const operation = startOperationFeedback({
+    label: 'Reset Blueprint Studio',
+    icon: 'restart_alt',
+    message: steps[resumeStep]?.running || 'Preparing application reset...',
+    scope: 'Blueprint Studio application data',
+    target: selected.join('; '),
+    retry: () => resetApplicationData(request, resumeStep),
+    openLabel: 'Application Settings',
+    openIcon: 'settings',
+    open: () => eventBus.emit('ui:show-settings', { tab: 'general' }),
+  });
+
+  try {
+    for (let index = resumeStep; index < steps.length; index += 1) {
+      const step = steps[index];
+      resumeStep = index;
+      operation.update({
+        message: step.running,
+        detail: `Step ${index + 1} of ${steps.length}`,
+        percent: Math.round((index / steps.length) * 100),
+      });
+      const data = await fetchWithAuth(API_BASE, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: step.action, ...(step.request || {}) }),
+      });
+      if (!data.success) throw new Error(data.message || data.error || `${step.complete} was rejected`);
+      completedSteps.push(step.complete);
+      resumeStep = index + 1;
+    }
+
+    operation.finish('Application reset complete; reloading...', {
+      detail: 'Configuration files were not changed',
+      percent: 100,
+    });
+    localStorage.clear();
+    setTimeout(() => window.location.reload(), 800);
+    return true;
+  } catch (error) {
+    const failedStep = steps[resumeStep];
+    const completed = completedSteps.length
+      ? `Completed during this attempt:\n- ${completedSteps.join('\n- ')}\n\nCompleted steps remain applied.`
+      : startStep > 0
+        ? 'Steps completed before this Retry remain applied.'
+        : 'No reset steps completed during this attempt.';
+    operation.fail(
+      failedStep ? `Reset stopped at step ${resumeStep + 1} of ${steps.length}` : 'Application reset incomplete',
+      `${error.message}\n\n${completed}`,
+      { detail: 'Browser settings were not cleared and the page was not reloaded.' },
+    );
+    showToast(`Application reset failed: ${error.message}`, 'error');
+    return false;
+  }
+}
 
 const AI_MODEL_PRESETS = {
   "cloud:gemini": [],
@@ -72,7 +167,7 @@ const AI_MODEL_PICKERS = {
     statusId: "ollama-model-fetch-status",
     fetchSupported: true,
     inputLabel: "Model Name",
-    inputPlaceholder: "codellama:7b",
+    inputPlaceholder: "Choose an installed model",
     helpText: "Fetch installed Ollama models, or type a tag manually.",
   },
   "local:lm-studio": {
@@ -293,6 +388,9 @@ async function fetchModelsViaBackend(sourceKey, payload) {
     if (Array.isArray(result?.models)) {
       return uniqueModels(result.models);
     }
+    if (result?.success === false) {
+      throw new Error(result.message || result.error || 'Model discovery was rejected');
+    }
     return null;
   } catch (error) {
     if (/unknown action/i.test(error.message || "")) {
@@ -459,7 +557,28 @@ function syncAllModelPickers() {
   Object.keys(AI_MODEL_PICKERS).forEach((sourceKey) => updateModelPickerUi(sourceKey));
 }
 
-async function refreshModelList(sourceKey, { silent = false } = {}) {
+function aiDiscoveryTarget(sourceKey) {
+  const labels = {
+    'cloud:gemini': 'Gemini',
+    'cloud:openai': 'OpenAI',
+    'cloud:claude': 'Claude',
+    'local:ollama': 'Ollama',
+    'local:lm-studio': 'LM Studio',
+    'local:custom': 'Custom AI',
+  };
+  const direct = getDirectFetchPayload(sourceKey);
+  const rawUrl = direct.baseUrl || direct.fallbackBaseUrl || '';
+  if (!rawUrl) return labels[sourceKey] || sourceKey;
+  try {
+    const parsed = new URL(rawUrl);
+    const endpoint = `${parsed.host}${parsed.pathname}`.replace(/\/$/, '');
+    return `${labels[sourceKey] || sourceKey} -> ${endpoint}`;
+  } catch (_error) {
+    return labels[sourceKey] || sourceKey;
+  }
+}
+
+export async function refreshModelList(sourceKey, { silent = false } = {}) {
   const config = getModelPickerConfig(sourceKey);
   if (!config.fetchSupported) {
     updateModelPickerUi(sourceKey);
@@ -473,6 +592,17 @@ async function refreshModelList(sourceKey, { silent = false } = {}) {
     error: "",
   };
   updateModelPickerUi(sourceKey);
+  const operation = silent ? null : startOperationFeedback({
+    label: `Discover ${aiDiscoveryTarget(sourceKey).split(' -> ')[0]} models`,
+    icon: 'travel_explore',
+    message: 'Fetching available models...',
+    scope: 'AI provider model discovery',
+    target: aiDiscoveryTarget(sourceKey),
+    retry: () => refreshModelList(sourceKey),
+    openLabel: 'AI Settings',
+    openIcon: 'settings',
+    open: () => eventBus.emit('ui:show-settings', { tab: 'integrations' }),
+  });
 
   try {
     const backendPayload = getBackendFetchPayload(sourceKey);
@@ -490,6 +620,9 @@ async function refreshModelList(sourceKey, { silent = false } = {}) {
       count: unique.length,
     };
     updateModelPickerUi(sourceKey);
+    operation?.finish(`${unique.length} model${unique.length === 1 ? '' : 's'} discovered`, {
+      detail: unique.length ? unique.join('\n') : 'Provider returned no models',
+    });
     if (!silent) {
       showToast(`Fetched ${unique.length} model${unique.length === 1 ? "" : "s"}.`, "success");
     }
@@ -500,9 +633,44 @@ async function refreshModelList(sourceKey, { silent = false } = {}) {
       error: error.message || "Failed to fetch models.",
     };
     updateModelPickerUi(sourceKey);
+    operation?.fail('Model discovery failed', error.message || 'Failed to fetch models.');
     if (!silent) {
       showToast(error.message || "Failed to fetch models.", "error");
     }
+  }
+}
+
+export async function refreshHassAgents({ silent = false } = {}) {
+  const operation = silent ? null : startOperationFeedback({
+    label: 'Discover Home Assistant agents',
+    icon: 'forum',
+    message: 'Loading conversation agents...',
+    scope: 'Local Home Assistant instance',
+    target: 'Conversation agents',
+    retry: refreshHassAgents,
+    openLabel: 'AI Settings',
+    openIcon: 'settings',
+    open: () => eventBus.emit('ui:show-settings', { tab: 'integrations' }),
+  });
+  try {
+    const data = await fetchWithAuth(`${API_BASE}?action=list_hass_agents`);
+    if (!Array.isArray(data?.agents)) {
+      throw new Error(data?.message || data?.error || 'Conversation-agent discovery was rejected');
+    }
+    state.hassAgents = data.agents;
+    const select = document.getElementById('hass-agent-select');
+    if (select) {
+      select.innerHTML = '<option value="">Auto-detect</option>' + data.agents.map(agent =>
+        `<option value="${escapeHtml(agent.id)}" ${state.hassAgentId === agent.id ? 'selected' : ''}>${escapeHtml(agent.name)} (${escapeHtml(agent.platform)})</option>`
+      ).join('');
+    }
+    operation?.finish(`${data.agents.length} conversation agent${data.agents.length === 1 ? '' : 's'} discovered`);
+    if (!silent) showToast(`Found ${data.agents.length} conversation agent(s)`, 'success');
+    return data.agents;
+  } catch (error) {
+    operation?.fail('Conversation-agent discovery failed', error.message);
+    if (!silent) showToast(`Failed to fetch agents: ${error.message}`, 'error');
+    return [];
   }
 }
 
@@ -1103,7 +1271,7 @@ export async function showAppSettings() {
                   ${ollamaModelPicker}
 
                   <div style="font-size: 11px; color: var(--text-secondary); padding: 8px; background: var(--bg-secondary); border-radius: 4px;">
-                    Install Ollama from <a href="https://ollama.ai" target="_blank" style="color: var(--accent-color);">ollama.ai</a> and run: <code style="background: var(--bg-tertiary); padding: 2px 6px; border-radius: 3px;">ollama run codellama:7b</code>
+                    Install Ollama, fetch the installed model list, then choose the model you want Blueprint Studio to use.
                   </div>
                 </div>
 
@@ -1320,6 +1488,7 @@ export async function showAppSettings() {
     `;
 
     activateSharedModal({ initialFocus: () => modalBody.querySelector('input, select, button') });
+    modal.classList.add("modal--full-workflow");
     modal.style.maxWidth = "600px";
     modal.style.maxHeight = "85vh";
 
@@ -1914,7 +2083,7 @@ export async function showAppSettings() {
         if (localAiConfig) localAiConfig.style.display = aiType === 'local-ai' ? 'block' : 'none';
         if (cloudAiConfig) cloudAiConfig.style.display = aiType === 'cloud' ? 'block' : 'none';
         if (hassAgentConfigSection) hassAgentConfigSection.style.display = aiType === 'hass-agent' ? 'block' : 'none';
-        if (aiType === 'hass-agent') _refreshHassAgents();
+        if (aiType === 'hass-agent') void refreshHassAgents({ silent: true });
 
         // Update radio button styling
         aiTypeRadios.forEach(r => {
@@ -1936,9 +2105,9 @@ export async function showAppSettings() {
     });
 
     const CLOUD_PROVIDER_DEFAULT_MODELS = {
-      gemini: "gemini-2.0-flash-exp",
-      openai: "gpt-4o",
-      claude: "claude-sonnet-4-5-20250929",
+      gemini: "",
+      openai: "",
+      claude: "",
     };
 
     const localAiProviderSelect = document.getElementById("local-ai-provider-select");
@@ -2039,25 +2208,9 @@ export async function showAppSettings() {
     }
     const btnRefreshHassAgents = document.getElementById("btn-refresh-hass-agents");
     if (btnRefreshHassAgents) {
-      btnRefreshHassAgents.addEventListener("click", () => _refreshHassAgents());
+      btnRefreshHassAgents.addEventListener("click", () => refreshHassAgents());
     }
-    async function _refreshHassAgents() {
-      try {
-        const data = await fetchWithAuth(`${API_BASE}?action=list_hass_agents`);
-        if (data && data.agents) {
-          state.hassAgents = data.agents;
-          const sel = document.getElementById("hass-agent-select");
-          if (sel) {
-            sel.innerHTML = '<option value="">Auto-detect</option>' +
-              data.agents.map(a => `<option value="${a.id}" ${state.hassAgentId === a.id ? 'selected' : ''}>${a.name} (${a.platform})</option>`).join('');
-          }
-          showToast(`Found ${data.agents.length} conversation agent(s)`, "success");
-        }
-      } catch (err) {
-        showToast(`Failed to fetch agents: ${err.message}`, "error");
-      }
-    }
-    if (state.aiType === 'hass-agent') _refreshHassAgents();
+    if (state.aiType === 'hass-agent') void refreshHassAgents({ silent: true });
 
     bindTextSetting("ollama-url", "ollamaUrl");
     bindTextSetting("lm-studio-url", "lmStudioUrl");
@@ -2128,7 +2281,7 @@ export async function showAppSettings() {
         // Local AI settings
         state.localAiProvider = document.getElementById("local-ai-provider-select")?.value || 'ollama';
         state.ollamaUrl = readValue("ollama-url", 'http://localhost:11434') || 'http://localhost:11434';
-        state.ollamaModel = readValue("ollama-model", 'codellama:7b') || 'codellama:7b';
+        state.ollamaModel = readValue("ollama-model", '');
         state.lmStudioUrl = readValue("lm-studio-url", 'http://localhost:1234') || 'http://localhost:1234';
         state.lmStudioModel = readValue("lm-studio-model", '');
         state.customAiUrl = readValue("custom-ai-url", '');
@@ -2391,49 +2544,11 @@ export async function showAppSettings() {
         const handleConfirm = async () => {
             const clearCredentials = document.getElementById("clear-credentials-check")?.checked;
             const deleteRepo = document.getElementById("delete-repo-check")?.checked;
-
-            if (clearCredentials) {
-                try {
-                    await fetchWithAuth(API_BASE, {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ action: "git_clear_credentials" }),
-                    });
-                } catch (e) {
-                    console.error("Failed to clear credentials:", e);
-                }
-            }
-
-            if (deleteRepo) {
-                try {
-                    await fetchWithAuth(API_BASE, {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ action: "git_delete_repo" }),
-                    });
-                } catch (e) {
-                    console.error("Failed to delete repo:", e);
-                }
-            }
-
-            // Reset server-side settings
-            try {
-                await fetchWithAuth(API_BASE, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        action: "save_settings",
-                        settings: {
-                            onboardingCompleted: false
-                        }
-                    }),
-                });
-            } catch (e) {
-                console.error("Failed to reset server settings:", e);
-            }
-
-            localStorage.clear();
-            window.location.reload();
+            cleanup();
+            await resetApplicationData({
+              clearCredentials,
+              deleteRepository: deleteRepo,
+            }, 0, true);
         };
 
         // One-time listener for this specific modal instance

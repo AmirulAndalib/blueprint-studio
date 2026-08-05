@@ -38,8 +38,18 @@ export async function checkFileUpdates() {
       if (state.activeTab.mtime !== response.mtime) {
         if (!state.activeTab.modified) {
           const path = state.activeTab.path;
+          state.activeTab.externallyChanged = true;
+          eventBus.emit('ui:refresh-tabs');
           await Promise.all(eventBus.emit('file:open', { path, forceReload: true }));
           showToast(`File updated externally: ${path.split('/').pop()}`, "info");
+          state.activeTab.externallyChanged = false;
+          eventBus.emit('ui:refresh-tabs');
+        } else {
+          if (!state.activeTab.externalConflict) {
+            state.activeTab.externalConflict = true;
+            eventBus.emit('ui:refresh-tabs');
+            showToast(`Save conflict: ${state.activeTab.path.split('/').pop()} changed outside Blueprint Studio`, "warning", 10000);
+          }
         }
       }
     }

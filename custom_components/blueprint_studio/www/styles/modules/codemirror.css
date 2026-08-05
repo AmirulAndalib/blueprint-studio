@@ -342,9 +342,14 @@
     .CodeMirror-merge {
         height: 100%;
         border: none;
+        max-width: 100%;
+        min-width: 0;
+        overflow: hidden;
+        width: 100%;
     }
     .CodeMirror-merge-pane {
         height: 100%;
+        min-width: 0;
     }
     .CodeMirror-merge .CodeMirror {
         height: 100%;

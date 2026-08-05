@@ -26,6 +26,7 @@
     {"action": "get_themes", "query": {}, "success": {"status": 200, "body_type": "object", "required_keys": ["success", "themes"]}},
     {"action": "get_addons", "query": {}, "success": {"status": 200, "body_type": "object", "required_keys": ["success", "addons"]}},
     {"action": "get_services", "query": {}, "success": {"status": 200, "body_type": "object", "required_keys": ["success", "services"]}},
+    {"action": "get_metadata", "query": {}, "success": {"status": 200, "body_type": "object", "required_keys": ["success", "schema_version", "ha_version", "capabilities", "selector_types", "domains", "actions", "entities", "devices", "areas", "labels", "floors", "partial", "failures"]}},
     {"action": "zip_progress", "query": {"progress_id": "fixture-progress"}, "success": {"status": 200, "body_type": "object"}},
     {"action": "run_config_check", "query": {}, "success": {"status": 200, "body_type": "object", "required_keys": ["success", "output", "errors"]}},
     {"action": "list_hass_agents", "query": {}, "success": {"status": 200, "body_type": "object", "required_keys": ["success", "agents"]}}

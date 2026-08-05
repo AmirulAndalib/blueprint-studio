@@ -4,15 +4,24 @@ import { t } from './translations.js';
 import { showToast, setButtonLoading } from './ui.js';
 import { isTextFile } from './utils.js';
 import { refreshActivityRail } from './activity-rail.js';
-import { renderRepositoryContext } from './context-indicators.js?v=2.5.75';
+import { renderRepositoryContext } from './context-indicators.js?v=2.5.188';
+import { bindSourceControlRecovery, renderSourceControlRecovery } from './source-control-recovery.js?v=2.5.188';
+import {
+  captureSourceControlView,
+  getUnstagedPaths,
+  renderSourceControlFiles,
+  scheduleSourceControlViewRestore,
+  updateCommitComposer,
+} from './source-control-view.js?v=2.5.188';
 import {
   giteaStage,
   giteaUnstage,
   giteaAbort,
   giteaForcePush,
   giteaHardReset,
+  giteaPull,
   giteaStatus
-} from './gitea-integration.js?v=2.5.75';
+} from './gitea-integration.js?v=2.5.188';
 
 /**
  * Updates the Gitea panel UI with current status
@@ -34,6 +43,7 @@ export function updateGiteaPanel() {
   const actions = panel.querySelector(".git-panel-actions");
 
   if (!container || !badge || !commitBtn || !actions) return;
+  const viewContext = captureSourceControlView(container);
 
   if (badge) badge.textContent = giteaState.totalChanges;
   refreshActivityRail();
@@ -79,7 +89,7 @@ export function updateGiteaPanel() {
     giteaState.status.toLowerCase().includes("unmerged") ||
     giteaState.status.toLowerCase().includes("conflict")
   );
-  if (isConflicted) {
+  if (false && isConflicted) {
     const conflictFiles = giteaState.conflictFiles || [];
 
     const conflictRows = conflictFiles.map(f => `
@@ -109,7 +119,7 @@ export function updateGiteaPanel() {
 
   // Diverged Sync Detection
   let divergedWarningHtml = "";
-  if (giteaState.ahead > 0 && giteaState.behind > 0) {
+  if (false && giteaState.ahead > 0 && giteaState.behind > 0) {
     divergedWarningHtml = `
       <div style="margin: 8px; padding: 12px; background: rgba(156, 39, 176, 0.1); border: 1px solid #9c27b0; border-radius: 6px; font-size: 12px;">
         <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px; color: #9c27b0; font-weight: 600;">
@@ -170,7 +180,7 @@ export function updateGiteaPanel() {
   }
 
   if (!giteaState.hasRemote) {
-    if (giteaState.totalChanges === 0) {
+    if (false && giteaState.totalChanges === 0) {
       container.innerHTML = `
         <div class="git-empty-state">
           <span class="ui-icon material-icons git-empty-state-glyph git-empty-state-glyph-spaced gitea-brand-icon">link_off</span>
@@ -185,11 +195,17 @@ export function updateGiteaPanel() {
     }
   }
 
-  if (giteaState.totalChanges > 0 || stuckWarningHtml || divergedWarningHtml) {
-    container.innerHTML = stuckWarningHtml + divergedWarningHtml;
-    if (giteaState.totalChanges > 0) {
-      renderGiteaFiles(container);
-    }
+  if (giteaState.isInitialized || stuckWarningHtml || divergedWarningHtml) {
+    container.innerHTML = renderSourceControlRecovery(giteaState, 'Gitea');
+    renderGiteaFiles(container);
+    bindSourceControlRecovery(container, {
+      retry: () => giteaStatus(true),
+      configure: () => eventBus.emit('git:show-gitea-settings'),
+      pull: () => giteaPull(),
+      'force-push': () => giteaForcePush(),
+      'hard-reset': () => giteaHardReset(),
+      abort: () => giteaAbort(),
+    });
 
     // Add event listeners for warning buttons
     const btnAbort = document.getElementById("btn-gitea-abort");
@@ -223,14 +239,15 @@ export function updateGiteaPanel() {
     `;
   }
 
-  if (commitBtn) commitBtn.disabled = giteaState.files.staged.length === 0;
+  updateCommitComposer('gitea', giteaState);
+  scheduleSourceControlViewRestore(container, viewContext);
 }
 
 /**
  * Renders Gitea files in the panel
  * Groups files by status: staged, modified, added, deleted, untracked
  */
-export function renderGiteaFiles(container) {
+function renderGiteaFilesLegacy(container) {
   const groups = [
     { key: "staged", title: t("sidebar.staged"), files: giteaState.files.staged, icon: "inventory_2", color: "success" },
     { key: "modified", title: t("sidebar.modified"), files: giteaState.files.modified.filter(f => !giteaState.files.staged.includes(f)), icon: "edit", color: "modified" },
@@ -285,6 +302,10 @@ export function renderGiteaFiles(container) {
   container.insertAdjacentHTML('beforeend', html);
 }
 
+export function renderGiteaFiles(container) {
+  renderSourceControlFiles(container, giteaState, 'gitea');
+}
+
 /**
  * Toggle Gitea file selection
  */
@@ -311,19 +332,13 @@ export async function stageSelectedGiteaFiles() {
   if (giteaStage) {
     await giteaStage(Array.from(giteaState.selectedFiles));
   }
-  giteaState.selectedFiles.clear();
 }
 
 /**
  * Stage all unstaged Gitea files
  */
 export async function stageAllGiteaFiles() {
-  const unstagedFiles = [
-    ...giteaState.files.modified.filter(f => !giteaState.files.staged.includes(f)),
-    ...giteaState.files.added.filter(f => !giteaState.files.staged.includes(f)),
-    ...giteaState.files.deleted.filter(f => !giteaState.files.staged.includes(f)),
-    ...giteaState.files.untracked
-  ];
+  const unstagedFiles = getUnstagedPaths(giteaState);
 
   if (unstagedFiles.length > 0 && giteaStage) {
     await giteaStage(unstagedFiles);

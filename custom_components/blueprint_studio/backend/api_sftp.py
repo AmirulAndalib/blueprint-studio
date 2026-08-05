@@ -34,8 +34,12 @@ async def sftp_action(sftp_manager, action: str, data: dict, hass, request=None)
         return json_message("Missing connection parameters", status_code=400)
 
     if action == "sftp_prepare_stream":
-        path = data.get("path")
-        if not path:
+        stream_type = data.get("stream_type", "file")
+        paths = data.get("paths", [])
+        path = data.get("path", "")
+        if stream_type == "selected_zip" and not paths:
+            return json_message("Missing paths", status_code=400)
+        if stream_type != "selected_zip" and not path:
             return json_message("Missing path", status_code=400)
         result = sftp_manager.create_stream_token(
             host,
@@ -43,8 +47,9 @@ async def sftp_action(sftp_manager, action: str, data: dict, hass, request=None)
             username,
             auth,
             path,
-            data.get("stream_type", "file"),
+            stream_type,
             data.get("progress_id"),
+            paths,
         )
         return json_response(result)
 
@@ -195,9 +200,8 @@ async def sftp_stream_file(sftp_manager, hass, request, host, port, username, au
         return json_message("SFTP stream failed", status_code=500)
 
 
-async def sftp_stream_folder_zip(sftp_manager, hass, request, host, port, username, auth, path):
-    """Stream a remote SFTP folder as ZIP without base64 or full buffering."""
-    folder_name = os.path.basename(path.rstrip("/")) or "download"
+async def _sftp_stream_zip(sftp_manager, request, filename, producer):
+    """Bridge a blocking SFTP ZIP producer to a bounded async response."""
     chunks: queue.Queue[bytes | None] = queue.Queue(maxsize=8)
     result_holder: dict = {}
     stopped = threading.Event()
@@ -213,9 +217,7 @@ async def sftp_stream_folder_zip(sftp_manager, hass, request, host, port, userna
 
     def worker() -> None:
         try:
-            result_holder["result"] = sftp_manager.stream_folder_zip(
-                host, port, username, auth, path, write_chunk, getattr(request, "_blueprint_zip_progress_id", None)
-            )
+            result_holder["result"] = producer(write_chunk)
             while not stopped.is_set():
                 try:
                     chunks.put(None, timeout=0.5)
@@ -242,12 +244,12 @@ async def sftp_stream_folder_zip(sftp_manager, hass, request, host, port, userna
             thread.join(timeout=1)
             result = result_holder.get("result", {})
             if not result.get("success"):
-                return json_message(result.get("message", "SFTP folder ZIP stream failed"), status_code=result.get("status_code", 500))
+                return json_message(result.get("message", "SFTP ZIP stream failed"), status_code=result.get("status_code", 500))
             first_chunk = b""
 
         response = web.StreamResponse(headers={
             "Content-Type": "application/zip",
-            "Content-Disposition": f'attachment; filename="{folder_name}.zip"',
+            "Content-Disposition": f'attachment; filename="{filename}"',
             "Cache-Control": "no-store",
         })
         await response.prepare(request)
@@ -263,11 +265,38 @@ async def sftp_stream_folder_zip(sftp_manager, hass, request, host, port, userna
         thread.join(timeout=1)
         result = result_holder.get("result", {})
         if not result.get("success"):
-            _LOGGER.error("SFTP folder ZIP stream failed: %s", result.get("message", "Unknown error"))
+            _LOGGER.error("SFTP ZIP stream failed: %s", result.get("message", "Unknown error"))
         await response.write_eof()
         return response
     except Exception as exc:
-        _LOGGER.error("sftp_stream_folder_zip failed: %s", exc, exc_info=True)
+        _LOGGER.error("SFTP ZIP response failed: %s", exc, exc_info=True)
         raise
     finally:
         stopped.set()
+
+
+async def sftp_stream_folder_zip(sftp_manager, hass, request, host, port, username, auth, path):
+    """Stream a remote SFTP folder as ZIP without full buffering."""
+    folder_name = os.path.basename(path.rstrip("/")) or "download"
+    return await _sftp_stream_zip(
+        sftp_manager,
+        request,
+        f"{folder_name}.zip",
+        lambda write_chunk: sftp_manager.stream_folder_zip(
+            host, port, username, auth, path, write_chunk,
+            getattr(request, "_blueprint_zip_progress_id", None),
+        ),
+    )
+
+
+async def sftp_stream_selected_zip(sftp_manager, hass, request, host, port, username, auth, paths):
+    """Stream selected remote files and folders as one bounded ZIP response."""
+    return await _sftp_stream_zip(
+        sftp_manager,
+        request,
+        "selected-items.zip",
+        lambda write_chunk: sftp_manager.stream_selected_zip(
+            host, port, username, auth, paths, write_chunk,
+            getattr(request, "_blueprint_zip_progress_id", None),
+        ),
+    )

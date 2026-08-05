@@ -136,6 +136,7 @@ class BlueprintStudioGlobalRegistration:
             runtime.operations,
             runtime.tickets,
             runtime.coordinator,
+            runtime.metadata,
         )
         self.stream.activate(runtime.file, runtime.sftp, runtime.operations, runtime.tickets)
         self.upload.activate(runtime.file, runtime.sftp, runtime.operations)
@@ -176,6 +177,7 @@ async def _async_get_or_register_global_routes(
         terminal=runtime.terminal,
         operations=runtime.operations,
         tickets=runtime.tickets,
+        metadata=runtime.metadata,
     )
     stream_view = BlueprintStudioStreamView(runtime.file, runtime.sftp, runtime.operations, runtime.tickets)
     upload_view = BlueprintStudioUploadView(runtime.file, runtime.sftp, runtime.operations)

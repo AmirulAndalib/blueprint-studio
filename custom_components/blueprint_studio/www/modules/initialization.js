@@ -15,7 +15,7 @@ import {
   defineHAYamlMode,
   defineCSVMode,
   defineShowWhitespaceMode
-} from './ha-autocomplete.js';
+} from './ha-autocomplete.js?v=2.5.188';
 
 import {
   state,
@@ -58,7 +58,7 @@ import {
 
 import {
   initResizeHandle
-} from './resize.js?v=2.5.75';
+} from './resize.js?v=2.5.188';
 
 import {
   initStatusBarEvents
@@ -85,13 +85,13 @@ import {
   parseSftpPath,
   uploadSftpFile,
   refreshSftp
-} from './sftp.js?v=2.5.75';
+} from './sftp.js?v=2.5.188';
 
 import {
   loadSettings,
   saveSettings,
   updateShowHiddenButton
-} from './settings.js?v=2.5.75';
+} from './settings.js?v=2.5.188';
 
 import {
   showAppSettings
@@ -130,27 +130,41 @@ import {
 import {
   giteaStatus,
   giteaCreateRepo
-} from "./gitea-integration.js?v=2.5.75";
+} from "./gitea-integration.js?v=2.5.188";
 
 import {
+  initResponsiveSplitView,
+  updateResponsiveSplitView,
   updateSplitViewButtons
-} from './split-view.js?v=2.5.75';
+} from './split-view.js?v=2.5.188';
 import {
   hideSidebar,
   showSidebar,
   syncActivityState
 } from './sidebar.js';
 import { initAiDiffListener, enqueueAiDiff } from './git-diff.js';
-import { initializeEventHandlers } from './coordinators/index.js?v=2.5.75';
+import { initializeEventHandlers } from './coordinators/index.js?v=2.5.188';
 import { 
   isTextFile, 
   copyToClipboard 
 } from './utils.js';
 import { initializeToolbarControls, updateToolbarState } from './toolbar.js';
 import { updateStatusBar } from './status-bar.js';
-import { initTooltips } from './tooltip.js?v=2.5.75';
-import { initToolbarOverflow } from './toolbar-overflow.js';
+import { initTooltips } from './tooltip.js?v=2.5.188';
+import { initToolbarOverflow } from './toolbar-overflow.js?v=2.5.188';
+import { initEditorWorkflow } from './editor-workflow.js?v=2.5.188';
 import { initActivityRail } from './activity-rail.js';
+import { initPhoneNavigation } from './phone-navigation.js?v=2.5.188';
+import {
+  captureEditorViewports,
+  scheduleEditorViewportRestore,
+} from './editor-viewport.js?v=2.5.188';
+import {
+  initViewportEnvironment,
+  initWorkspaceMode,
+  isWorkspaceDrawerMode,
+  refreshViewportEnvironment,
+} from './workspace-layout.js?v=2.5.188';
 
 let isInitializing = false;
 
@@ -169,6 +183,7 @@ export async function init() {
     initElements();
     initializeToolbarControls();
     initTooltips();
+    initResponsiveSplitView();
 
     // Initialize coordinator event handlers (must happen after initElements)
     initializeEventHandlers();
@@ -180,6 +195,38 @@ export async function init() {
 
     await loadSettings();
     await initTranslations(state.language);
+
+    let workspaceEditorSnapshots = [];
+    initWorkspaceMode({
+      onBeforeChange: () => {
+        workspaceEditorSnapshots = captureEditorViewports();
+      },
+      onChange: (mode) => {
+        state.workspaceMode = mode;
+        state.isMobile = isWorkspaceDrawerMode(mode);
+        if (state.isMobile && state.sidebarVisible && state.aiSidebarVisible) {
+          eventBus.emit('ui:toggle-ai-sidebar', false);
+        } else if (!state.isMobile) {
+          elements.sidebarOverlay?.classList.remove('visible');
+        }
+        eventBus.emit('ui:refresh-layout');
+        updateResponsiveSplitView();
+        refreshViewportEnvironment();
+        scheduleEditorViewportRestore(workspaceEditorSnapshots);
+      },
+    });
+
+    let viewportEditorSnapshots = [];
+    initViewportEnvironment({
+      onBeforeChange: () => {
+        viewportEditorSnapshots = captureEditorViewports();
+      },
+      onChange: () => {
+        eventBus.emit('ui:refresh-layout');
+        updateResponsiveSplitView();
+        scheduleEditorViewportRestore(viewportEditorSnapshots);
+      },
+    });
     
     // Initial application of settings via events
     eventBus.emit('settings:loaded');
@@ -187,7 +234,9 @@ export async function init() {
     eventBus.emit('ui:refresh-visibility');
     eventBus.emit('ui:refresh-layout');
     initToolbarOverflow();
+    initEditorWorkflow();
     initActivityRail();
+    initPhoneNavigation();
 
 
     // Auto-reload settings when user comes back to the app
@@ -211,11 +260,9 @@ export async function init() {
 
     try {
       const raw = localStorage.getItem('blueprint_studio_pending_ai_edit');
-      console.log('[BPS-init] localStorage check:', raw ? 'FOUND' : 'empty');
       if (raw) {
         localStorage.removeItem('blueprint_studio_pending_ai_edit');
         const data = JSON.parse(raw);
-        console.log('[BPS-init] consuming localStorage:', data.action, data.path);
         if (data.action === 'navigate' && data.path) {
           const { revealAndOpenFile } = await import('./file-nav-helper.js');
           revealAndOpenFile(data.path, 'tool').catch((e) => console.warn('[BPS-init] navigate error', e));
@@ -233,11 +280,9 @@ export async function init() {
 
     window.addEventListener('storage', async (event) => {
       if (event.key === 'blueprint_studio_pending_ai_edit' && event.newValue) {
-        console.log('[BPS-storage] storage event fired:', event.newValue.substring(0, 100));
         try {
           localStorage.removeItem('blueprint_studio_pending_ai_edit');
           const data = JSON.parse(event.newValue);
-          console.log('[BPS-storage] processing:', data.action, data.path);
           if (data.action === 'navigate' && data.path) {
             const { revealAndOpenFile } = await import('./file-nav-helper.js');
             revealAndOpenFile(data.path, 'tool').catch((e) => console.warn('[BPS-storage] navigate error', e));

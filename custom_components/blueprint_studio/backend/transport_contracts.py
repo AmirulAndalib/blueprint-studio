@@ -1,4 +1,5 @@
 """Typed, compatibility-preserving contracts for public transports."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -46,47 +47,159 @@ class ActionSchema:
     required: tuple[str, ...] = ()
 
 
-GET_ACTIONS = frozenset({
-    "list_files", "list_all", "list_directory", "list_git_files", "read_file",
-    "global_search", "get_file_stat", "get_tree_snapshot", "get_settings",
-    "get_version", "get_devices", "get_areas", "get_labels", "get_floors",
-    "get_themes", "get_addons", "get_services", "zip_progress",
-    "run_config_check", "list_hass_agents",
-})
+GET_ACTIONS = frozenset(
+    {
+        "list_files",
+        "list_all",
+        "list_directory",
+        "list_git_files",
+        "read_file",
+        "global_search",
+        "get_file_stat",
+        "get_tree_snapshot",
+        "get_settings",
+        "get_version",
+        "get_devices",
+        "get_areas",
+        "get_labels",
+        "get_floors",
+        "get_themes",
+        "get_addons",
+        "get_services",
+        "get_metadata",
+        "zip_progress",
+        "run_config_check",
+        "list_hass_agents",
+    }
+)
 
-POST_ACTIONS = frozenset({
-    "issue_connection_ticket", "save_settings", "write_file", "create_file",
-    "create_folder", "delete", "copy", "rename", "upload_file", "upload_folder",
-    "prepare_download_multi", "download_multi", "delete_multi", "move_multi",
-    "global_search", "global_replace", "check_yaml", "check_jinja", "check_json",
-    "check_python", "check_javascript", "check_syntax", "terminal_exec", "git_status",
-    "git_log", "git_diff_commit", "git_pull", "git_push", "git_push_only",
-    "git_commit", "git_show", "git_init", "git_add_remote", "git_remove_remote",
-    "git_delete_repo", "git_repair_index", "git_rename_branch", "git_merge_unrelated",
-    "git_force_push", "git_hard_reset", "git_delete_remote_branch",
-    "git_checkout_branch", "git_create_branch", "git_delete_local_branch",
-    "git_merge_branch", "git_get_conflict_files", "git_resolve_conflict", "git_abort",
-    "git_stage", "git_unstage", "git_reset", "git_clean_locks", "git_stop_tracking",
-    "git_get_remotes", "git_get_credentials", "git_set_credentials",
-    "git_clear_credentials", "git_test_connection", "gitea_status", "gitea_pull",
-    "gitea_push", "gitea_push_only", "gitea_get_credentials", "gitea_set_credentials",
-    "gitea_clear_credentials", "gitea_test_connection", "gitea_add_remote",
-    "gitea_remove_remote", "gitea_create_repo", "ai_query", "ai_get_models",
-    "github_create_repo", "github_set_default_branch", "github_device_flow_start",
-    "github_device_flow_poll", "github_star", "github_follow", "restart_home_assistant",
-    "get_entities", "get_device_automations", "render_template", "call_service", "convert_to_blueprint",
-    "parse_blueprint_inputs", "instantiate_blueprint", "reload_automations", "reload_yaml",
-})
+POST_ACTIONS = frozenset(
+    {
+        "issue_connection_ticket",
+        "save_settings",
+        "write_file",
+        "create_file",
+        "create_folder",
+        "delete",
+        "copy",
+        "rename",
+        "upload_file",
+        "upload_folder",
+        "prepare_download_multi",
+        "cancel_zip",
+        "download_multi",
+        "delete_multi",
+        "move_multi",
+        "global_search",
+        "global_replace",
+        "check_yaml",
+        "check_jinja",
+        "check_json",
+        "check_python",
+        "check_javascript",
+        "check_syntax",
+        "terminal_exec",
+        "git_status",
+        "git_log",
+        "git_diff_commit",
+        "git_pull",
+        "git_push",
+        "git_push_only",
+        "git_commit",
+        "git_show",
+        "git_init",
+        "git_add_remote",
+        "git_remove_remote",
+        "git_delete_repo",
+        "git_repair_index",
+        "git_rename_branch",
+        "git_merge_unrelated",
+        "git_force_push",
+        "git_hard_reset",
+        "git_delete_remote_branch",
+        "git_checkout_branch",
+        "git_create_branch",
+        "git_delete_local_branch",
+        "git_merge_branch",
+        "git_get_conflict_files",
+        "git_resolve_conflict",
+        "git_abort",
+        "git_stage",
+        "git_unstage",
+        "git_reset",
+        "git_clean_locks",
+        "git_stop_tracking",
+        "git_get_remotes",
+        "git_get_credentials",
+        "git_set_credentials",
+        "git_clear_credentials",
+        "git_test_connection",
+        "gitea_status",
+        "gitea_pull",
+        "gitea_push",
+        "gitea_push_only",
+        "gitea_get_credentials",
+        "gitea_set_credentials",
+        "gitea_clear_credentials",
+        "gitea_test_connection",
+        "gitea_add_remote",
+        "gitea_remove_remote",
+        "gitea_create_repo",
+        "ai_query",
+        "ai_preview_context",
+        "ai_get_models",
+        "ai_apply_proposal",
+        "ai_undo_proposal",
+        "ai_cancel",
+        "ai_revise_proposal",
+        "ai_reject_proposal",
+        "github_create_repo",
+        "github_set_default_branch",
+        "github_device_flow_start",
+        "github_device_flow_poll",
+        "github_star",
+        "github_follow",
+        "restart_home_assistant",
+        "get_entities",
+        "get_device_automations",
+        "render_template",
+        "call_service",
+        "convert_to_blueprint",
+        "parse_blueprint_inputs",
+        "instantiate_blueprint",
+        "reload_automations",
+        "reload_yaml",
+    }
+)
 
-SFTP_ACTIONS = frozenset({
-    "sftp_test", "sftp_list", "sftp_read", "sftp_write", "sftp_create",
-    "sftp_delete", "sftp_delete_multi", "sftp_rename", "sftp_mkdir", "sftp_copy",
-    "sftp_upload_folder", "sftp_download_folder", "sftp_prepare_stream", "sftp_serve_file",
-})
+SFTP_ACTIONS = frozenset(
+    {
+        "sftp_test",
+        "sftp_list",
+        "sftp_read",
+        "sftp_write",
+        "sftp_create",
+        "sftp_delete",
+        "sftp_delete_multi",
+        "sftp_rename",
+        "sftp_mkdir",
+        "sftp_copy",
+        "sftp_upload_folder",
+        "sftp_download_folder",
+        "sftp_prepare_stream",
+        "sftp_serve_file",
+    }
+)
 
-STREAM_ACTIONS = frozenset({
-    "serve_file", "download_folder", "download_multi", "search_stream", "sftp_serve_file",
-})
+STREAM_ACTIONS = frozenset(
+    {
+        "serve_file",
+        "download_folder",
+        "download_multi",
+        "search_stream",
+        "sftp_serve_file",
+    }
+)
 STREAM_SCHEMAS = {
     "serve_file": ActionSchema(("path",)),
     "download_folder": ActionSchema(("path",)),
@@ -96,43 +209,84 @@ STREAM_SCHEMAS = {
 }
 
 _REQUIRED = {
-    "read_file": ("path",), "get_file_stat": ("path",), "zip_progress": ("progress_id",),
-    "write_file": ("path", "content"), "create_file": ("path",),
-    "create_folder": ("path",), "delete": ("path",),
-    "copy": ("source", "destination"), "rename": ("source", "destination"),
-    "upload_file": ("path", "content"), "upload_folder": ("path", "zip_data"),
-    "prepare_download_multi": ("paths",), "download_multi": ("paths",),
-    "delete_multi": ("paths",), "move_multi": ("paths", "destination"),
-    "global_search": ("query",), "global_replace": ("query", "replacement"),
-    "check_yaml": ("content",), "check_jinja": ("content",), "check_json": ("content",),
-    "check_python": ("content",), "check_javascript": ("content",),
-    "check_syntax": ("content", "file_path"), "terminal_exec": ("command",),
-    "git_diff_commit": ("hash",), "git_push": ("commit_message",),
-    "git_commit": ("commit_message",), "git_show": ("path",),
-    "git_add_remote": ("name", "url"), "git_remove_remote": ("name",),
+    "read_file": ("path",),
+    "get_file_stat": ("path",),
+    "zip_progress": ("progress_id",),
+    "write_file": ("path", "content"),
+    "create_file": ("path",),
+    "create_folder": ("path",),
+    "delete": ("path",),
+    "copy": ("source", "destination"),
+    "rename": ("source", "destination"),
+    "upload_file": ("path", "content"),
+    "upload_folder": ("path", "zip_data"),
+    "prepare_download_multi": ("paths",),
+    "cancel_zip": ("progress_id",),
+    "download_multi": ("paths",),
+    "delete_multi": ("paths",),
+    "move_multi": ("paths", "destination"),
+    "global_search": ("query",),
+    "global_replace": ("query", "replacement"),
+    "check_yaml": ("content",),
+    "check_jinja": ("content",),
+    "check_json": ("content",),
+    "check_python": ("content",),
+    "check_javascript": ("content",),
+    "check_syntax": ("content", "file_path"),
+    "terminal_exec": ("command",),
+    "git_diff_commit": ("hash",),
+    "git_push": ("commit_message",),
+    "git_commit": ("commit_message",),
+    "git_show": ("path",),
+    "git_add_remote": ("name", "url"),
+    "git_remove_remote": ("name",),
     "git_rename_branch": ("old_name", "new_name"),
-    "git_merge_unrelated": ("remote", "branch"), "git_hard_reset": ("remote", "branch"),
-    "git_delete_remote_branch": ("branch",), "git_checkout_branch": ("branch",),
-    "git_create_branch": ("name",), "git_delete_local_branch": ("branch",),
-    "git_merge_branch": ("branch",), "git_resolve_conflict": ("path", "resolution"),
-    "git_stage": ("files",), "git_unstage": ("files",), "git_reset": ("files",),
-    "git_stop_tracking": ("files",), "git_set_credentials": ("username", "token"),
+    "git_merge_unrelated": ("remote", "branch"),
+    "git_hard_reset": ("remote", "branch"),
+    "git_delete_remote_branch": ("branch",),
+    "git_checkout_branch": ("branch",),
+    "git_create_branch": ("name",),
+    "git_delete_local_branch": ("branch",),
+    "git_merge_branch": ("branch",),
+    "git_resolve_conflict": ("path", "resolution"),
+    "git_stage": ("files",),
+    "git_unstage": ("files",),
+    "git_reset": ("files",),
+    "git_stop_tracking": ("files",),
+    "git_set_credentials": ("username", "token"),
     "gitea_push": ("commit_message",),
     "gitea_set_credentials": ("url", "username", "token"),
-    "gitea_add_remote": ("url",), "gitea_create_repo": ("name",),
-    "ai_query": ("query", "ai_type"), "ai_get_models": ("ai_type",),
-    "github_create_repo": ("name",), "github_set_default_branch": ("branch",),
+    "gitea_add_remote": ("url",),
+    "gitea_create_repo": ("repo_name",),
+    "ai_query": ("query", "ai_type"),
+    "ai_preview_context": ("ai_type",),
+    "ai_get_models": ("ai_type",),
+    "ai_apply_proposal": ("proposal_id",),
+    "ai_undo_proposal": ("undo_id",),
+    "ai_cancel": ("request_id",),
+    "ai_revise_proposal": ("proposal_id",),
+    "ai_reject_proposal": ("proposal_id",),
+    "github_create_repo": ("repo_name",),
+    "github_set_default_branch": ("branch",),
     "github_device_flow_start": ("client_id",),
     "github_device_flow_poll": ("client_id", "device_code"),
-    "render_template": ("template",), "call_service": ("domain", "service"),
+    "render_template": ("template",),
+    "call_service": ("domain", "service"),
     "get_device_automations": ("device_id",),
-    "convert_to_blueprint": ("content",), "parse_blueprint_inputs": ("content",),
-    "instantiate_blueprint": ("content", "input_values", "name"), "reload_yaml": ("domain",),
-    "sftp_read": ("path",), "sftp_write": ("path", "content"),
-    "sftp_create": ("path",), "sftp_delete": ("path",), "sftp_delete_multi": ("paths",),
-    "sftp_rename": ("source", "destination"), "sftp_mkdir": ("path",),
-    "sftp_copy": ("source", "destination"), "sftp_upload_folder": ("path", "zip_data"),
-    "sftp_download_folder": ("path",), "sftp_prepare_stream": ("path",),
+    "convert_to_blueprint": ("content",),
+    "parse_blueprint_inputs": ("content",),
+    "instantiate_blueprint": ("content", "input_values", "name"),
+    "reload_yaml": ("domain",),
+    "sftp_read": ("path",),
+    "sftp_write": ("path", "content"),
+    "sftp_create": ("path",),
+    "sftp_delete": ("path",),
+    "sftp_delete_multi": ("paths",),
+    "sftp_rename": ("source", "destination"),
+    "sftp_mkdir": ("path",),
+    "sftp_copy": ("source", "destination"),
+    "sftp_upload_folder": ("path", "zip_data"),
+    "sftp_download_folder": ("path",),
     "sftp_serve_file": ("path",),
 }
 
@@ -141,42 +295,73 @@ ACTION_SCHEMAS = {
     for action in GET_ACTIONS | POST_ACTIONS | SFTP_ACTIONS
 }
 
-_BOOL_FIELDS = frozenset({
-    "show_hidden", "force", "optional", "overwrite", "is_base64", "case_sensitive",
-    "use_regex", "match_word", "checkout", "private", "extract_zip",
-})
-_LIST_FIELDS = frozenset({"paths", "files", "domains"})
-_DICT_FIELDS = frozenset({"settings", "service_data", "input_values", "auth", "connection"})
+_BOOL_FIELDS = frozenset(
+    {
+        "show_hidden",
+        "force",
+        "optional",
+        "overwrite",
+        "is_base64",
+        "case_sensitive",
+        "use_regex",
+        "match_word",
+        "checkout",
+        "private",
+        "is_private",
+        "extract_zip",
+        "include_file_context",
+        "include_metadata",
+    }
+)
+_LIST_FIELDS = frozenset({"paths", "files", "domains", "selected_paths"})
+_DICT_FIELDS = frozenset(
+    {"settings", "service_data", "input_values", "auth", "connection"}
+)
 _INT_FIELDS = frozenset({"port", "rows", "cols", "limit", "max_results"})
 # These fields are required to be present, but an empty string is valid data.
 # Empty editor buffers must be writable and validatable, an empty replacement
 # deletes matches, and rendering an empty template is a valid HA operation.
-_EMPTY_STRING_FIELDS = frozenset({"content", "replacement", "template"})
+_EMPTY_STRING_FIELDS = frozenset({"content", "new_content", "replacement", "template"})
 _ENUM_FIELDS = {
     "mode": frozenset({"merge", "replace"}),
     "resolution": frozenset({"ours", "theirs", "resolved"}),
-    "stream_type": frozenset({"file", "folder"}),
-    "ai_type": frozenset({"none", "rule-based", "local-ai", "cloud", "hass-agent", "hass"}),
+    "stream_type": frozenset({"file", "folder", "folder_zip", "selected_zip"}),
+    "ai_type": frozenset(
+        {"none", "rule-based", "local-ai", "cloud", "hass-agent", "hass"}
+    ),
     "cloud_provider": frozenset({"gemini", "openai", "claude"}),
     "local_ai_provider": frozenset({"ollama", "lm-studio", "custom"}),
+    "task_mode": frozenset({"ask", "explain", "generate", "fix", "refactor"}),
 }
 
 _BRANCH_FIELDS = frozenset({"branch", "old_name", "new_name"})
 
 
-def validate_action(action: Any, values: Mapping[str, Any], *, transport: str) -> dict[str, Any]:
+def validate_action(
+    action: Any, values: Mapping[str, Any], *, transport: str
+) -> dict[str, Any]:
     """Validate an action and return a normalized, handler-compatible dictionary."""
-    allowed = GET_ACTIONS if transport == "get" else SFTP_ACTIONS if transport == "sftp" else POST_ACTIONS
+    allowed = (
+        GET_ACTIONS
+        if transport == "get"
+        else SFTP_ACTIONS
+        if transport == "sftp"
+        else POST_ACTIONS
+    )
     if not isinstance(action, str) or action not in allowed:
         raise ValidationError("Unknown action")
     data = dict(values)
     schema = ACTION_SCHEMAS[action]
     for field in schema.required:
-        if field not in data or data[field] is None or (
-            data[field] == "" and field not in _EMPTY_STRING_FIELDS
+        if (
+            field not in data
+            or data[field] is None
+            or (data[field] == "" and field not in _EMPTY_STRING_FIELDS)
         ):
             raise ValidationError(f"Missing required field: {field}")
-        if field not in _LIST_FIELDS | _DICT_FIELDS and not isinstance(data[field], str):
+        if field not in _LIST_FIELDS | _DICT_FIELDS and not isinstance(
+            data[field], str
+        ):
             raise ValidationError(f"Field '{field}' must be a string")
 
     for field, value in tuple(data.items()):
@@ -184,8 +369,12 @@ def validate_action(action: Any, values: Mapping[str, Any], *, transport: str) -
             parsed = _boolean(value, field)
             data[field] = value if transport == "get" else parsed
         elif field in _LIST_FIELDS:
-            if not isinstance(value, list) or any(not isinstance(item, str) or not item for item in value):
-                raise ValidationError(f"Field '{field}' must be a list of non-empty strings")
+            if not isinstance(value, list) or any(
+                not isinstance(item, str) or not item for item in value
+            ):
+                raise ValidationError(
+                    f"Field '{field}' must be a list of non-empty strings"
+                )
             if field in schema.required and not value:
                 raise ValidationError(f"Field '{field}' must not be empty")
         elif field in _DICT_FIELDS and not isinstance(value, dict):
@@ -199,7 +388,10 @@ def validate_action(action: Any, values: Mapping[str, Any], *, transport: str) -
         elif field == "hash" and not _valid_commit_reference(value):
             raise ValidationError("Field 'hash' is not a valid commit reference")
         elif field in {"name", "remote"} and (
-            not isinstance(value, str) or not value or len(value) > 255 or any(char.isspace() for char in value)
+            not isinstance(value, str)
+            or not value
+            or len(value) > 255
+            or any(char.isspace() for char in value)
         ):
             raise ValidationError(f"Field '{field}' is not a valid name")
 
@@ -211,6 +403,16 @@ def validate_action(action: Any, values: Mapping[str, Any], *, transport: str) -
             validate_stream(ticket_action, data)
         else:
             raise ValidationError("Invalid ticket scope")
+
+    if action == "sftp_prepare_stream":
+        if data.get("stream_type", "file") == "selected_zip":
+            if not data.get("paths"):
+                raise ValidationError("Missing required field: paths")
+        elif not data.get("path"):
+            raise ValidationError("Missing required field: path")
+
+    if action == "ai_apply_proposal" and "selected_paths" in data and not data["selected_paths"]:
+        raise ValidationError("Field 'selected_paths' must not be empty")
 
     if transport == "sftp":
         _validate_connection(data.get("connection"))

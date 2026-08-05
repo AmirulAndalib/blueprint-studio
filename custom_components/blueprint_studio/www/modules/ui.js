@@ -6,13 +6,13 @@ import { t } from './translations.js';
 import { eventBus } from './event-bus.js';
 import { applyMinimapState } from './minimap.js';
 import { closeDialog, openDialog } from './dialog-manager.js';
-import { constrainSidebarWidth } from './workspace-layout.js';
+import { constrainSidebarWidth } from './workspace-layout.js?v=2.5.188';
 import {
   hideGlobalPending,
   notify,
   setControlPending,
   showGlobalPending,
-} from './feedback-service.js';
+} from './feedback-service.js?v=2.5.188';
 
 const HA_VAR_MAPPING = {
     '--bg-primary': '--primary-background-color',
@@ -312,6 +312,7 @@ export function resetModalToDefault() {
 
     // Reset modal width
     if (modal) {
+      modal.classList.remove("modal--full-workflow", "modal--tall-sheet");
       modal.style.maxWidth = "";
       modal.style.width = "";
     }
@@ -487,6 +488,7 @@ export function initElements() {
     elements.statusEncoding = document.getElementById("status-encoding");
     elements.statusLanguage = document.getElementById("status-language");
     elements.statusConnection = document.getElementById("status-connection");
+    elements.statusRepository = document.getElementById("status-repository");
     elements.btnSave = document.getElementById("btn-save");
     elements.btnSaveAll = document.getElementById("btn-save-all");
     elements.btnUndo = document.getElementById("btn-undo");
@@ -528,6 +530,7 @@ export function initElements() {
     elements.btnCollapseAllFolders = document.getElementById("btn-collapse-all-folders");
     elements.btnOneTabMode = document.getElementById("btn-one-tab-mode");
     elements.selectionToolbar = document.getElementById("selection-toolbar");
+    elements.selectionModeLabel = document.getElementById("selection-mode-label");
     elements.selectionCount = document.getElementById("selection-count");
     elements.btnDownloadSelected = document.getElementById("btn-download-selected");
     elements.btnDeleteSelected = document.getElementById("btn-delete-selected");
@@ -690,8 +693,10 @@ export function applyEditorSettings() {
 }
 
 export function applyLayoutSettings() {
-    if (elements.sidebar) {
+    if (elements.sidebar && document.body.dataset.workspaceMode === 'desktop') {
       elements.sidebar.style.width = `${constrainSidebarWidth(state.sidebarWidth)}px`;
+    } else if (elements.sidebar) {
+      elements.sidebar.style.removeProperty('width');
     }
     
     document.body.setAttribute('data-tab-position', state.tabPosition);

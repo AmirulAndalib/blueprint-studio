@@ -1,6 +1,7 @@
 /** HA-AUTOCOMPLETE.JS | Purpose: Home Assistant entity autocomplete and YAML schema hints. */
 import { API_BASE, HA_SCHEMA } from './constants.js';
 import { fetchWithAuth } from './api.js';
+import { BLUEPRINT_DOMAINS, getEditorYamlContext } from './yaml-context.js?v=2.5.188';
 
 export let HA_ENTITIES = [];
 export let HA_SERVICES = [];
@@ -8,21 +9,46 @@ export let HA_DEVICES = [];
 export let HA_AREAS = [];
 export let HA_LABELS = [];
 export let HA_FLOORS = [];
+export let HA_ADDONS = [];
+export let HA_METADATA = null;
 export let HA_AUTOCOMPLETE_ERROR = null;
+let metadataRequest = null;
 const DEVICE_AUTOMATIONS = new Map();
 const DEVICE_AUTOMATION_REQUESTS = new Map();
+const RECENT_ACTIONS = [];
+const MAX_RECENT_ACTIONS = 12;
+
+export async function loadMetadata({ force = false } = {}) {
+  if (metadataRequest && !force) return metadataRequest;
+  metadataRequest = Promise.all([
+    fetchWithAuth(`${API_BASE}?action=get_metadata`, { method: "GET" }),
+    fetchWithAuth(`${API_BASE}?action=get_addons`, { method: "GET" }).catch(() => ({ addons: [] })),
+  ]).then(([data, addonData]) => {
+      HA_METADATA = data;
+      HA_ENTITIES = Array.isArray(data.entities) ? data.entities : [];
+      HA_SERVICES = Array.isArray(data.actions) ? data.actions : [];
+      HA_DEVICES = Array.isArray(data.devices) ? data.devices : [];
+      HA_AREAS = Array.isArray(data.areas) ? data.areas : [];
+      HA_LABELS = Array.isArray(data.labels) ? data.labels : [];
+      HA_FLOORS = Array.isArray(data.floors) ? data.floors : [];
+      HA_ADDONS = Array.isArray(addonData.addons) ? addonData.addons : [];
+      const failed = Object.keys(data.failures || {});
+      HA_AUTOCOMPLETE_ERROR = failed.length ? `Some Home Assistant metadata is unavailable: ${failed.join(", ")}` : null;
+      if (HA_AUTOCOMPLETE_ERROR) console.warn(HA_AUTOCOMPLETE_ERROR);
+      return data;
+    })
+    .catch(error => {
+      HA_AUTOCOMPLETE_ERROR = "Home Assistant metadata is unavailable; static YAML suggestions remain available";
+      console.warn("Failed to load Home Assistant metadata", error);
+      throw error;
+    })
+    .finally(() => { metadataRequest = null; });
+  return metadataRequest;
+}
 
 export async function loadEntities() {
   try {
-    const data = await fetchWithAuth(API_BASE, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "get_entities" }),
-    });
-    if (data.entities) {
-      HA_ENTITIES = data.entities;
-      HA_AUTOCOMPLETE_ERROR = null;
-    }
+    await loadMetadata();
   } catch (e) {
     HA_AUTOCOMPLETE_ERROR = "Entity autocomplete is unavailable";
     console.warn("Failed to load entities for autocomplete", e);
@@ -31,11 +57,7 @@ export async function loadEntities() {
 
 export async function loadServices() {
   try {
-    const data = await fetchWithAuth(`${API_BASE}?action=get_services`, { method: "GET" });
-    if (data.services) {
-      HA_SERVICES = data.services;
-      HA_AUTOCOMPLETE_ERROR = null;
-    }
+    await loadMetadata();
   } catch (e) {
     HA_AUTOCOMPLETE_ERROR = "Action autocomplete is unavailable";
     console.warn("Failed to load actions for autocomplete", e);
@@ -43,23 +65,11 @@ export async function loadServices() {
 }
 
 export async function loadRegistries() {
-  const registries = [
-    ["get_devices", "devices", value => { HA_DEVICES = value; }],
-    ["get_areas", "areas", value => { HA_AREAS = value; }],
-    ["get_labels", "labels", value => { HA_LABELS = value; }],
-    ["get_floors", "floors", value => { HA_FLOORS = value; }],
-  ];
-  const results = await Promise.allSettled(registries.map(([action]) =>
-    fetchWithAuth(`${API_BASE}?action=${action}`, { method: "GET" })
-  ));
-  results.forEach((result, index) => {
-    const [, field, assign] = registries[index];
-    if (result.status === "fulfilled" && Array.isArray(result.value[field])) {
-      assign(result.value[field]);
-    } else if (result.status === "rejected") {
-      console.warn(`Failed to load ${field} for autocomplete`, result.reason);
-    }
-  });
+  try {
+    await loadMetadata();
+  } catch (_error) {
+    // loadMetadata records a visible degraded state while static hints remain usable.
+  }
 }
 
 async function loadDeviceAutomations(deviceId) {
@@ -115,6 +125,46 @@ function appendHintContent(elem, { iconClass, iconText, text, type, description 
   elem.replaceChildren(row);
 }
 
+function decorateCompletionMenu() {
+  if (typeof document === 'undefined') return;
+  const menu = document.querySelector('.CodeMirror-hints:not([data-ha-accessible])');
+  if (!menu) return;
+  menu.dataset.haAccessible = 'true';
+  menu.setAttribute('role', 'listbox');
+  menu.setAttribute('aria-label', 'YAML completions');
+  const update = () => menu.querySelectorAll('li').forEach((item, index) => {
+    item.setAttribute('role', 'option');
+    item.setAttribute('aria-selected', String(item.classList.contains('CodeMirror-hint-active')));
+    if (!item.id) item.id = `ha-completion-${index}`;
+  });
+  update();
+  if (typeof MutationObserver !== 'undefined') {
+    new MutationObserver(update).observe(menu, { attributes: true, attributeFilter: ['class'], subtree: true, childList: true });
+  }
+}
+
+export function metadataCompletionState(now = Date.now()) {
+  if (metadataRequest) return { type: 'loading', label: 'Loading installed Home Assistant metadata' };
+  if (HA_AUTOCOMPLETE_ERROR) return { type: 'unavailable', label: HA_AUTOCOMPLETE_ERROR };
+  if (!HA_METADATA) return { type: 'loading', label: 'Loading installed Home Assistant metadata' };
+  const generatedAt = Number(HA_METADATA.generated_at || 0) * 1000;
+  if (generatedAt && now - generatedAt > 120_000) return { type: 'stale', label: 'Using cached Home Assistant metadata while it refreshes' };
+  if (!HA_SERVICES.length) return { type: 'empty', label: 'No installed actions were reported by Home Assistant' };
+  return { type: 'ready', label: '' };
+}
+
+function statusCompletion(state, cursor) {
+  return {
+    list: [{
+      text: '', displayText: state.label, className: `ha-hint-${state.type}`,
+      render: elem => appendHintContent(elem, { text: state.label, type: state.type }),
+      hint: () => {},
+    }],
+    from: CodeMirror.Pos(cursor.line, cursor.ch),
+    to: CodeMirror.Pos(cursor.line, cursor.ch),
+  };
+}
+
 export function getCompletionPrefix(line, cursorCh) {
   const beforeCursor = line.slice(0, cursorCh);
   const match = beforeCursor.match(/[!a-zA-Z0-9_-]+$/);
@@ -134,14 +184,102 @@ export function filterSchemaSuggestions(suggestions, query) {
   });
 }
 
+function fuzzyScore(value, query) {
+  if (!query) return 1;
+  let queryIndex = 0;
+  let gap = 0;
+  for (let valueIndex = 0; valueIndex < value.length && queryIndex < query.length; valueIndex += 1) {
+    if (value[valueIndex] === query[queryIndex]) queryIndex += 1;
+    else if (queryIndex > 0) gap += 1;
+  }
+  return queryIndex === query.length ? Math.max(1, 40 - gap) : 0;
+}
+
+export function rankActionSuggestions(actions, query, { recent = [], preferredDomain = '' } = {}) {
+  const normalizedQuery = String(query || '').trim().toLowerCase();
+  const recentRanks = new Map(recent.map((action, index) => [action, recent.length - index]));
+  return actions.map(action => {
+    const id = String(action.service || action.id || '').toLowerCase();
+    const domain = String(action.domain || id.split('.')[0]);
+    const name = String(action.name || '').toLowerCase();
+    let score = fuzzyScore(id, normalizedQuery) || fuzzyScore(name, normalizedQuery);
+    if (normalizedQuery && id === normalizedQuery) score += 1000;
+    else if (normalizedQuery && id.startsWith(normalizedQuery)) score += 500;
+    else if (normalizedQuery && id.split('.')[1]?.startsWith(normalizedQuery)) score += 260;
+    if (preferredDomain && domain === preferredDomain) score += 90;
+    score += (recentRanks.get(action.service || action.id) || 0) * 8;
+    return { action, score };
+  }).filter(item => !normalizedQuery || item.score > 0)
+    .sort((left, right) => right.score - left.score || String(left.action.service).localeCompare(String(right.action.service)))
+    .map(item => item.action);
+}
+
+function rememberAction(action) {
+  const index = RECENT_ACTIONS.indexOf(action);
+  if (index >= 0) RECENT_ACTIONS.splice(index, 1);
+  RECENT_ACTIONS.unshift(action);
+  RECENT_ACTIONS.splice(MAX_RECENT_ACTIONS);
+}
+
 function selectorType(selector) {
   if (!selector || typeof selector !== "object") return null;
   return Object.keys(selector)[0] || null;
 }
 
-function liveValueItems(key, query, context) {
+function selectorDomains(config, action) {
+  const domains = [];
+  const add = value => {
+    if (Array.isArray(value)) value.forEach(add);
+    else if (typeof value === 'string') domains.push(value);
+    else if (value && typeof value === 'object') add(value.domain);
+  };
+  add(config?.domain);
+  add(config?.filter);
+  add(action?.target?.entity);
+  return new Set(domains);
+}
+
+function scalarCandidate(value, description, type) {
+  if (value === undefined || value === null || typeof value === 'object') return null;
+  return { value: String(value), description, type };
+}
+
+export function selectorValueCandidates(type, config = {}, field = {}, registries = {}, action = null) {
+  const entities = registries.entities || [];
+  const domains = selectorDomains(config, action);
+  if (type === 'entity') return entities
+    .filter(entity => !domains.size || domains.has(entity.domain || String(entity.entity_id).split('.')[0]))
+    .map(entity => ({ value: entity.entity_id, description: entity.friendly_name || entity.name, type }));
+  if (type === 'device') return (registries.devices || []).map(device => ({ value: device.id, description: device.name, type }));
+  if (type === 'area') return (registries.areas || []).map(area => ({ value: area.id, description: area.name, type }));
+  if (type === 'label') return (registries.labels || []).map(label => ({ value: label.id, description: label.name, type }));
+  if (type === 'floor') return (registries.floors || []).map(floor => ({ value: floor.id, description: floor.name, type }));
+  if (type === 'app' || type === 'addon') return (registries.addons || []).map(addon => ({ value: addon.slug, description: addon.name, type: 'app' }));
+  if (type === 'target') return entities
+    .filter(entity => !domains.size || domains.has(entity.domain || String(entity.entity_id).split('.')[0]))
+    .map(entity => ({ value: entity.entity_id, description: entity.friendly_name || entity.name, type: 'entity' }));
+  if (type === 'select' && Array.isArray(config?.options)) return config.options.map(option => ({
+    value: typeof option === 'object' ? option.value : option,
+    description: typeof option === 'object' ? option.label : field.description,
+    type: 'option',
+  }));
+  if (type === 'boolean') return [true, false].map(value => ({ value: String(value), description: field.description, type }));
+
+  const candidates = [field.example, field.default, config.example, config.default];
+  if (type === 'number' || type === 'color_temp') candidates.push(config.min, config.max, config.step);
+  if (type === 'date') candidates.push('2026-01-01');
+  if (type === 'time') candidates.push('08:00:00');
+  if (type === 'datetime') candidates.push('2026-01-01 08:00:00');
+  if (type === 'duration') candidates.push('00:05:00');
+  if (type === 'color_rgb') candidates.push('[255, 255, 255]');
+  return candidates.map(value => scalarCandidate(value, field.description, type)).filter(Boolean);
+}
+
+export function liveValueItems(key, query, context) {
   let items = [];
-  if (key === "entity_id") {
+  if (key === 'domain' && context.inBlueprint && context.blueprintSection === 'metadata') {
+    items = BLUEPRINT_DOMAINS.map(value => ({ value, description: 'Supported Blueprint domain', type: 'domain' }));
+  } else if (key === "entity_id") {
     items = HA_ENTITIES.map(entity => ({ value: entity.entity_id, description: entity.friendly_name, type: "entity" }));
   } else if (key === "device_id") {
     items = HA_DEVICES.map(device => ({ value: device.id, description: device.name, type: "device" }));
@@ -161,18 +299,12 @@ function liveValueItems(key, query, context) {
   if (field) {
     const type = selectorType(field.selector);
     const config = type ? field.selector[type] : null;
-    if (type === "entity") items = HA_ENTITIES.map(entity => ({ value: entity.entity_id, description: entity.friendly_name, type }));
-    else if (type === "device") items = HA_DEVICES.map(device => ({ value: device.id, description: device.name, type }));
-    else if (type === "area") items = HA_AREAS.map(area => ({ value: area.id, description: area.name, type }));
-    else if (type === "select" && Array.isArray(config?.options)) {
-      items = config.options.map(option => ({
-        value: typeof option === "object" ? option.value : option,
-        description: typeof option === "object" ? option.label : field.description,
-        type: "option",
-      }));
-    } else if (type === "boolean") {
-      items = [true, false].map(value => ({ value: String(value), description: field.description, type }));
-    }
+    items = selectorValueCandidates(type, config, field, {
+      entities: HA_ENTITIES, devices: HA_DEVICES, areas: HA_AREAS,
+      labels: HA_LABELS, floors: HA_FLOORS, addons: HA_ADDONS,
+    }, action);
+  } else if (action && key === 'entity_id') {
+    items = selectorValueCandidates('entity', {}, {}, { entities: HA_ENTITIES }, action);
   }
 
   if (context.deviceId) {
@@ -206,6 +338,7 @@ export function homeAssistantHint(editor, options) {
   const start = prefix.start;
   const end = cursor.ch;
   const currentWord = prefix.text;
+  if (typeof setTimeout === 'function') setTimeout(decorateCompletionMenu, 0);
 
   // Determine context from previous lines and indentation
   const context = getYamlContext(editor, cursor.line);
@@ -216,7 +349,11 @@ export function homeAssistantHint(editor, options) {
   let suggestions = [];
   const lineText = currentLine.slice(0, cursor.ch);
 
-  const valueMatch = lineText.match(/^\s*(?:-\s*)?([a-zA-Z_][\w-]*):\s*([^#]*)$/);
+  const directValueMatch = lineText.match(/^\s*(?:-\s*)?([a-zA-Z_][\w-]*):\s*([^#]*)$/);
+  const listValueMatch = !directValueMatch && context.path.length
+    ? lineText.match(/^\s*-\s*([^#]*)$/)
+    : null;
+  const valueMatch = directValueMatch || (listValueMatch ? [listValueMatch[0], context.path.at(-1), listValueMatch[1]] : null);
   if (valueMatch && !["action", "service"].includes(valueMatch[1])) {
     const key = valueMatch[1];
     const rawQuery = valueMatch[2];
@@ -273,28 +410,40 @@ export function homeAssistantHint(editor, options) {
     }
   }
 
+  if (isServiceLine && HA_SERVICES.length === 0) {
+    return statusCompletion(metadataCompletionState(), cursor);
+  }
+
   // Service autocompletion — triggered when the line is an action:/service: key
   if (isServiceLine && HA_SERVICES.length > 0) {
     // The typed word starts after the colon
     const afterColon = lineText.replace(/^\s*(action|service)\s*:\s*/, '');
     const serviceQuery = afterColon.trimStart();
     const serviceStart = cursor.ch - afterColon.length;
-    const matchedServices = HA_SERVICES.filter(s =>
-      s.service.startsWith(serviceQuery) || (serviceQuery.length === 0)
-    ).slice(0, 30);
+    const preferredDomain = serviceQuery.includes('.') ? serviceQuery.split('.')[0] : '';
+    const matchedServices = rankActionSuggestions(HA_SERVICES, serviceQuery, {
+      recent: RECENT_ACTIONS,
+      preferredDomain,
+    }).slice(0, 30);
     if (matchedServices.length > 0) {
+      const actionHints = matchedServices.map(s => ({
+        text: s.service,
+        displayText: s.service,
+        className: 'ha-hint-service',
+        render: elem => appendHintContent(elem, { iconText: "play_circle", text: s.service, description: s.description }),
+        hint: cm => {
+          rememberAction(s.service);
+          cm.replaceRange(s.service, { line: cursor.line, ch: serviceStart }, { line: cursor.line, ch: end });
+        },
+      }));
+      const metadataState = metadataCompletionState();
+      if (metadataState.type !== 'ready') actionHints.push({
+        text: '', displayText: metadataState.label, className: `ha-hint-${metadataState.type}`,
+        render: elem => appendHintContent(elem, { text: metadataState.label, type: metadataState.type }),
+        hint: () => {},
+      });
       return {
-        list: matchedServices.map(s => ({
-          text: s.service,
-          displayText: s.service,
-          className: 'ha-hint-service',
-          render: (elem) => {
-            appendHintContent(elem, { iconText: "play_circle", text: s.service, description: s.description });
-          },
-          hint: (cm) => {
-            cm.replaceRange(s.service, { line: cursor.line, ch: serviceStart }, { line: cursor.line, ch: end });
-          }
-        })),
+        list: actionHints,
         from: CodeMirror.Pos(cursor.line, serviceStart),
         to: CodeMirror.Pos(cursor.line, end)
       };
@@ -304,40 +453,40 @@ export function homeAssistantHint(editor, options) {
   const trimmedLine = currentLine.trimStart();
   const isLineStart = currentLine.substring(0, cursor.ch).trim() === currentWord.trim();
 
-  if (currentWord.startsWith('!') || (isLineStart && currentWord === '!')) {
-    // Dynamic !input completion for blueprint files
-    const fullContent = editor.getValue();
-    if (fullContent.includes('blueprint:') && lineText.match(/!input\s+\w*$/)) {
-      const inputMatch = lineText.match(/!input\s+(\w*)$/);
+  const cursorIndex = typeof editor.indexFromPos === 'function' ? editor.indexFromPos(cursor) : null;
+  const beforeCursor = cursorIndex === null ? lineText : editor.getValue().slice(0, cursorIndex);
+  const openExpression = beforeCursor.lastIndexOf('{{') > beforeCursor.lastIndexOf('}}');
+  const openStatement = beforeCursor.lastIndexOf('{%') > beforeCursor.lastIndexOf('%}');
+  if ((openExpression || openStatement) && currentWord && !currentWord.includes('!')) {
+    const jinjaSuggestions = HA_SCHEMA.jinjaNames.filter(item => item.text.startsWith(currentWord.toLowerCase()));
+    if (jinjaSuggestions.length) {
+      return {
+        list: jinjaSuggestions.map(item => ({
+          ...item,
+          displayText: item.text,
+          className: 'ha-hint-template',
+          render: (elem, self, data) => appendHintContent(elem, data),
+          hint: cm => cm.replaceRange(item.text, { line: cursor.line, ch: start }, { line: cursor.line, ch: end }),
+        })),
+        from: CodeMirror.Pos(cursor.line, start),
+        to: CodeMirror.Pos(cursor.line, end),
+      };
+    }
+  }
+
+  if (context.inBlueprint && lineText.match(/!input\s+[\w-]*$/)) {
+      const inputMatch = lineText.match(/!input\s+([\w-]*)$/);
       const inputPrefix = inputMatch ? inputMatch[1] : '';
       const inputMatchStart = cursor.ch - inputPrefix.length;
-      // Extract defined input names from blueprint.input block
-      const inputNames = [];
-      const lines = fullContent.split(/\r?\n/);
-      const inputLine = lines.findIndex(line => /^\s+input:\s*(?:#.*)?$/.test(line));
-      if (inputLine >= 0) {
-        const inputIndent = lines[inputLine].match(/^\s*/)[0].length;
-        let inputNameIndent = null;
-        for (let i = inputLine + 1; i < lines.length; i++) {
-          if (!lines[i].trim() || lines[i].trimStart().startsWith("#")) continue;
-          const indent = lines[i].match(/^\s*/)[0].length;
-          if (indent <= inputIndent) break;
-          if (inputNameIndent === null) inputNameIndent = indent;
-          if (indent === inputNameIndent) {
-            const name = lines[i].trim().match(/^([a-zA-Z0-9_]+):/);
-            if (name && !inputNames.includes(name[1])) inputNames.push(name[1]);
-          }
-        }
-      }
-      if (inputNames.length > 0) {
-        const filtered = inputNames.filter(n => n.startsWith(inputPrefix));
+      if (context.blueprintInputNames.length > 0) {
+        const filtered = context.blueprintInputNames.filter(name => name.startsWith(inputPrefix));
         if (filtered.length > 0) {
           return {
             list: filtered.map(name => ({
               text: name,
               displayText: name,
               className: 'ha-hint-tag',
-              render: (elem) => { elem.innerHTML = `<span>${name}</span><span class="ha-hint-type">!input</span>`; },
+              render: elem => appendHintContent(elem, { text: name, type: '!input', description: 'Blueprint input' }),
               hint: (cm) => { cm.replaceRange(name, { line: cursor.line, ch: inputMatchStart }, { line: cursor.line, ch: end }); }
             })),
             from: CodeMirror.Pos(cursor.line, inputMatchStart),
@@ -345,18 +494,14 @@ export function homeAssistantHint(editor, options) {
           };
         }
       }
-    }
+  }
 
+  if (currentWord.startsWith('!') || (isLineStart && currentWord === '!')) {
     suggestions = HA_SCHEMA.yamlTags.map(item => ({
       text: item.text,
       displayText: item.text,
       className: 'ha-hint-tag',
-      render: (elem, self, data) => {
-        elem.innerHTML = `
-          <span>${data.text}</span>
-          <span class="ha-hint-type">${data.type}</span>
-        `;
-      },
+      render: (elem, self, data) => appendHintContent(elem, data),
       hint: (cm, self, data) => {
         cm.replaceRange(data.text, { line: cursor.line, ch: start }, { line: cursor.line, ch: end });
       },
@@ -399,17 +544,16 @@ export function homeAssistantHint(editor, options) {
     }
   }
 
-  if (suggestions.length === 0 && context.indent === 0 && isLineStart) {
+  const automationDocument = context.section === 'automation' || (
+    context.inBlueprint && context.blueprintDomain === 'automation' && context.blueprintSection === 'body'
+  );
+
+  if (suggestions.length === 0 && context.indent === 0 && isLineStart && !['automation-list', 'script-map', 'blueprint'].includes(context.fileRole)) {
     suggestions = HA_SCHEMA.configuration.map(item => ({
       text: item.text,
       displayText: item.text,
       className: 'ha-hint-domain',
-      render: (elem, self, data) => {
-        elem.innerHTML = `
-          <span>${data.text}</span>
-          <span class="ha-hint-description">${data.description}</span>
-        `;
-      },
+      render: (elem, self, data) => appendHintContent(elem, data),
       hint: (cm, self, data) => {
         cm.replaceRange(data.text, { line: cursor.line, ch: start }, { line: cursor.line, ch: end });
       },
@@ -417,32 +561,50 @@ export function homeAssistantHint(editor, options) {
     }));
   }
   else if (context.inBlueprint && context.inSelector) {
-    // Inside a selector: block in a blueprint — suggest selector types
-    suggestions = HA_SCHEMA.blueprintSelectors.map(item => ({
+    const selectorIndex = context.path.lastIndexOf('selector');
+    const hasSelectorType = context.path.length > selectorIndex + 1;
+    suggestions = (hasSelectorType ? HA_SCHEMA.blueprintSelectorKeys : HA_SCHEMA.blueprintSelectors).map(item => ({
       text: item.text,
       displayText: item.text,
       className: 'ha-hint-key',
-      render: (elem, self, data) => {
-        elem.innerHTML = `<span>${data.text}</span><span class="ha-hint-type">${data.type}</span>${data.description ? `<span class="ha-hint-description">${data.description}</span>` : ''}`;
-      },
+      render: (elem, self, data) => appendHintContent(elem, data),
       hint: (cm, self, data) => {
         cm.replaceRange(data.text, { line: cursor.line, ch: start }, { line: cursor.line, ch: end });
       },
       ...item
     }));
   }
+  else if (context.inBlueprint && context.blueprintSection === 'input-section') {
+    suggestions = HA_SCHEMA.blueprintInputSectionKeys.map(item => ({
+      ...item,
+      displayText: item.text,
+      className: 'ha-hint-key',
+      render: (elem, self, data) => appendHintContent(elem, data),
+      hint: cm => cm.replaceRange(item.text, { line: cursor.line, ch: start }, { line: cursor.line, ch: end }),
+    }));
+  }
+  else if (context.inBlueprint && context.blueprintSection === 'input') {
+    suggestions = HA_SCHEMA.blueprintInputKeys.map(item => ({
+      ...item,
+      displayText: item.text,
+      className: 'ha-hint-key',
+      render: (elem, self, data) => appendHintContent(elem, data),
+      hint: cm => cm.replaceRange(item.text, { line: cursor.line, ch: start }, { line: cursor.line, ch: end }),
+    }));
+  }
   else if (context.inBlueprint && !context.inTrigger && !context.inCondition && !context.inAction) {
     // Inside a blueprint file — suggest blueprint keys + automation keys
     suggestions = [
       ...HA_SCHEMA.blueprintKeys,
-      ...HA_SCHEMA.automation,
+      ...(context.blueprintSection === 'body' && context.blueprintDomain === 'script' ? HA_SCHEMA.script : []),
+      ...(context.blueprintSection === 'body' && context.blueprintDomain === 'automation'
+        ? [...HA_SCHEMA.automation, ...(context.legacySyntax ? HA_SCHEMA.automationLegacy : [])]
+        : []),
     ].map(item => ({
       text: item.text,
       displayText: item.text,
       className: `ha-hint-${item.type}`,
-      render: (elem, self, data) => {
-        elem.innerHTML = `<span>${data.text}</span><span class="ha-hint-type">${data.type}</span>${data.description ? `<span class="ha-hint-description">${data.description}</span>` : ''}`;
-      },
+      render: (elem, self, data) => appendHintContent(elem, data),
       hint: (cm, self, data) => {
         cm.replaceRange(data.text, { line: cursor.line, ch: start }, { line: cursor.line, ch: end });
       },
@@ -450,14 +612,16 @@ export function homeAssistantHint(editor, options) {
     }));
   }
   else if (
-    context.section === 'automation' ||
+    automationDocument ||
     context.section === 'script' ||
     context.inTrigger ||
     context.inCondition ||
     context.inAction
   ) {
     if (context.inTrigger) {
-      suggestions = context.atSequenceItem ? HA_SCHEMA.triggers : HA_SCHEMA.triggerKeys;
+      suggestions = context.atSequenceItem
+        ? HA_SCHEMA.triggers.filter(item => context.legacySyntax || !item.text.startsWith('platform:'))
+        : HA_SCHEMA.triggerKeys;
     } else if (context.inCondition) {
       suggestions = context.atSequenceItem ? HA_SCHEMA.conditions : HA_SCHEMA.conditionKeys;
     } else if (context.inAction) {
@@ -469,24 +633,32 @@ export function homeAssistantHint(editor, options) {
             description: field.description || selectedAction.name || "Action field",
           }))
         : [];
-      suggestions = context.atSequenceItem
-        ? [...HA_SCHEMA.services, ...HA_SCHEMA.actionKeys]
-        : [...HA_SCHEMA.actionKeys, ...liveFields];
+      const underActionData = ['data', 'data_template'].includes(context.path.at(-1));
+      const underTarget = context.path.at(-1) === 'target';
+      const supportedTargetKeys = selectedAction?.supports_target
+        ? HA_SCHEMA.actionKeys.filter(item => ['entity_id:', 'device_id:', 'area_id:', 'floor_id:', 'label_id:'].includes(item.text))
+        : [];
+      const actionKeys = HA_SCHEMA.actionKeys.filter(item => (
+        context.legacySyntax || !['service:', 'data_template:', 'event_data_template:'].includes(item.text)
+      ));
+      suggestions = underActionData
+        ? liveFields
+        : underTarget
+          ? supportedTargetKeys
+          : context.atSequenceItem
+            ? actionKeys.filter(item => ['action:', 'delay:', 'wait_template:', 'wait_for_trigger:', 'choose:', 'repeat:', 'if:', 'parallel:', 'variables:', 'event:', 'scene:', 'stop:'].includes(item.text))
+            : actionKeys;
     } else {
-      suggestions = HA_SCHEMA.automation;
+      suggestions = context.section === 'script'
+        ? HA_SCHEMA.script
+        : [...HA_SCHEMA.automation, ...(context.legacySyntax ? HA_SCHEMA.automationLegacy : [])];
     }
 
     suggestions = suggestions.map(item => ({
       text: item.text,
       displayText: item.text,
       className: `ha-hint-${item.type}`,
-      render: (elem, self, data) => {
-        elem.innerHTML = `
-          <span>${data.text}</span>
-          <span class="ha-hint-type">${data.type}</span>
-          ${data.description ? `<span class="ha-hint-description">${data.description}</span>` : ''}
-        `;
-      },
+      render: (elem, self, data) => appendHintContent(elem, data),
       hint: (cm, self, data) => {
         cm.replaceRange(data.text, { line: cursor.line, ch: start }, { line: cursor.line, ch: end });
       },
@@ -504,12 +676,7 @@ export function homeAssistantHint(editor, options) {
       text: item.text,
       displayText: item.text,
       className: `ha-hint-${item.type}`,
-      render: (elem, self, data) => {
-        elem.innerHTML = `
-          <span>${data.text}</span>
-          ${data.description ? `<span class="ha-hint-description">${data.description}</span>` : ''}
-        `;
-      },
+      render: (elem, self, data) => appendHintContent(elem, data),
       hint: (cm, self, data) => {
         cm.replaceRange(data.text, { line: cursor.line, ch: start }, { line: cursor.line, ch: end });
       },
@@ -524,12 +691,7 @@ export function homeAssistantHint(editor, options) {
       text: item.text,
       displayText: item.text,
       className: `ha-hint-${item.type}`,
-      render: (elem, self, data) => {
-        elem.innerHTML = `
-          <span>${data.text}</span>
-          ${data.description ? `<span class="ha-hint-description">${data.description}</span>` : ''}
-        `;
-      },
+      render: (elem, self, data) => appendHintContent(elem, data),
       hint: (cm, self, data) => {
         cm.replaceRange(data.text, { line: cursor.line, ch: start }, { line: cursor.line, ch: end });
       },
@@ -555,107 +717,7 @@ export function homeAssistantHint(editor, options) {
 }
 
 export function getYamlContext(editor, lineNumber) {
-  let context = {
-    indent: 0,
-    section: null,
-    inTrigger: false,
-    inCondition: false,
-    inAction: false,
-    inPlatform: false,
-    inBlueprint: false,
-    inSelector: false,
-    atSequenceItem: false,
-    path: [],
-    actionService: null,
-    deviceId: null,
-  };
-
-  const currentLine = editor.getLine(lineNumber);
-  const match = currentLine.match(/^(\s*)/);
-  context.indent = match ? match[1].length : 0;
-
-  const allLines = [];
-  for (let i = 0; i < editor.lineCount(); i++) allLines.push(editor.getLine(i));
-  context.inBlueprint = allLines.some(line => /^blueprint:\s*(?:#.*)?$/.test(line));
-
-  const stack = [];
-  let hasAutomationShape = false;
-  for (let i = 0; i < lineNumber; i++) {
-    const line = allLines[i];
-    if (!line.trim() || line.trimStart().startsWith("#")) continue;
-    const indent = line.match(/^\s*/)[0].length;
-    while (stack.length && stack[stack.length - 1].indent >= indent) stack.pop();
-    const match = line.trim().match(/^(?:-\s*)?([a-zA-Z_][\w-]*):(?:\s*([^#\s][^#]*?))?\s*(?:#.*)?$/);
-    if (!match) continue;
-    const key = match[1];
-    const value = (match[2] || "").trim().replace(/^['"]|['"]$/g, "");
-    stack.push({ indent, key, value, sequenceItem: /^\s*-/.test(line) });
-    if (["alias", "triggers", "trigger", "conditions", "condition", "actions", "action", "mode"].includes(key)) {
-      hasAutomationShape = true;
-    }
-  }
-
-  context.path = stack.map(entry => entry.key);
-  for (let i = stack.length - 1; i >= 0; i--) {
-    if ((stack[i].key === "action" || stack[i].key === "service") && stack[i].value.includes(".")) {
-      context.actionService = stack[i].value;
-      break;
-    }
-  }
-  for (let i = stack.length - 1; i >= 0; i--) {
-    if (stack[i].key === "device_id" && stack[i].value) {
-      context.deviceId = stack[i].value;
-      break;
-    }
-  }
-  if (!context.deviceId) {
-    for (let i = lineNumber - 1; i >= 0; i--) {
-      const line = allLines[i];
-      if (!line.trim() || line.trimStart().startsWith("#")) continue;
-      const indent = line.match(/^\s*/)[0].length;
-      if (indent < Math.max(0, context.indent - 2)) break;
-      if (/^\s*-/.test(line) && indent < context.indent) break;
-      const device = line.trim().match(/^device_id:\s*['"]?([^'"#\s]+)['"]?/);
-      if (device) {
-        context.deviceId = device[1];
-        break;
-      }
-    }
-  }
-  const currentTrimmed = currentLine.trimStart();
-  const currentIsItem = currentTrimmed.startsWith("-");
-  const pluralOrSingular = (plural, singular) => {
-    for (let i = context.path.length - 1; i >= 0; i--) {
-      if (context.path[i] === plural || context.path[i] === singular) return i;
-    }
-    return -1;
-  };
-  const triggerIndex = pluralOrSingular("triggers", "trigger");
-  const conditionIndex = pluralOrSingular("conditions", "condition");
-  const actionIndex = Math.max(
-    pluralOrSingular("actions", "action"),
-    ...["sequence", "then", "else", "parallel"].map(key => context.path.lastIndexOf(key))
-  );
-  const deepest = Math.max(triggerIndex, conditionIndex, actionIndex);
-  context.inTrigger = triggerIndex >= 0 && triggerIndex === deepest;
-  context.inCondition = conditionIndex >= 0 && conditionIndex === deepest;
-  context.inAction = actionIndex >= 0 && actionIndex === deepest;
-  context.inSelector = context.path.includes("selector");
-  context.inPlatform = context.path.includes("platform");
-  context.atSequenceItem = currentIsItem || (
-    (context.inTrigger && context.path[triggerIndex] === "triggers") ||
-    (context.inCondition && context.path[conditionIndex] === "conditions") ||
-    (context.inAction && ["actions", "sequence", "then", "else", "parallel"].includes(context.path[actionIndex]))
-  );
-
-  if (context.path.includes("binary_sensor")) context.section = "binary_sensor";
-  else if (context.path.includes("sensor")) context.section = "sensor";
-  else if (context.path.includes("script")) context.section = "script";
-  else if (context.path.includes("automation") || context.inBlueprint || hasAutomationShape || allLines[0]?.trimStart().startsWith("-")) {
-    context.section = "automation";
-  }
-
-  return context;
+  return getEditorYamlContext(editor, lineNumber);
 }
 
 export function defineHAYamlMode() {

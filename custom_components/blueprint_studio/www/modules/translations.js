@@ -113,7 +113,7 @@ export function refreshAllUIStrings() {
     if (fileFilterControl) fileFilterControl.title = t("sidebar.filter_files");
     elements.fileFilter.value = state.fileTreeFilter || "all";
     const labels = {
-      all: t("filter.all"),
+      all: t("filter.all_files"),
       yaml: t("filter.yaml"),
       python: t("filter.python"),
       images: t("filter.images"),
@@ -221,7 +221,13 @@ export function refreshAllUIStrings() {
     btnCloseSidebar.setAttribute("aria-label", t("sidebar.close"));
   }
   
-  if (elements.fileSearch) elements.fileSearch.placeholder = t("sidebar.search_files");
+  if (elements.fileSearch) {
+    const searchLabel = state.contentSearchEnabled
+      ? t("sidebar.search_content_placeholder")
+      : t("sidebar.search_names_placeholder");
+    elements.fileSearch.placeholder = searchLabel;
+    elements.fileSearch.setAttribute("aria-label", searchLabel);
+  }
   if (elements.fileSearchClear) elements.fileSearchClear.title = t("sidebar.clear_search");
   if (elements.btnFilenameSearch) {
     elements.btnFilenameSearch.title = t("sidebar.filename_search");
@@ -230,6 +236,17 @@ export function refreshAllUIStrings() {
   if (elements.btnContentSearch) {
     elements.btnContentSearch.title = t("sidebar.content_search");
     elements.btnContentSearch.setAttribute("aria-label", t("sidebar.content_search"));
+  }
+  const explorerSearchModes = document.querySelector(".explorer-search-modes");
+  if (explorerSearchModes) explorerSearchModes.setAttribute("aria-label", t("sidebar.search_scope"));
+  const filenameSearchLabel = elements.btnFilenameSearch?.querySelector(".explorer-search-mode-label");
+  if (filenameSearchLabel) filenameSearchLabel.textContent = t("sidebar.filename_scope");
+  const contentSearchLabel = elements.btnContentSearch?.querySelector(".explorer-search-mode-label");
+  if (contentSearchLabel) contentSearchLabel.textContent = t("sidebar.content_scope");
+  const fileFilterLabel = document.getElementById("file-filter-label");
+  if (fileFilterLabel && elements.fileFilter) {
+    const selectedOption = elements.fileFilter.options[elements.fileFilter.selectedIndex];
+    fileFilterLabel.textContent = selectedOption?.textContent || t("filter.all_files");
   }
   
   const favHeader = document.querySelector("#favorites-panel .favorites-header");
@@ -248,7 +265,16 @@ export function refreshAllUIStrings() {
 
   // Search View
   const viewSearchHeader = document.querySelector("#view-search .sidebar-header span:first-child");
-  if (viewSearchHeader) viewSearchHeader.textContent = t("search.global_search");
+  if (viewSearchHeader) viewSearchHeader.textContent = t("search.workspace_search");
+
+  const globalScopeLabels = {
+    all: t("search.scope_workspace"),
+    files: t("search.scope_file_content"),
+    entities: t("search.scope_entities"),
+  };
+  document.querySelectorAll(".search-mode-tab").forEach((tab) => {
+    tab.textContent = globalScopeLabels[tab.dataset.mode] || tab.textContent;
+  });
   
   const btnRefreshSearch = document.getElementById("btn-refresh-search");
   if (btnRefreshSearch) btnRefreshSearch.title = t("search.refresh");
@@ -257,7 +283,13 @@ export function refreshAllUIStrings() {
   if (btnCollapseSearch) btnCollapseSearch.title = t("search.collapse_all");
   
   const globalSearchInput = document.getElementById("global-search-input");
-  if (globalSearchInput) globalSearchInput.placeholder = t("search.search_placeholder");
+  if (globalSearchInput) {
+    const activeScope = document.querySelector(".search-mode-tab.active")?.dataset.mode || "all";
+    const placeholderKey = `search.placeholder_${activeScope}`;
+    const labelKey = `search.label_${activeScope}`;
+    globalSearchInput.placeholder = t(placeholderKey);
+    globalSearchInput.setAttribute("aria-label", t(labelKey));
+  }
   
   const btnMatchCase = document.getElementById("btn-match-case");
   if (btnMatchCase) btnMatchCase.title = t("search.match_case");

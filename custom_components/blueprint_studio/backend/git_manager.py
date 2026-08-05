@@ -14,6 +14,7 @@ from typing import Any
 import aiohttp
 from aiohttp import web
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.storage import Store
 
 from ..const import DOMAIN
@@ -27,6 +28,7 @@ GITHUB_ACCESS_TOKEN_URL = "https://github.com/login/oauth/access_token"
 GITHUB_CREATE_REPO_URL = "https://api.github.com/user/repos"
 
 _CREDENTIAL_SAFE = re.compile(r"^[^\r\n\x00]+$")
+MAX_IGNORED_STATUS_PATHS = 200
 
 
 def _validate_git_credential(value: str, field_name: str) -> None:
@@ -139,21 +141,28 @@ class GitManager:
             if not is_initialized:
                  return json_response({
                     "success": True, "is_initialized": False, "has_remote": False, "has_changes": False,
-                    "files": {"modified": [], "added": [], "deleted": [], "untracked": [], "staged": [], "unstaged": []}
+                    "files": {"modified": [], "added": [], "deleted": [], "untracked": [], "staged": [], "unstaged": [], "ignored": []}
                 })
 
-            result = await self.hass.async_add_executor_job(self._run_git_command, ["status", "--porcelain"])
+            result = await self.hass.async_add_executor_job(
+                self._run_git_command,
+                ["status", "--porcelain", "--ignored=matching"],
+            )
             if not result["success"]:
                 return json_message(result["error"], status_code=500)
 
             full_status_result = await self.hass.async_add_executor_job(self._run_git_command, ["status"])
             full_status = full_status_result["output"] if full_status_result["success"] else ""
 
-            status_data = {"modified": [], "added": [], "deleted": [], "untracked": [], "staged": [], "unstaged": []}
+            status_data = {"modified": [], "added": [], "deleted": [], "untracked": [], "staged": [], "unstaged": [], "ignored": []}
             for line in result["output"].split("\n"):
                 if len(line) < 4: continue
                 x_status, y_status, filename = line[0], line[1], line[3:].strip()
                 if filename.startswith('"') and filename.endswith('"'): filename = filename[1:-1]
+                if x_status == '!' and y_status == '!':
+                    if len(status_data["ignored"]) < MAX_IGNORED_STATUS_PATHS:
+                        status_data["ignored"].append(filename)
+                    continue
                 if x_status == 'M': status_data["modified"].append(filename); status_data["staged"].append(filename)
                 elif x_status == 'A': status_data["added"].append(filename); status_data["staged"].append(filename)
                 elif x_status == 'D': status_data["deleted"].append(filename); status_data["staged"].append(filename)
@@ -171,7 +180,10 @@ class GitManager:
             for key in status_data:
                 status_data[key].sort()
 
-            has_changes = any(status_data.values())
+            has_changes = any(
+                status_data[key]
+                for key in ("modified", "added", "deleted", "untracked", "staged", "unstaged")
+            )
             ahead = behind = 0
             if has_remote:
                 compare_result = await self.hass.async_add_executor_job(self._run_git_command, ["rev-list", "--left-right", "--count", f"HEAD...{remote}"])
@@ -439,14 +451,61 @@ class GitManager:
             _LOGGER.error("Error getting remotes: %s", err)
             return json_message(str(err), status_code=500)
 
-    def get_credentials(self, provider: str = "github") -> web.Response:
-        """Get saved git credentials."""
+    async def get_credentials(self, provider: str = "github", verify: bool = False) -> web.Response:
+        """Return saved credential presence and optionally verify GitHub identity."""
         creds_key = f"{provider}_credentials" if provider != "github" else "credentials"
         creds = self.data.get(creds_key, {})
-        # Fallback check
         if not creds and provider == "github":
-             creds = self.data.get("github_credentials", {})
-        return json_response({"success": True, "has_credentials": "username" in creds, "username": creds.get("username", "")})
+            creds = self.data.get("github_credentials", {})
+        username = creds.get("username", "")
+        encoded_token = creds.get("token", "")
+        has_credentials = bool(username and encoded_token)
+        result = {
+            "success": True,
+            "has_credentials": has_credentials,
+            "username": username if has_credentials else "",
+            "authenticated": False,
+            "auth_status": "saved" if has_credentials else "not_configured",
+        }
+        if not verify or provider != "github" or not has_credentials:
+            return json_response(result)
+
+        try:
+            token = base64.b64decode(encoded_token).decode()
+        except (ValueError, UnicodeDecodeError):
+            result.update(auth_status="invalid", auth_error="Saved credentials are invalid")
+            return json_response(result)
+
+        try:
+            session = async_get_clientsession(self.hass)
+            timeout = aiohttp.ClientTimeout(total=8, connect=4)
+            async with session.get(
+                "https://api.github.com/user",
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "Accept": "application/vnd.github+json",
+                    "X-GitHub-Api-Version": "2022-11-28",
+                },
+                timeout=timeout,
+            ) as response:
+                if response.status == 200:
+                    user_data = await response.json()
+                    verified_username = user_data.get("login", "")
+                    result.update(
+                        authenticated=bool(verified_username),
+                        auth_status="authenticated" if verified_username else "invalid",
+                        username=verified_username or username,
+                    )
+                elif response.status == 401:
+                    result.update(auth_status="invalid", auth_error="GitHub rejected the saved token")
+                else:
+                    result.update(
+                        auth_status="unavailable",
+                        auth_error=f"GitHub verification returned HTTP {response.status}",
+                    )
+        except (aiohttp.ClientError, TimeoutError):
+            result.update(auth_status="unavailable", auth_error="GitHub verification is unavailable")
+        return json_response(result)
 
     async def set_credentials(self, username: str, token: str, remember_me: bool = True, provider: str = "github") -> web.Response:
         """Set git credentials."""

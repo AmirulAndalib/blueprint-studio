@@ -1,7 +1,8 @@
 /** DEV-TOOLS.JS | Purpose: HA Developer Tools floating panel — Actions / Template / States / Config */
 import { API_BASE } from './constants.js';
 import { fetchWithAuth } from './api.js';
-import { HA_ENTITIES, HA_SERVICES } from './ha-autocomplete.js';
+import { HA_ENTITIES, HA_SERVICES } from './ha-autocomplete.js?v=2.5.188';
+import { startOperationFeedback } from './feedback-service.js?v=2.5.188';
 
 const PANEL_ID = 'bps-dev-tools-panel';
 
@@ -36,10 +37,11 @@ function _buildPanel(activeTab) {
       <span class="ui-icon material-icons bdt-header-icon">construction</span>
       <span class="bdt-title" id="bps-dev-tools-title">Developer Tools</span>
       <div class="bdt-tabs" role="tablist" aria-label="Developer Tool views">
-        <button class="bdt-tab-btn" id="bdt-tab-actions" data-tab="actions" type="button" role="tab" aria-controls="bdt-pane-actions" aria-selected="false" tabindex="-1">Actions</button>
-        <button class="bdt-tab-btn" id="bdt-tab-template" data-tab="template" type="button" role="tab" aria-controls="bdt-pane-template" aria-selected="false" tabindex="-1">Template</button>
         <button class="bdt-tab-btn" id="bdt-tab-states" data-tab="states" type="button" role="tab" aria-controls="bdt-pane-states" aria-selected="false" tabindex="-1">States</button>
-        <button class="bdt-tab-btn" id="bdt-tab-config" data-tab="config" type="button" role="tab" aria-controls="bdt-pane-config" aria-selected="false" tabindex="-1">Config</button>
+        <button class="bdt-tab-btn" id="bdt-tab-actions" data-tab="actions" type="button" role="tab" aria-controls="bdt-pane-actions" aria-selected="false" tabindex="-1">Actions</button>
+        <button class="bdt-tab-btn" id="bdt-tab-template" data-tab="template" type="button" role="tab" aria-controls="bdt-pane-template" aria-selected="false" tabindex="-1">Templates</button>
+        <button class="bdt-tab-btn" id="bdt-tab-config" data-tab="config" type="button" role="tab" aria-controls="bdt-pane-config" aria-selected="false" tabindex="-1">Configuration</button>
+        <button class="bdt-tab-btn" id="bdt-tab-reload" data-tab="reload" type="button" role="tab" aria-controls="bdt-pane-reload" aria-selected="false" tabindex="-1">Reload</button>
       </div>
       <button class="bdt-close" type="button" title="Close Developer Tools" aria-label="Close Developer Tools"><span class="ui-icon material-icons">close</span></button>
     </div>
@@ -48,6 +50,8 @@ function _buildPanel(activeTab) {
       <div class="bdt-pane" id="bdt-pane-template" data-pane="template" role="tabpanel" aria-labelledby="bdt-tab-template">${_templatePane()}</div>
       <div class="bdt-pane" id="bdt-pane-states" data-pane="states" role="tabpanel" aria-labelledby="bdt-tab-states">${_statesPane()}</div>
       <div class="bdt-pane" id="bdt-pane-config" data-pane="config" role="tabpanel" aria-labelledby="bdt-tab-config">${_configPane()}</div>
+      <div class="bdt-pane" id="bdt-pane-reload" data-pane="reload" role="tabpanel" aria-labelledby="bdt-tab-reload">${_reloadPane()}</div>
+      ${_resultInspector()}
     </div>
   `;
 
@@ -77,11 +81,13 @@ function _buildPanel(activeTab) {
   cleanupFns.push(() => document.removeEventListener('keydown', onKey));
 
   _switchTab(panel, activeTab);
+  _initResultInspector(panel);
   _initActions(panel);
   _initTemplate(panel);
   const cleanupStates = _initStates(panel);
   if (cleanupStates) cleanupFns.push(cleanupStates);
   _initConfig(panel);
+  _initReload(panel);
 }
 
 function _switchTab(panel, tab) {
@@ -98,10 +104,228 @@ function _switchTab(panel, tab) {
   });
 }
 
+function _revealDevTools(tab) {
+  const panel = document.getElementById(PANEL_ID);
+  if (panel) {
+    _switchTab(panel, tab);
+    panel.querySelector(`.bdt-tab-btn[data-tab="${tab}"]`)?.focus();
+    return;
+  }
+  openDevTools(tab);
+}
+
+function cloneOperationInput(value) {
+  if (typeof structuredClone === 'function') return structuredClone(value);
+  return JSON.parse(JSON.stringify(value));
+}
+
+function actionTargetLabel(target) {
+  const values = Object.values(target || {})
+    .flatMap(value => Array.isArray(value) ? value : [value])
+    .filter(value => typeof value === 'string' || typeof value === 'number')
+    .map(String);
+  if (!values.length) return 'No explicit target';
+  if (values.length === 1) return values[0];
+  return `${values.length} targets -> ${values[0]}`;
+}
+
+function responseFailure(response, fallback) {
+  return response?.message || response?.error || fallback;
+}
+
+export async function runDeveloperAction(request, context = {}) {
+  const immutableRequest = {
+    domain: String(request.domain || ''),
+    service: String(request.service || ''),
+    serviceData: cloneOperationInput(request.serviceData || {}),
+    target: cloneOperationInput(request.target || {}),
+  };
+  const serviceName = `${immutableRequest.domain}.${immutableRequest.service}`;
+  const { button = null, resultElement = null, panel = null, buttonLabel = 'Perform action' } = context;
+  const operation = startOperationFeedback({
+    label: `Perform ${serviceName}`,
+    icon: 'play_arrow',
+    message: 'Waiting for Home Assistant action completion...',
+    scope: 'Home Assistant action',
+    target: `${serviceName} -> ${actionTargetLabel(immutableRequest.target)}`,
+    retry: () => runDeveloperAction(immutableRequest),
+    open: () => _revealDevTools('actions'),
+    openLabel: 'Developer Tools',
+    openIcon: 'construction',
+  });
+  if (button) {
+    button.disabled = true;
+    button.innerHTML = '<span class="ui-icon material-icons bdt-button-icon">hourglass_empty</span> Calling…';
+  }
+  if (resultElement) resultElement.style.display = 'none';
+  try {
+    const response = await fetchWithAuth(API_BASE, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'call_service',
+        domain: immutableRequest.domain,
+        service: immutableRequest.service,
+        service_data: immutableRequest.serviceData,
+        target: immutableRequest.target,
+      }),
+    });
+    if (!response?.success) {
+      const message = responseFailure(response, 'Home Assistant rejected the action');
+      operation.fail(`${serviceName} failed`, message);
+      if (resultElement?.isConnected) _showActionResult(resultElement, false, message);
+      if (panel?.isConnected) _recordRawResult(panel, 'Actions', `${serviceName} failed`, response);
+      return false;
+    }
+    operation.finish(`${serviceName} completed`, { detail: actionTargetLabel(immutableRequest.target) });
+    if (resultElement?.isConnected) _showActionResult(resultElement, true, 'Action performed successfully');
+    if (panel?.isConnected) _recordRawResult(panel, 'Actions', serviceName, response);
+    return true;
+  } catch (error) {
+    operation.fail(`${serviceName} failed`, error.message);
+    if (resultElement?.isConnected) _showActionResult(resultElement, false, error.message);
+    if (panel?.isConnected) _recordRawResult(panel, 'Actions', `${serviceName} failed`, { error: error.message });
+    return false;
+  } finally {
+    if (button?.isConnected) {
+      button.disabled = false;
+      button.innerHTML = `<span class="ui-icon material-icons bdt-button-icon">play_arrow</span> ${buttonLabel}`;
+    }
+  }
+}
+
+function _showActionResult(element, ok, message) {
+  element.textContent = ok ? `✓ ${message}` : `✗ ${message}`;
+  element.className = `bdt-action-result ${ok ? 'bdt-ok' : 'bdt-err'}`;
+  element.style.display = 'block';
+}
+
+export async function renderDeveloperTemplate(template, context = {}) {
+  const immutableTemplate = String(template || '');
+  const { resultElement = null, panel = null, observable = true } = context;
+  const operation = observable ? startOperationFeedback({
+    label: 'Render Home Assistant template',
+    icon: 'data_object',
+    message: 'Rendering with the Home Assistant template engine...',
+    scope: 'Home Assistant template engine',
+    target: `${immutableTemplate.length} character template`,
+    retry: () => renderDeveloperTemplate(immutableTemplate),
+    open: () => _revealDevTools('template'),
+    openLabel: 'Developer Tools',
+    openIcon: 'construction',
+  }) : null;
+  if (resultElement?.isConnected) {
+    resultElement.className = 'bdt-template-result bdt-loading';
+    resultElement.textContent = 'Rendering…';
+  }
+  try {
+    const response = await fetchWithAuth(API_BASE, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'render_template', template: immutableTemplate }),
+    });
+    if (!response?.success) {
+      const message = responseFailure(response, 'Home Assistant rejected the template');
+      operation?.fail('Template rendering failed', message);
+      if (resultElement?.isConnected) {
+        resultElement.textContent = message;
+        resultElement.className = 'bdt-template-result bdt-err';
+      }
+      if (panel?.isConnected) _recordRawResult(panel, 'Templates', 'Render failed', response);
+      return false;
+    }
+    operation?.finish('Template rendered', { detail: `${String(response.result ?? '').length} output characters` });
+    if (resultElement?.isConnected) {
+      resultElement.textContent = response.result;
+      resultElement.className = 'bdt-template-result bdt-ok';
+    }
+    if (panel?.isConnected) _recordRawResult(panel, 'Templates', 'Rendered', response);
+    return true;
+  } catch (error) {
+    operation?.fail('Template rendering failed', error.message);
+    if (resultElement?.isConnected) {
+      resultElement.textContent = error.message;
+      resultElement.className = 'bdt-template-result bdt-err';
+    }
+    if (panel?.isConnected) _recordRawResult(panel, 'Templates', 'Render failed', { error: error.message });
+    return false;
+  }
+}
+
 function _destroyPanel(panel) {
   if (!panel) return;
   if (typeof panel._bdtCleanup === 'function') panel._bdtCleanup();
   panel.remove();
+}
+
+const MAX_RAW_RESULT_LENGTH = 200000;
+
+function _resultInspector() {
+  return `
+    <details class="bdt-result-inspector">
+      <summary class="bdt-result-summary">
+        <span>Result inspector</span>
+        <span class="bdt-result-context">No results yet</span>
+      </summary>
+      <div class="bdt-result-tools">
+        <input class="bdt-result-search" type="search" aria-label="Search raw developer tool result" placeholder="Search this result" autocomplete="off" spellcheck="false">
+        <button class="bdt-btn-ghost bdt-result-copy" type="button" title="Copy raw result" aria-label="Copy raw result" disabled>
+          <span class="ui-icon material-icons bdt-toolbar-icon" aria-hidden="true">content_copy</span>
+        </button>
+      </div>
+      <pre class="bdt-result-raw" tabindex="0">Run a developer tool to inspect its raw response.</pre>
+      <div class="bdt-result-empty" hidden>No lines match this search.</div>
+    </details>
+  `;
+}
+
+function _initResultInspector(panel) {
+  const inspector = panel.querySelector('.bdt-result-inspector');
+  const search = inspector.querySelector('.bdt-result-search');
+  const copy = inspector.querySelector('.bdt-result-copy');
+  const raw = inspector.querySelector('.bdt-result-raw');
+  const empty = inspector.querySelector('.bdt-result-empty');
+  panel._bdtResultState = { text: '', source: '', summary: '' };
+
+  const render = () => {
+    const fullText = panel._bdtResultState.text;
+    const query = search.value.trim().toLowerCase();
+    const visibleText = query
+      ? fullText.split('\n').filter(line => line.toLowerCase().includes(query)).join('\n')
+      : fullText;
+    raw.textContent = visibleText || (fullText ? '' : 'Run a developer tool to inspect its raw response.');
+    empty.hidden = !fullText || Boolean(visibleText);
+  };
+
+  search.addEventListener('input', render);
+  copy.addEventListener('click', async () => {
+    if (!panel._bdtResultState.text) return;
+    await navigator.clipboard.writeText(panel._bdtResultState.text);
+    copy.title = 'Copied';
+    setTimeout(() => { copy.title = 'Copy raw result'; }, 1200);
+  });
+  panel._bdtRenderResult = render;
+}
+
+function _recordRawResult(panel, source, summary, value, { open = true } = {}) {
+  const inspector = panel.querySelector('.bdt-result-inspector');
+  if (!inspector) return;
+  let text;
+  try {
+    text = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+  } catch {
+    text = String(value);
+  }
+  text = text || '(empty response)';
+  if (text.length > MAX_RAW_RESULT_LENGTH) {
+    text = `${text.slice(0, MAX_RAW_RESULT_LENGTH)}\n\n[Result truncated at ${MAX_RAW_RESULT_LENGTH.toLocaleString()} characters]`;
+  }
+  panel._bdtResultState = { text, source, summary };
+  panel.querySelector('.bdt-result-context').textContent = `${source}: ${summary}`;
+  panel.querySelector('.bdt-result-copy').disabled = false;
+  panel.querySelector('.bdt-result-search').value = '';
+  panel._bdtRenderResult?.();
+  if (open) inspector.open = true;
 }
 
 // ── Actions pane ──────────────────────────────────────────────────────────────
@@ -200,8 +424,8 @@ function _initActions(panel) {
     if (allServices.length) return allServices;
     if (HA_SERVICES.length) { allServices = HA_SERVICES; return allServices; }
     try {
-      const d = await fetchWithAuth(`${API_BASE}?action=get_services`);
-      allServices = d.services || [];
+      const d = await fetchWithAuth(`${API_BASE}?action=get_metadata`);
+      allServices = d.actions || [];
     } catch { allServices = []; }
     return allServices;
   }
@@ -419,7 +643,10 @@ function _initActions(panel) {
     const formData = _collectFormData();
     const target = {};
     if (formData.entity_id) { target.entity_id = formData.entity_id; delete formData.entity_id; }
-    await _callAction(domain, service, formData, target, performBtn, actionResult, 'Perform action');
+    await runDeveloperAction(
+      { domain, service, serviceData: formData, target },
+      { button: performBtn, resultElement: actionResult, panel, buttonLabel: 'Perform action' },
+    );
   });
 
   // ── Perform (YAML mode) ──
@@ -437,33 +664,11 @@ function _initActions(panel) {
     if (!action) { _showResult(yamlResult, false, 'Missing "action:" field'); return; }
     const [domain, service] = action.split('.');
     if (!domain || !service) { _showResult(yamlResult, false, 'Action must be in domain.service format'); return; }
-    await _callAction(domain, service, data, target, yamlPerformBtn, yamlResult, 'Perform action');
+    await runDeveloperAction(
+      { domain, service, serviceData: data, target },
+      { button: yamlPerformBtn, resultElement: yamlResult, panel, buttonLabel: 'Perform action' },
+    );
   });
-
-  async function _callAction(domain, service, serviceData, target, btn, resultEl, label) {
-    btn.disabled = true;
-    btn.innerHTML = `<span class="ui-icon material-icons bdt-button-icon">hourglass_empty</span> Calling…`;
-    resultEl.style.display = 'none';
-    try {
-      const d = await fetchWithAuth(API_BASE, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'call_service', domain, service, service_data: serviceData, target }),
-      });
-      _showResult(resultEl, d.success, d.success ? 'Action performed successfully' : (d.error || 'Unknown error'));
-    } catch (e) {
-      _showResult(resultEl, false, e.message);
-    } finally {
-      btn.disabled = false;
-      btn.innerHTML = `<span class="ui-icon material-icons bdt-button-icon">play_arrow</span> ${label}`;
-    }
-  }
-
-  function _showResult(el, ok, msg) {
-    el.textContent = ok ? `✓ ${msg}` : `✗ ${msg}`;
-    el.className = `bdt-action-result ${ok ? 'bdt-ok' : 'bdt-err'}`;
-    el.style.display = 'block';
-  }
 }
 
 // ── Template pane ─────────────────────────────────────────────────────────────
@@ -497,33 +702,20 @@ function _initTemplate(panel) {
   const clearBtn = pane.querySelector('.bdt-clear-btn');
   let timer = null;
 
-  async function render() {
+  async function render(observable = false) {
     const tmpl = input.value.trim();
     if (!tmpl) { result.textContent = '— output appears here —'; result.className = 'bdt-template-result bdt-placeholder'; return; }
-    result.className = 'bdt-template-result bdt-loading';
-    result.textContent = 'Rendering…';
-    try {
-      const data = await fetchWithAuth(API_BASE, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'render_template', template: tmpl }),
-      });
-      result.textContent = data.success ? data.result : (data.error || 'Unknown error');
-      result.className = `bdt-template-result ${data.success ? 'bdt-ok' : 'bdt-err'}`;
-    } catch (e) {
-      result.textContent = e.message;
-      result.className = 'bdt-template-result bdt-err';
-    }
+    await renderDeveloperTemplate(tmpl, { resultElement: result, panel, observable });
   }
 
-  input.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(render, 600); });
-  renderBtn.addEventListener('click', render);
+  input.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(() => render(false), 600); });
+  renderBtn.addEventListener('click', () => render(true));
   clearBtn.addEventListener('click', () => {
     input.value = '';
     result.textContent = '— output appears here —';
     result.className = 'bdt-template-result bdt-placeholder';
   });
-  input.addEventListener('keydown', e => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); render(); } });
+  input.addEventListener('keydown', e => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); render(true); } });
 }
 
 // ── States pane ───────────────────────────────────────────────────────────────
@@ -556,20 +748,39 @@ function _initStates(panel) {
   const refreshBtn = pane.querySelector('.bdt-states-refresh');
   let allEntities = [];
 
-  async function load() {
+  async function load(observable = false) {
+    const operation = observable ? startOperationFeedback({
+      label: 'Refresh Home Assistant states',
+      icon: 'refresh',
+      message: 'Loading entity states and attributes...',
+      scope: 'Home Assistant instance',
+      target: 'Entity state registry',
+      retry: () => {
+        _revealDevTools('states');
+        queueMicrotask(() => document.querySelector(`#${PANEL_ID} .bdt-states-refresh`)?.click());
+      },
+      open: () => _revealDevTools('states'),
+      openLabel: 'Developer Tools',
+      openIcon: 'construction',
+    }) : null;
     tbody.innerHTML = '<tr><td colspan="3" class="bdt-states-loading">Loading…</td></tr>';
     try {
       const data = await fetchWithAuth(API_BASE, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'get_entities', with_attributes: true }),
       });
+      if (data?.success === false) throw new Error(responseFailure(data, 'State loading was rejected'));
       allEntities = data.entities || [];
+      operation?.finish(`${allEntities.length} entity state${allEntities.length === 1 ? '' : 's'} loaded`);
+      _recordRawResult(panel, 'States', `${allEntities.length} entities loaded`, data, { open: false });
       const domains = [...new Set(allEntities.map(e => e.entity_id.split('.')[0]))].sort();
       domainFilter.innerHTML = '<option value="">All domains</option>' +
         domains.map(d => `<option value="${_esc(d)}">${_esc(d)}</option>`).join('');
       render();
     } catch (e) {
+      operation?.fail('Home Assistant states could not be loaded', e.message);
       tbody.innerHTML = `<tr><td colspan="3" class="bdt-states-loading">Error: ${_esc(e.message)}</td></tr>`;
+      _recordRawResult(panel, 'States', 'Load failed', { error: e.message });
     }
   }
 
@@ -637,17 +848,17 @@ function _initStates(panel) {
 
   searchInput.addEventListener('input', render);
   domainFilter.addEventListener('change', render);
-  refreshBtn.addEventListener('click', () => { allEntities = []; load(); });
+  refreshBtn.addEventListener('click', () => { allEntities = []; load(true); });
 
   const observer = new MutationObserver(() => {
-    if (pane.classList.contains('active') && allEntities.length === 0) load();
+    if (pane.classList.contains('active') && allEntities.length === 0) load(false);
   });
   observer.observe(pane, { attributes: true, attributeFilter: ['class'] });
-  if (pane.classList.contains('active') && allEntities.length === 0) load();
+  if (pane.classList.contains('active') && allEntities.length === 0) load(false);
   return () => observer.disconnect();
 }
 
-// ── Config pane ───────────────────────────────────────────────────────────────
+// ── Configuration and reload panes ───────────────────────────────────────────
 
 const RELOAD_ITEMS = [
   { domain: 'core',           label: 'All YAML configuration',     icon: 'refresh' },
@@ -682,29 +893,31 @@ function _configPane() {
         </button>
         <div class="bdt-check-result" style="display:none;"></div>
         <div class="bdt-check-errors" style="display:none;"></div>
-        <details class="bdt-check-raw-wrap" style="display:none;">
-          <summary class="bdt-check-raw-toggle">Raw output</summary>
-          <pre class="bdt-check-raw"></pre>
-        </details>
       </div>
 
-      <!-- YAML reloads -->
+    </div>
+  `;
+}
+
+function _reloadPane() {
+  return `
+    <div class="bdt-config-wrap">
       <div class="bdt-config-section">
         <div class="bdt-config-section-title">
           <span class="ui-icon material-icons bdt-section-icon">cached</span>
           Reload YAML configuration
         </div>
+        <p class="bdt-section-description">Apply YAML changes without restarting the Home Assistant instance.</p>
         <div class="bdt-reload-grid">
           ${RELOAD_ITEMS.map(item => `
-            <button class="bdt-reload-btn" data-domain="${_esc(item.domain)}" title="Reload ${_esc(item.label)}">
-              <span class="ui-icon material-icons bdt-reload-icon">${_esc(item.icon)}</span>
+            <button class="bdt-reload-btn" type="button" data-domain="${_esc(item.domain)}" title="Reload ${_esc(item.label)}">
+              <span class="ui-icon material-icons bdt-reload-icon" aria-hidden="true">${_esc(item.icon)}</span>
               <span class="bdt-reload-label">${_esc(item.label)}</span>
-              <span class="bdt-reload-status"></span>
+              <span class="bdt-reload-status" aria-live="polite"></span>
             </button>
           `).join('')}
         </div>
       </div>
-
     </div>
   `;
 }
@@ -714,24 +927,45 @@ function _initConfig(panel) {
 
   // ── Config check ──
   const checkBtn = pane.querySelector('.bdt-run-check-btn');
-  const checkResult = pane.querySelector('.bdt-check-result');
-  const checkErrors = pane.querySelector('.bdt-check-errors');
-  const checkRawWrap = pane.querySelector('.bdt-check-raw-wrap');
-  const checkRaw = pane.querySelector('.bdt-check-raw');
 
-  checkBtn.addEventListener('click', async () => {
+  checkBtn.addEventListener('click', () => _runConfigurationCheck(panel));
+}
+
+async function _runConfigurationCheck(panel = null) {
+  const pane = panel?.isConnected ? panel.querySelector('[data-pane="config"]') : null;
+  const checkBtn = pane?.querySelector('.bdt-run-check-btn');
+  const checkResult = pane?.querySelector('.bdt-check-result');
+  const checkErrors = pane?.querySelector('.bdt-check-errors');
+  const operation = startOperationFeedback({
+    label: 'Check Home Assistant configuration',
+    icon: 'fact_check',
+    scope: 'Home Assistant instance',
+    target: 'YAML configuration',
+    message: 'Checking configuration...',
+    retry: () => _runConfigurationCheck(),
+    open: () => _revealDevTools('config'),
+    openLabel: 'Open',
+    openIcon: 'construction',
+  });
+
+  if (checkBtn && checkResult && checkErrors) {
     checkBtn.disabled = true;
     checkBtn.innerHTML = `<span class="ui-icon material-icons bdt-button-icon">hourglass_empty</span> Checking…`;
     checkResult.style.display = 'none';
     checkErrors.style.display = 'none';
-    checkRawWrap.style.display = 'none';
+  }
 
-    try {
-      const data = await fetchWithAuth(`${API_BASE}?action=run_config_check`);
-      const result = data.result || {};
-      const ok = result.success;
-      const errors = result.errors || [];
+  try {
+    const data = await fetchWithAuth(`${API_BASE}?action=run_config_check`);
+    const result = data.result || {};
+    const ok = result.success;
+    const errors = result.errors || [];
+    const errorDetail = errors.map(error => {
+      const location = error.file ? `${error.file}${error.line ? `:${error.line}` : ''}: ` : '';
+      return `${location}${error.message || 'Unknown configuration error'}`;
+    }).join('\n');
 
+    if (checkResult && checkErrors) {
       checkResult.textContent = ok
         ? '✓ Configuration is valid'
         : `✗ ${errors.length} error${errors.length !== 1 ? 's' : ''} found`;
@@ -745,48 +979,104 @@ function _initConfig(panel) {
         }).join('');
         checkErrors.style.display = 'block';
       }
+    }
 
-      if (result.output) {
-        checkRaw.textContent = result.output;
-        checkRawWrap.style.display = 'block';
-      }
-    } catch (e) {
+    if (panel?.isConnected) {
+      _recordRawResult(panel, 'Configuration', ok ? 'Configuration valid' : 'Configuration invalid', data);
+    }
+    if (ok) {
+      operation.finish('Configuration is valid');
+    } else {
+      operation.fail(
+        errors.length
+          ? `${errors.length} configuration error${errors.length !== 1 ? 's' : ''} found`
+          : 'Configuration check did not pass',
+        errorDetail || result.output || data.message || 'Home Assistant reported an invalid configuration',
+      );
+    }
+  } catch (e) {
+    if (checkResult) {
       checkResult.textContent = `✗ Error: ${e.message}`;
       checkResult.className = 'bdt-check-result bdt-err';
       checkResult.style.display = 'block';
-    } finally {
+    }
+    if (panel?.isConnected) {
+      _recordRawResult(panel, 'Configuration', 'Check failed', { error: e.message });
+    }
+    operation.fail('Configuration check failed', e.message);
+  } finally {
+    if (checkBtn) {
       checkBtn.disabled = false;
       checkBtn.innerHTML = `<span class="ui-icon material-icons bdt-button-icon">play_arrow</span> Check configuration`;
     }
+  }
+}
+
+function _initReload(panel) {
+  const pane = panel.querySelector('[data-pane="reload"]');
+  pane.querySelectorAll('.bdt-reload-btn').forEach(btn => {
+    btn.addEventListener('click', () => _runYamlReload(btn.dataset.domain, panel));
+  });
+}
+
+async function _runYamlReload(domain, panel = null) {
+  const item = RELOAD_ITEMS.find(candidate => candidate.domain === domain);
+  const label = item?.label || domain;
+  const pane = panel?.isConnected ? panel.querySelector('[data-pane="reload"]') : null;
+  const btn = pane?.querySelector(`.bdt-reload-btn[data-domain="${domain}"]`);
+  const status = btn?.querySelector('.bdt-reload-status');
+  const operation = startOperationFeedback({
+    label: `Reload ${label}`,
+    icon: item?.icon || 'cached',
+    scope: 'Home Assistant instance',
+    target: label,
+    message: 'Applying YAML configuration...',
+    retry: () => _runYamlReload(domain),
+    open: () => _revealDevTools('reload'),
+    openLabel: 'Open',
+    openIcon: 'construction',
   });
 
-  // ── Reload buttons ──
-  pane.querySelectorAll('.bdt-reload-btn').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const domain = btn.dataset.domain;
-      const status = btn.querySelector('.bdt-reload-status');
-      btn.disabled = true;
-      status.textContent = '…';
-      status.className = 'bdt-reload-status bdt-loading';
-      try {
-        const data = await fetchWithAuth(API_BASE, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'reload_yaml', domain }),
-        });
-        status.textContent = data.success ? '✓' : '✗';
-        status.className = `bdt-reload-status ${data.success ? 'bdt-ok' : 'bdt-err'}`;
-        status.title = data.message || '';
-      } catch (e) {
-        status.textContent = '✗';
-        status.className = 'bdt-reload-status bdt-err';
-        status.title = e.message;
-      } finally {
-        btn.disabled = false;
-        setTimeout(() => { status.textContent = ''; status.className = 'bdt-reload-status'; status.title = ''; }, 4000);
-      }
+  if (btn && status) {
+    btn.disabled = true;
+    status.textContent = '…';
+    status.className = 'bdt-reload-status bdt-loading';
+  }
+  try {
+    const data = await fetchWithAuth(API_BASE, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'reload_yaml', domain }),
     });
-  });
+    if (status) {
+      status.textContent = data.success ? '✓' : '✗';
+      status.className = `bdt-reload-status ${data.success ? 'bdt-ok' : 'bdt-err'}`;
+      status.title = data.message || '';
+    }
+    if (panel?.isConnected) {
+      _recordRawResult(panel, 'Reload', `${domain} ${data.success ? 'reloaded' : 'failed'}`, data);
+    }
+    if (data.success) operation.finish(`${label} reloaded`);
+    else operation.fail(`${label} reload failed`, data.message || 'Home Assistant rejected the reload');
+  } catch (e) {
+    if (status) {
+      status.textContent = '✗';
+      status.className = 'bdt-reload-status bdt-err';
+      status.title = e.message;
+    }
+    if (panel?.isConnected) {
+      _recordRawResult(panel, 'Reload', `${domain} failed`, { error: e.message });
+    }
+    operation.fail(`${label} reload failed`, e.message);
+  } finally {
+    if (btn) btn.disabled = false;
+    setTimeout(() => {
+      if (!status?.isConnected) return;
+      status.textContent = '';
+      status.className = 'bdt-reload-status';
+      status.title = '';
+    }, 4000);
+  }
 }
 
 // ── Draggable ─────────────────────────────────────────────────────────────────
@@ -795,6 +1085,7 @@ function _makeDraggable(panel) {
   const header = panel.querySelector('.bdt-header');
   let startX, startY, origX, origY;
   header.addEventListener('mousedown', e => {
+    if (document.body.dataset.workspaceMode === 'phone') return;
     if (e.target.closest('.bdt-close, .bdt-tab-btn, .bdt-mode-toggle')) return;
     const rect = panel.getBoundingClientRect();
     panel.style.bottom = 'auto'; panel.style.right = 'auto';

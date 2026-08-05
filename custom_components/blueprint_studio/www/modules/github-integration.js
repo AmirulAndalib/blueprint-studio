@@ -1,14 +1,14 @@
 /** GITHUB-INTEGRATION.JS | Purpose: * Handles GitHub-specific operations: OAuth authentication, repository creation, */
 
 import { state, elements, gitState } from './state.js';
-import { fetchWithAuth } from './api.js';
+import { fetchWithAuth } from './api.js?v=2.5.188';
 import { API_BASE } from './constants.js';
+import { eventBus } from './event-bus.js';
 import {
   activateSharedModal,
   deactivateSharedModal,
   showToast,
-  showGlobalLoading,
-  hideGlobalLoading,
+  setButtonLoading,
   resetModalToDefault,
   showConfirmDialog,
   showModal
@@ -23,6 +23,8 @@ import {
   gitGetRemotes,
   gitCleanLocks
 } from './git-operations.js';
+import { startOperationFeedback } from './feedback-service.js?v=2.5.188';
+import { getGitActionConfirmation } from './git-action-confirmation.js?v=2.5.188';
 
 // ============================================
 // Module-level Variables
@@ -30,26 +32,103 @@ import {
 
 // GitHub OAuth device flow polling timer
 let activePollTimer = null;
+let cancelActiveDeviceFlow = null;
+
+function escapeMarkup(value = "") {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function remoteEndpointLabel(url, fallback = 'remote endpoint') {
+  try {
+    const parsed = new URL(String(url));
+    return `${parsed.host}${parsed.pathname}`.replace(/\/$/, '') || fallback;
+  } catch (_error) {
+    const sshMatch = String(url || '').match(/^[^@\s]+@([^:\s]+):(.+)$/);
+    return sshMatch ? `${sshMatch[1]}/${sshMatch[2]}` : fallback;
+  }
+}
 
 // ============================================
 // GitHub Remote Operations
 // ============================================
 
 export async function gitAddRemote(name, url) {
+  const request = Object.freeze({ name: String(name || 'origin'), url: String(url || '') });
+  const operation = startOperationFeedback({
+    label: `Configure ${request.name} remote`,
+    icon: 'cloud_sync',
+    message: 'Saving GitHub remote...',
+    scope: 'Local Git repository',
+    target: `${request.name} -> ${remoteEndpointLabel(request.url, 'GitHub')}`,
+    retry: () => gitAddRemote(request.name, request.url),
+    openLabel: 'Source Control',
+    openIcon: 'account_tree',
+    open: () => eventBus.emit('ui:switch-sidebar-view', 'source-control'),
+  });
   try {
-    showToast(t("toast.git_push_started"), "info");
     const data = await fetchWithAuth(API_BASE, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "git_add_remote", name, url }),
+      body: JSON.stringify({ action: "git_add_remote", name: request.name, url: request.url }),
     });
 
     if (data.success) {
+      operation.finish(`${request.name} remote configured`);
       showToast(data.message, "success");
+      await gitStatus(false, true);
       return true;
     }
+    const message = data.message || data.error || 'Remote configuration failed';
+    operation.fail(`Could not configure ${request.name} remote`, message);
+    showToast(t("toast.github_error", { error: message }), "error");
+    return false;
   } catch (error) {
-    showToast(t("toast.gitea_error", { error: error.message }), "error");
+    operation.fail(`Could not configure ${request.name} remote`, error.message);
+    showToast(t("toast.github_error", { error: error.message }), "error");
+    return false;
+  }
+}
+
+export async function gitRemoveRemote(name) {
+  const remoteName = String(name || 'origin');
+  const confirmed = await showConfirmDialog({
+    title: 'Remove Remote?',
+    message: `Remove the local remote '${escapeMarkup(remoteName)}'? Remote repositories and branches are not deleted.`,
+    confirmText: 'Remove Remote',
+    cancelText: 'Cancel',
+    isDanger: true,
+  });
+  if (!confirmed) return false;
+  const operation = startOperationFeedback({
+    label: `Remove ${remoteName} remote`,
+    icon: 'link_off',
+    message: 'Removing local remote...',
+    scope: 'Local Git repository',
+    target: remoteName,
+    retry: () => gitRemoveRemote(remoteName),
+    openLabel: 'Source Control',
+    openIcon: 'account_tree',
+    open: () => eventBus.emit('ui:switch-sidebar-view', 'source-control'),
+  });
+  try {
+    const data = await fetchWithAuth(API_BASE, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'git_remove_remote', name: remoteName }),
+    });
+    if (!data.success) throw new Error(data.message || data.error || 'Remote removal failed');
+    operation.finish(`${remoteName} remote removed`);
+    showToast(data.message, 'success');
+    await gitStatus(false, true);
+    return true;
+  } catch (error) {
+    operation.fail(`Could not remove ${remoteName} remote`, error.message);
+    showToast(t("toast.remove_remote_error", { error: error.message }), 'error');
     return false;
   }
 }
@@ -59,6 +138,24 @@ export async function gitAddRemote(name, url) {
 // ============================================
 
 export async function githubCreateRepo(repoName, description, isPrivate) {
+  const request = Object.freeze({
+    repoName: String(repoName || '').trim(),
+    description: String(description || ''),
+    isPrivate: Boolean(isPrivate),
+  });
+  const visibility = request.isPrivate ? 'Private' : 'Public';
+  const operation = startOperationFeedback({
+    label: 'Create GitHub repository',
+    icon: 'add_circle',
+    message: 'Creating remote repository...',
+    scope: 'GitHub account',
+    target: `${request.repoName} (${visibility})`,
+    retry: () => githubCreateRepo(request.repoName, request.description, request.isPrivate),
+    openLabel: 'Source Control',
+    openIcon: 'account_tree',
+    open: () => eventBus.emit('ui:switch-sidebar-view', 'source-control'),
+  });
+
   try {
     showToast(t("toast.github_creating_repo"), "info");
     const data = await fetchWithAuth(API_BASE, {
@@ -66,20 +163,21 @@ export async function githubCreateRepo(repoName, description, isPrivate) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         action: "github_create_repo",
-        repo_name: repoName,
-        description: description,
-        is_private: isPrivate
+        repo_name: request.repoName,
+        description: request.description,
+        is_private: request.isPrivate
       }),
     });
 
     if (data.success) {
+      operation.finish('Repository created');
       showToast(data.message, "success");
 
       // Show link to new repo
       if (data.html_url) {
         setTimeout(() => {
           showToast(
-            t("gitea.view_repo", { url: data.html_url }),
+            t("github.view_repo", { url: data.html_url }),
             "success",
             10000  // Show for 10 seconds
           );
@@ -88,11 +186,14 @@ export async function githubCreateRepo(repoName, description, isPrivate) {
 
       return data;
     } else {
-      showToast(t("toast.gitea_create_repo_failed", { error: data.message || "Unknown error" }), "error");
+      const message = data.message || data.error || "Unknown error";
+      operation.fail('Repository creation failed', message);
+      showToast(t("toast.github_create_repo_failed", { error: message }), "error");
       return null;
     }
   } catch (error) {
-    showToast(t("toast.gitea_create_repo_failed", { error: error.message }), "error");
+    operation.fail('Repository creation failed', error.message);
+    showToast(t("toast.github_create_repo_failed", { error: error.message }), "error");
     return null;
   }
 }
@@ -102,53 +203,91 @@ export async function githubCreateRepo(repoName, description, isPrivate) {
 // ============================================
 
 export async function repairBranchMismatch() {
-  const confirmed = await showConfirmDialog({
-    title: "Repair Branch Mismatch",
-    message: `
-      <p>This will perform the following actions:</p>
-      <ul style="margin: 10px 0 10px 20px; font-size: 13px;">
-        <li>Rename your local <b>master</b> branch to <b>main</b></li>
-        <li>Synchronize histories with GitHub</li>
-        <li>Set up <b>main</b> as your primary tracking branch</li>
-      </ul>
-      <p>This is recommended for better compatibility with GitHub.</p>
-    `,
-    confirmText: "Repair Now",
-    cancelText: "Not Now"
+  return confirmBranchMismatchRepair(0);
+}
+
+async function confirmBranchMismatchRepair(startStep = 0) {
+  const confirmed = await showConfirmDialog(getGitActionConfirmation('repair-branch-mismatch', {
+    provider: 'GitHub',
+    resumeStep: startStep,
+  }));
+
+  if (!confirmed) return false;
+
+  let resumeStep = startStep;
+  const completedSteps = [];
+  const steps = [
+    {
+      action: 'git_abort',
+      running: 'Clearing merge or rebase state...',
+      complete: 'Merge or rebase state cleared',
+    },
+    {
+      action: 'git_rename_branch',
+      request: { old_name: 'master', new_name: 'main' },
+      running: 'Renaming master to main...',
+      complete: 'Local branch renamed to main',
+    },
+    {
+      action: 'git_merge_unrelated',
+      request: { remote: 'origin', branch: 'main' },
+      running: 'Merging origin/main into main...',
+      complete: 'GitHub history merged into main',
+    },
+  ];
+  const operation = startOperationFeedback({
+    label: 'Repair GitHub branch mismatch',
+    icon: 'account_tree',
+    message: steps[startStep]?.running || 'Preparing branch repair...',
+    scope: 'Local Git repository and GitHub',
+    target: 'master -> main; origin/main -> main',
+    retry: () => confirmBranchMismatchRepair(resumeStep),
+    openLabel: 'Source Control',
+    openIcon: 'account_tree',
+    open: () => eventBus.emit('ui:switch-sidebar-view', 'source-control'),
   });
 
-  if (!confirmed) return;
-
   try {
-    showGlobalLoading("Repairing branch structure...");
+    for (let index = startStep; index < steps.length; index += 1) {
+      const step = steps[index];
+      resumeStep = index;
+      operation.update({
+        message: step.running,
+        detail: `Step ${index + 1} of ${steps.length}`,
+        percent: Math.round((index / steps.length) * 100),
+      });
+      const data = await fetchWithAuth(API_BASE, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: step.action, ...(step.request || {}) }),
+      });
+      if (!data.success) {
+        throw new Error(data.message || data.error || `${step.complete} was rejected`);
+      }
+      completedSteps.push(step.complete);
+      resumeStep = index + 1;
+    }
 
-    // 1. Abort any stuck rebase first
-    await fetchWithAuth(API_BASE, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "git_abort" }),
+    operation.finish('Branch mismatch repaired', {
+      detail: 'Local main now includes origin/main',
+      percent: 100,
     });
-
-    // 2. Rename branch
-    await fetchWithAuth(API_BASE, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "git_rename_branch", old_name: "master", new_name: "main" }),
-    });
-
-    // 3. Merge unrelated histories from origin/main
-    await fetchWithAuth(API_BASE, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "git_merge_unrelated", remote: "origin", branch: "main" }),
-    });
-
-    hideGlobalLoading();
     showToast(t("toast.github_repair_success"), "success");
-    await gitStatus(true);
+    await gitStatus(true, true);
+    return true;
   } catch (e) {
-    hideGlobalLoading();
-    showToast(t("toast.github_repair_failed", { error: e.message }), "error");
+    const failedStep = steps[resumeStep];
+    const completed = completedSteps.length
+      ? `Completed during this attempt:\n- ${completedSteps.join('\n- ')}\n\nCompleted steps remain applied.`
+      : 'No repair steps completed during this attempt.';
+    operation.fail(
+      failedStep ? `Repair stopped at step ${resumeStep + 1} of ${steps.length}` : 'Branch repair incomplete',
+      `${e.message}\n\n${completed}`,
+      { detail: failedStep?.running.replace(/\.\.\.$/, '') || 'Refresh Source Control before retrying' },
+    );
+    showToast(t("toast.github_repair_failed", { error: e.message }), "error", 0);
+    await gitStatus(false, true);
+    return false;
   }
 }
 
@@ -157,8 +296,18 @@ export async function repairBranchMismatch() {
 // ============================================
 
 export async function gitTestConnection() {
+  const operation = startOperationFeedback({
+    label: 'Test GitHub connection',
+    icon: 'network_check',
+    message: 'Contacting GitHub remote...',
+    scope: 'GitHub remote',
+    target: 'origin',
+    retry: gitTestConnection,
+    openLabel: 'GitHub Settings',
+    openIcon: 'settings',
+    open: () => eventBus.emit('git:show-settings'),
+  });
   try {
-    showToast(t("toast.git_pull_started"), "info");
     const data = await fetchWithAuth(API_BASE, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -166,13 +315,17 @@ export async function gitTestConnection() {
     });
 
     if (data.success) {
+      operation.finish('GitHub connection verified');
       showToast(t("toast.git_conn_success"), "success");
       return true;
     } else {
-      showToast(t("toast.git_conn_failed") + ": " + (data.error || "Unknown error"), "error");
+      const message = data.message || data.error || "Unknown connection error";
+      operation.fail('GitHub connection failed', message);
+      showToast(t("toast.git_conn_failed") + ": " + message, "error");
       return false;
     }
   } catch (error) {
+    operation.fail('GitHub connection failed', error.message);
     showToast(t("toast.git_conn_failed") + ": " + error.message, "error");
     return false;
   }
@@ -183,8 +336,26 @@ export async function gitTestConnection() {
 // ============================================
 
 export async function gitClearCredentials() {
+  const confirmed = await showConfirmDialog({
+    title: 'Sign Out from GitHub?',
+    message: 'Saved GitHub credentials will be removed. Repository files, commits, and remotes are unchanged.',
+    confirmText: 'Sign Out',
+    cancelText: 'Cancel',
+    isDanger: true,
+  });
+  if (!confirmed) return false;
+  const operation = startOperationFeedback({
+    label: 'Sign out from GitHub',
+    icon: 'logout',
+    message: 'Removing saved GitHub credentials...',
+    scope: 'GitHub authentication',
+    target: 'Saved credentials',
+    retry: gitClearCredentials,
+    openLabel: 'GitHub Settings',
+    openIcon: 'settings',
+    open: () => eventBus.emit('git:show-settings'),
+  });
   try {
-    showToast(t("toast.git_signout"), "info");
     const data = await fetchWithAuth(API_BASE, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -192,14 +363,18 @@ export async function gitClearCredentials() {
     });
 
     if (data.success) {
+      operation.finish('Signed out from GitHub');
       showToast(t("toast.git_signout"), "success");
       return true;
     } else {
-      showToast(t("toast.gitea_error", { error: data.error || "Unknown error" }), "error");
+      const message = data.message || data.error || "Credential removal was rejected";
+      operation.fail('Could not sign out from GitHub', message);
+      showToast(t("toast.github_error", { error: message }), "error");
       return false;
     }
   } catch (error) {
-    showToast(t("toast.gitea_error", { error: error.message }), "error");
+    operation.fail('Could not sign out from GitHub', error.message);
+    showToast(t("toast.github_error", { error: error.message }), "error");
     return false;
   }
 }
@@ -251,26 +426,52 @@ export async function githubDeviceFlowPoll(clientId, deviceCode) {
 }
 
 export async function showGithubDeviceFlowLogin() {
-  return new Promise(async (resolve) => {
-    // Ensure any previous polling timer is stopped before starting a new one
-    if (activePollTimer) {
-      clearInterval(activePollTimer);
-      activePollTimer = null;
-    }
-    // Shared Blueprint Studio OAuth Client ID
-    const SHARED_CLIENT_ID = "Ov23liKHRfvPI4p0eN2f";
+  cancelActiveDeviceFlow?.();
+  if (activePollTimer) {
+    clearTimeout(activePollTimer);
+    activePollTimer = null;
+  }
 
-    const customClientId = localStorage.getItem("githubOAuthClientId") || "";
-    const finalClientId = customClientId || SHARED_CLIENT_ID;
+  // Shared Blueprint Studio OAuth Client ID
+  const SHARED_CLIENT_ID = "Ov23liKHRfvPI4p0eN2f";
+  const customClientId = localStorage.getItem("githubOAuthClientId") || "";
+  const finalClientId = customClientId || SHARED_CLIENT_ID;
+  let closeDeviceFlow = null;
+  const operation = startOperationFeedback({
+    label: 'Sign in to GitHub',
+    icon: 'verified_user',
+    message: 'Requesting a GitHub device authorization code...',
+    scope: 'GitHub account',
+    target: 'Device authorization',
+    retry: () => showGithubDeviceFlowLogin(),
+    runningActions: [{
+      label: 'Cancel',
+      icon: 'close',
+      callback: () => closeDeviceFlow?.(false),
+    }],
+    openLabel: 'Source Control',
+    openIcon: 'account_tree',
+    open: () => eventBus.emit('ui:switch-sidebar-view', 'source-control'),
+  });
 
-    showToast(t("toast.github_login_started"), "success");
-    const flowData = await githubDeviceFlowStart(finalClientId);
+  showToast(t("toast.github_login_started"), "success");
+  const flowData = await githubDeviceFlowStart(finalClientId);
 
-    if (!flowData.success) {
-      showToast(t("toast.gitea_error", { error: flowData.error || "Unknown error" }), "error");
-      resolve(false);
-      return;
-    }
+  if (!flowData.success) {
+    const message = flowData.error || "Unknown error";
+    operation.fail('Could not start GitHub sign-in', message);
+    showToast(t("toast.github_error", { error: message }), "error");
+    return false;
+  }
+  let verificationUri = 'https://github.com/login/device';
+  try {
+    const candidate = new URL(flowData.verificationUri);
+    if (candidate.protocol === 'https:') verificationUri = candidate.href;
+  } catch (_error) {
+    // Keep the trusted GitHub fallback when the provider response is malformed.
+  }
+
+  return new Promise(resolve => {
 
     // Show device code modal
     const modalOverlay = document.getElementById("modal-overlay");
@@ -289,13 +490,13 @@ export async function showGithubDeviceFlowLogin() {
         <h3>${t("github.auth_title")}</h3>
         <p>${t("auth.step1")}</p>
         <div style="background: #f5f5f5; padding: 15px; border-radius: 8px; margin: 15px 0;">
-          <a href="${flowData.verificationUri}" target="_blank" style="color: #2196f3; font-size: 18px; text-decoration: none;">
-            ${flowData.verificationUri}
+          <a href="${escapeMarkup(verificationUri)}" target="_blank" rel="noopener noreferrer" style="color: #2196f3; font-size: 18px; text-decoration: none;">
+            ${escapeMarkup(verificationUri)}
           </a>
         </div>
         <p>${t("auth.step6")}</p>
         <div style="background: #2196f3; color: white; padding: 20px; border-radius: 8px; margin: 15px 0; font-size: 32px; font-weight: bold; letter-spacing: 5px;">
-          ${flowData.userCode}
+          ${escapeMarkup(flowData.userCode)}
         </div>
         <div id="device-flow-status" style="margin-top: 20px; color: #666;">
           <span class="integration-sync-icon ui-icon material-icons">sync</span>
@@ -315,71 +516,108 @@ export async function showGithubDeviceFlowLogin() {
       modalFooter.style.display = "none";
     }
 
+    let closed = false;
+    let pollInterval = Math.max((flowData.interval || 5) * 1000, 5000);
+    const maxPolls = Math.floor(flowData.expiresIn / (pollInterval / 1000)) || 180;
+    let pollCount = 0;
+
     // Function to clean up and close
-    const closeDeviceFlow = (result) => {
+    closeDeviceFlow = (result, { cancelled = true, cancelMessage = 'GitHub authorization polling stopped.' } = {}) => {
+      if (closed) return;
+      closed = true;
       if (activePollTimer) {
         clearTimeout(activePollTimer);
         activePollTimer = null;
       }
+      if (cancelActiveDeviceFlow === closeDeviceFlow) cancelActiveDeviceFlow = null;
       deactivateSharedModal();
       resetModalToDefault();
       modalOverlay.removeEventListener("click", overlayClickHandler);
+      if (cancelled) operation.cancel(cancelMessage);
       resolve(result);
     };
+    cancelActiveDeviceFlow = closeDeviceFlow;
+    operation.update({
+      message: 'Waiting for GitHub authorization...',
+      detail: `Code ${flowData.userCode}`,
+    });
 
-    // Start polling
-    let pollInterval = (flowData.interval || 5) * 1000;
-    if (pollInterval < 5000) pollInterval = 5000; // Safety minimum
-    const maxPolls = Math.floor(flowData.expiresIn / (pollInterval / 1000)) || 180; // Default ~15 mins
-    let pollCount = 0;
+    const settleFailure = (message) => {
+      operation.fail('GitHub sign-in failed', message);
+      setTimeout(() => closeDeviceFlow(false, { cancelled: false }), 1000);
+    };
+
+    const setModalStatus = (icon, message, tone = '') => {
+      const statusDiv = document.getElementById("device-flow-status");
+      if (statusDiv) {
+        const statusIcon = document.createElement('span');
+        statusIcon.className = `ui-icon ${tone} material-icons`;
+        statusIcon.textContent = icon;
+        const statusMessage = document.createElement('p');
+        statusMessage.textContent = String(message || '');
+        statusDiv.replaceChildren(statusIcon, statusMessage);
+      }
+    };
+
+    const handlePollResult = (result) => {
+      if (closed) return true;
+      if (result.success && result.status === "authorized") {
+        setModalStatus('check_circle', t("toast.git_conn_success"), 'ui-icon--tone-success');
+        operation.finish('GitHub account connected', {
+          target: result.username || 'Authorized account',
+        });
+        showToast(t("toast.git_conn_success"), "success");
+        setTimeout(() => closeDeviceFlow(true, { cancelled: false }), 2000);
+        return true;
+      }
+      if (result.status === "expired") {
+        setModalStatus('error', t("toast.github_login_expired"), 'ui-icon--tone-error');
+        showToast(t("toast.github_login_expired"), "error");
+        settleFailure(result.message || t("toast.github_login_expired"));
+        return true;
+      }
+      if (result.status === "denied") {
+        setModalStatus('error', t("toast.github_login_denied"), 'ui-icon--tone-error');
+        showToast(t("toast.github_login_denied"), "error");
+        settleFailure(result.message || t("toast.github_login_denied"));
+        return true;
+      }
+      if (result.status === "pending" || result.status === "slow_down") {
+        if (result.status === "slow_down") pollInterval += 5000;
+        operation.update({
+          message: result.status === "slow_down" ? 'GitHub requested slower authorization checks...' : 'Waiting for GitHub authorization...',
+          detail: `Code ${flowData.userCode}`,
+        });
+        return false;
+      }
+      const message = result.message || "Unknown error";
+      setModalStatus('error', message, 'ui-icon--tone-error');
+      showToast(t("toast.github_error", { error: message }), "error");
+      settleFailure(message);
+      return true;
+    };
+
+    const schedulePoll = () => {
+      if (!closed) activePollTimer = setTimeout(pollLoop, pollInterval);
+    };
 
     const pollLoop = async () => {
+      if (closed) return;
       pollCount++;
 
       if (pollCount > maxPolls) {
-        const statusDiv = document.getElementById("device-flow-status");
-        if (statusDiv) {
-          statusDiv.innerHTML = `
-            <span class="ui-icon ui-icon--tone-error material-icons">error</span>
-            <p style="color: #f44336;">Login expired. Please try again.</p>
-          `;
-        }
+        setModalStatus('error', t("toast.github_login_expired"), 'ui-icon--tone-error');
         showToast(t("toast.github_login_expired"), "error");
-        setTimeout(() => closeDeviceFlow(false), 2000);
+        settleFailure(t("toast.github_login_expired"));
         return;
       }
 
       const result = await githubDeviceFlowPoll(finalClientId, flowData.deviceCode);
-
-      if (result.success && result.status === "authorized") {
-        const statusDiv = document.getElementById("device-flow-status");
-        if (statusDiv) {
-          statusDiv.innerHTML = `
-            <span class="ui-icon ui-icon--tone-success material-icons">check_circle</span>
-            <p style="color: #4caf50;">${t("toast.git_conn_success")}</p>
-          `;
-        }
-        showToast(t("toast.git_conn_success"), "success");
-        setTimeout(() => closeDeviceFlow(true), 2000);
-      } else if (result.status === "expired") {
-        showToast(t("toast.github_login_expired"), "error");
-        setTimeout(() => closeDeviceFlow(false), 1000);
-      } else if (result.status === "denied") {
-        showToast(t("toast.github_login_denied"), "error");
-        setTimeout(() => closeDeviceFlow(false), 1000);
-      } else {
-        // Pending or slow_down
-        if (result.status === "slow_down") {
-          // Increase interval by 5 seconds if asked to slow down
-          pollInterval += 5000;
-        }
-        // Continue polling
-        activePollTimer = setTimeout(pollLoop, pollInterval);
-      }
+      if (!handlePollResult(result)) schedulePoll();
     };
 
     // Start the loop
-    activePollTimer = setTimeout(pollLoop, pollInterval);
+    schedulePoll();
 
     const overlayClickHandler = (e) => {
       if (e.target === modalOverlay) {
@@ -415,32 +653,7 @@ export async function showGithubDeviceFlowLogin() {
         const result = await githubDeviceFlowPoll(finalClientId, flowData.deviceCode);
 
         if (btnIcon) btnIcon.classList.remove('spinning');
-
-                if (result.success && result.status === "authorized") {
-                  const statusDiv = document.getElementById("device-flow-status");
-                  if (statusDiv) {
-                    statusDiv.innerHTML = `
-                      <span class="ui-icon ui-icon--tone-success material-icons">check_circle</span>
-                      <p style="color: #4caf50;">${t("toast.git_conn_success")}</p>
-                    `;
-                  }
-                  showToast(t("toast.git_conn_success"), "success");
-                  setTimeout(() => closeDeviceFlow(true), 2000);
-                } else if (result.status === "pending") {
-                  if (statusDiv) statusDiv.querySelector('p').textContent = t("toast.github_waiting");
-                  showToast(t("toast.github_waiting"), "info", 3000);
-                } else if (result.status === "slow_down") {
-                  if (statusDiv) statusDiv.querySelector('p').textContent = t("toast.github_slow_down");
-                  showToast(t("toast.github_slow_down"), "warning", 3000);
-                } else if (result.status === "expired") {
-                  showToast(t("toast.github_login_expired"), "error");
-                  setTimeout(() => closeDeviceFlow(false), 1000);
-                } else if (result.status === "denied") {
-                  showToast(t("toast.github_login_denied"), "error");
-                  setTimeout(() => closeDeviceFlow(false), 1000);
-                } else {
-                  showToast(t("toast.gitea_error", { error: result.message || "Unknown error" }), "error");
-                }
+        if (!handlePollResult(result)) schedulePoll();
         btnCheckAuthNow.disabled = false;
         if (btnTextSpan) btnTextSpan.textContent = "Check Now";
       });
@@ -452,12 +665,86 @@ export async function showGithubDeviceFlowLogin() {
 // Git Exclusions Management
 // ============================================
 
+export async function saveGitExclusions(content, ignoredPaths = []) {
+  const request = Object.freeze({
+    content: String(content ?? ''),
+    ignoredPaths: Object.freeze(Array.from(new Set(ignoredPaths.filter(Boolean))).sort()),
+  });
+  let gitignoreSaved = false;
+  const operation = startOperationFeedback({
+    label: 'Save Git exclusions',
+    icon: 'filter_alt',
+    message: 'Writing .gitignore...',
+    scope: 'Local Git repository',
+    target: `.gitignore; ${request.ignoredPaths.length} ${request.ignoredPaths.length === 1 ? 'path' : 'paths'} to untrack`,
+    retry: () => saveGitExclusions(request.content, request.ignoredPaths),
+    openLabel: 'Source Control',
+    openIcon: 'account_tree',
+    open: () => eventBus.emit('ui:switch-sidebar-view', 'source-control'),
+  });
+
+  try {
+    operation.update({ message: 'Writing .gitignore...', detail: 'Step 1 of 2', percent: 20 });
+    const writeResponse = await fetchWithAuth(API_BASE, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'write_file', path: '.gitignore', content: request.content }),
+    });
+    if (!writeResponse.success) {
+      throw new Error(writeResponse.message || writeResponse.error || 'The .gitignore write was rejected');
+    }
+    gitignoreSaved = true;
+
+    if (request.ignoredPaths.length > 0) {
+      operation.update({ message: 'Removing ignored paths from the Git index...', detail: 'Step 2 of 2', percent: 65 });
+      const indexResponse = await fetchWithAuth(API_BASE, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'git_stop_tracking', files: request.ignoredPaths }),
+      });
+      if (!indexResponse.success) {
+        throw new Error(indexResponse.message || indexResponse.error || 'Git index update was rejected');
+      }
+    }
+
+    operation.finish('Git exclusions saved', {
+      detail: request.ignoredPaths.length
+        ? `${request.ignoredPaths.length} ${request.ignoredPaths.length === 1 ? 'path' : 'paths'} removed from tracking`
+        : 'No tracked paths required removal',
+      percent: 100,
+    });
+    showToast('Git exclusions saved', 'success');
+    await gitStatus(false, true);
+    return true;
+  } catch (error) {
+    operation.fail(gitignoreSaved ? '.gitignore saved; index update failed' : 'Could not save .gitignore', error.message, {
+      detail: gitignoreSaved
+        ? 'The exclusion file is already updated. Some paths may still be tracked until Retry succeeds.'
+        : 'No index update was attempted.',
+    });
+    showToast(`Failed to save Git exclusions: ${error.message}`, 'error');
+    if (gitignoreSaved) await gitStatus(false, true);
+    return false;
+  }
+}
+
 export async function showGitExclusions() {
   return new Promise(async (resolve) => {
-    showGlobalLoading("Loading file list...");
+    const loadOperation = startOperationFeedback({
+      label: 'Load Git exclusions',
+      icon: 'filter_alt',
+      message: 'Loading repository file list...',
+      scope: 'Local Git repository',
+      target: '.gitignore and workspace paths',
+      retry: showGitExclusions,
+      openLabel: 'Source Control',
+      openIcon: 'account_tree',
+      open: () => eventBus.emit('ui:switch-sidebar-view', 'source-control'),
+    });
 
     try {
       const items = await fetchWithAuth(`${API_BASE}?action=list_git_files`);
+      if (!Array.isArray(items)) throw new Error(items?.message || items?.error || 'Repository file list was rejected');
 
       // Build tree structure
       const tree = buildFileTree(items);
@@ -471,6 +758,7 @@ export async function showGitExclusions() {
       // 2. Fetch current .gitignore content
       let gitignoreContent = "";
       try {
+        loadOperation.update({ message: 'Loading current .gitignore...', detail: `${items.length} workspace entries loaded`, percent: 65 });
         const response = await fetchWithAuth(`${API_BASE}?action=read_file&path=.gitignore&_t=${Date.now()}`);
         if (response?.content !== undefined && !response.is_base64) {
           gitignoreContent = response.content;
@@ -478,8 +766,6 @@ export async function showGitExclusions() {
       } catch (e) {
         // It's okay if .gitignore doesn't exist yet
       }
-
-      hideGlobalLoading();
 
       // 3. Parse .gitignore to find what's currently ignored
       const ignoredLines = new Set(
@@ -878,36 +1164,12 @@ export async function showGitExclusions() {
 
         const newContent = newContentLines.join("\n").trim() + "\n";
 
-        showGlobalLoading("Saving .gitignore...");
-        const response = await fetchWithAuth(API_BASE, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "write_file", path: ".gitignore", content: newContent }),
-        });
-
-        if (response.success) {
-          if (optimizedIgnoreList.length > 0) {
-            showGlobalLoading("Updating git index...");
-            try {
-              await fetchWithAuth(API_BASE, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  action: "git_stop_tracking",
-                  files: optimizedIgnoreList
-                }),
-              });
-            } catch (e) {
-              console.error("Failed to stop tracking files:", e);
-            }
-          }
-
-          hideGlobalLoading();
+        setButtonLoading(btnConfirm, true);
+        const saved = await saveGitExclusions(newContent, optimizedIgnoreList);
+        setButtonLoading(btnConfirm, false);
+        if (saved) {
           deactivateSharedModal();
-          await gitStatus();
           cleanup(true);
-        } else {
-          hideGlobalLoading();
         }
       };
 
@@ -927,9 +1189,13 @@ export async function showGitExclusions() {
 
       btnConfirm.addEventListener("click", saveHandler);
       btnCancel.addEventListener("click", cancelHandler);
+      loadOperation.finish('Git exclusions ready', {
+        detail: `${items.length} workspace entries loaded`,
+        percent: 100,
+      });
 
     } catch (error) {
-      hideGlobalLoading();
+      loadOperation.fail('Could not load Git exclusions', error.message);
       showToast(t("toast.load_file_list_failed", { error: error.message }), "error");
       resolve(false);
     }
@@ -948,11 +1214,13 @@ export async function showGitSettings() {
   const credentialsData = await fetchWithAuth(API_BASE, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action: "git_get_credentials" }),
+    body: JSON.stringify({ action: "git_get_credentials", verify: true }),
   });
 
-  const savedUsername = credentialsData.has_credentials ? credentialsData.username : "";
+  const savedUsername = credentialsData.has_credentials ? escapeMarkup(credentialsData.username) : "";
   const hasCredentials = credentialsData.has_credentials;
+  const isAuthenticated = credentialsData.authenticated === true;
+  const authenticationUnavailable = credentialsData.auth_status === "unavailable";
 
   // Check if OAuth Client ID is saved
   const savedClientId = localStorage.getItem("githubOAuthClientId") || "";
@@ -987,15 +1255,26 @@ export async function showGitSettings() {
   }
 
   let credentialsStatusHtml = "";
-  if (hasCredentials) {
+  if (isAuthenticated) {
     credentialsStatusHtml = `
-      <div class="git-settings-info" style="color: #4caf50; margin-bottom: 12px;">
+      <div class="git-settings-info git-auth-status" data-status="connected">
         <span class="ui-icon material-icons">check_circle</span>
-        <span>You are logged in as <strong>${savedUsername}</strong></span>
+        <span>Connected to GitHub as <strong>${savedUsername}</strong></span>
       </div>
-      <button id="btn-github-signout" style="width: 100%; padding: 10px; display: flex; align-items: center; justify-content: center; gap: 8px; background: #f44336; color: white; border: none; border-radius: 4px; font-size: 14px; cursor: pointer; transition: background 0.15s;">
+    `;
+  } else if (hasCredentials) {
+    credentialsStatusHtml = `
+      <div class="git-settings-info git-auth-status" data-status="${authenticationUnavailable ? 'unavailable' : 'invalid'}">
+        <span class="ui-icon material-icons">${authenticationUnavailable ? 'cloud_off' : 'key_off'}</span>
+        <span><strong>${authenticationUnavailable ? 'Saved credentials could not be verified' : 'GitHub authentication is no longer valid'}</strong><small>${escapeMarkup(credentialsData.auth_error || 'Reconnect GitHub or replace the saved token.')}</small></span>
+      </div>
+    `;
+  }
+  if (hasCredentials) {
+    credentialsStatusHtml += `
+      <button class="btn-secondary git-signout-button" id="btn-github-signout" type="button">
         <span class="ui-icon material-icons">logout</span>
-        <span>${t("toast.git_signout")}</span>
+        <span>Remove saved credentials</span>
       </button>
     `;
   }
@@ -1004,7 +1283,7 @@ export async function showGitSettings() {
     <div class="git-settings-content">
       ${remotesHtml}
 
-      ${hasCredentials ? `
+      ${isAuthenticated ? `
       <div class="git-settings-section" style="background: var(--primary-background-color); padding: 16px; border-radius: 8px; border: 2px dashed #2196f3;">
         <div class="git-settings-label" style="color: #1976d2; font-weight: 600;">
           <span class="ui-icon ui-icon--align-middle ui-icon--space-after-4 material-icons">add_circle</span>
@@ -1047,7 +1326,7 @@ export async function showGitSettings() {
 
         ${credentialsStatusHtml}
 
-        ${!hasCredentials ? `
+        ${!isAuthenticated ? `
           <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 16px; border-radius: 8px; margin-bottom: 16px;">
             <div style="color: white; font-weight: 600; margin-bottom: 8px; display: flex; align-items: center; gap: 8px;">
               <span class="ui-icon material-icons">verified_user</span>
@@ -1060,7 +1339,7 @@ export async function showGitSettings() {
               <svg height="20" width="20" viewBox="0 0 16 16" style="fill: #667eea;">
                 <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02-.08-2.12 0 0 .67-.22 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"></path>
               </svg>
-              <span>Login with GitHub</span>
+              <span>${hasCredentials ? 'Reconnect GitHub' : 'Login with GitHub'}</span>
             </button>
           </div>
 
@@ -1181,16 +1460,8 @@ export async function showGitSettings() {
   }
   if (btnGithubSignout) {
     btnGithubSignout.addEventListener("click", async () => {
-      const confirmed = await showConfirmDialog({
-        title: "Sign Out from GitHub",
-        message: "Are you sure you want to sign out?<br><br>Your saved credentials will be removed and you'll need to login again to use GitHub features.",
-        confirmText: "Sign Out",
-        cancelText: "Cancel",
-        isDanger: true
-      });
-
-      if (confirmed) {
-        await gitClearCredentials();
+      const signedOut = await gitClearCredentials();
+      if (signedOut) {
         closeGitSettings();
         // Reopen settings to show updated state
         setTimeout(() => showGitSettings(), 300);
@@ -1202,19 +1473,13 @@ export async function showGitSettings() {
   }
   if (btnSaveGitCredentials) {
     btnSaveGitCredentials.addEventListener("click", async () => {
-      await saveGitCredentials();
-      closeGitSettings();
-    }, { once: true });
+      const saved = await saveGitCredentials();
+      if (saved) closeGitSettings();
+    });
   }
   if (btnCleanGitLocks) {
     btnCleanGitLocks.addEventListener("click", async () => {
-      showToast(t("toast.cleaning_git_lock_files"), "info");
-      const success = await gitCleanLocks();
-      if (success) {
-        showToast(t("toast.git_lock_files_cleaned_success"), "success");
-      } else {
-        showToast(t("toast.no_lock_files_found_or_failed_"), "warning");
-      }
+      await gitCleanLocks();
     }, { once: true });
   }
   if (btnCreateGithubRepo) {
@@ -1228,38 +1493,13 @@ export async function showGitSettings() {
   removeRemoteBtns.forEach(btn => {
     btn.addEventListener('click', async (e) => {
       const remoteName = e.currentTarget.dataset.remoteName;
-      const confirmed = await showConfirmDialog({
-        title: "Remove Remote",
-        message: `Are you sure you want to remove the remote '${remoteName}'?`,
-        confirmText: "Remove",
-        cancelText: "Cancel",
-        isDanger: true
-      });
-
-      if (confirmed) {
-        try {
-          const data = await fetchWithAuth(API_BASE, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ action: "git_remove_remote", name: remoteName }),
-          });
-
-          if (data.success) {
-            showToast(data.message, "success");
-            // Refresh settings modal
-            setTimeout(() => showGitSettings(), 300);
-          } else {
-            showToast(t("toast.remove_remote_failed", { error: data.message }), "error");
-          }
-        } catch (error) {
-          showToast(t("toast.remove_remote_error", { error: error.message }), "error");
-        }
-      }
+      const removed = await gitRemoveRemote(remoteName);
+      if (removed) setTimeout(() => showGitSettings(), 300);
     });
   });
 
   // Mobile optimization: prevent iOS zoom on input focus
-  if (state.isMobile && state.isMobile()) {
+  if (state.isMobile) {
     const inputs = modalBody.querySelectorAll('.git-settings-input');
     inputs.forEach(input => {
       // Ensure font-size is 16px on mobile to prevent zoom
@@ -1400,7 +1640,7 @@ export async function showCreateGithubRepoDialog() {
 
       showToast(t("toast.creating_repository"), "info");
       await githubCreateRepo(repoName, description, isPrivate);
-      await gitStatus();
+      await gitStatus(false, true);
 
     }, { once: true });
   });
@@ -1434,7 +1674,7 @@ export async function saveGitCredentials() {
     return;
   }
 
-  await gitSetCredentials(username, token, rememberMe);
+  return gitSetCredentials(username, token, rememberMe);
 }
 
 export async function testGitConnection() {
