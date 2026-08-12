@@ -47,5 +47,5 @@ def test_github_credentials_are_verified_before_reporting_authentication():
     assert 'auth_status="invalid"' in manager
     assert 'auth_status="unavailable"' in manager
     assert "aiohttp.ClientTimeout(total=8, connect=4)" in manager
-    assert "verify=data.get(\"verify\", False)" in handlers
+    assert 'verify=data.get("verify", False)' in handlers
     assert "self.git, d" in api
