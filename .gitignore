@@ -55,7 +55,10 @@ htmlcov/
 dmypy.json
 /artifacts/*
 /test/*
-/tests/
+!/tests/
+/tests/*
+!/tests/js/
+!/tests/js/ai_modes.mjs
 /scripts/*
 !/scripts/audit_frontend_release.mjs
 !/scripts/audit_frontend_ownership.mjs
