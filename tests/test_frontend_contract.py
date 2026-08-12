@@ -5025,11 +5025,11 @@ class FrontendContractTests(unittest.TestCase):
 
     def test_frontend_release_gate_covers_ci_and_live_artifacts(self):
         gate = (ROOT / "scripts" / "audit_frontend_release.mjs").read_text(encoding="utf-8")
-        quality = (ROOT / "FRONTEND_QUALITY_GATES.md").read_text(encoding="utf-8")
         workflow = (ROOT / ".github" / "workflows" / "frontend-quality.yaml").read_text(encoding="utf-8")
         self.assertIn("--live", gate)
-        self.assertIn("FRONTEND_QUALITY_GATES.md", gate)
-        self.assertIn("pytest -q", quality)
+        self.assertIn("custom_components/blueprint_studio/www/panels/panel_custom.html", gate)
+        self.assertIn("scripts/audit_frontend_pseudo_locale.mjs", gate)
+        self.assertNotIn("FRONTEND_QUALITY_GATES.md", gate)
         self.assertIn("audit_frontend_release.mjs", workflow)
 
     def test_frontend_test_matrix_names_primary_workflows_and_limits(self):

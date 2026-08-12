@@ -57,6 +57,11 @@ dmypy.json
 /test/*
 /tests/
 /scripts/*
+!/scripts/audit_frontend_release.mjs
+!/scripts/audit_frontend_ownership.mjs
+!/scripts/audit_frontend_scoped_wiring.mjs
+!/scripts/audit_frontend_pseudo_locale.mjs
+!/scripts/audit_frontend_degraded_states.mjs
 /custom_components/blueprint_studio/www/component-showcase.html
 /custom_components/blueprint_studio/www/modules/component-showcase.js
 /custom_components/blueprint_studio/www/styles/component-showcase.css
