@@ -4,6 +4,7 @@
   "codeowners": ["@ha-china", "@soulripper13"],
   "config_flow": true,
   "dependencies": ["http", "frontend"],
+  "after_dependencies": ["hassio"],
   "documentation": "https://github.com/ha-china/blueprint-studio",
   "integration_type": "service",
   "iot_class": "local_push",
