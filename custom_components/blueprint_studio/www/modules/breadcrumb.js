@@ -5,21 +5,13 @@ import {
   navigateSftp, 
   parseSftpPath,
   isSftpPath
-} from './sftp.js?v=2.5.188';
-import { setOverflowTooltip } from './tooltip.js?v=2.5.188';
+} from './sftp.js?v=2.5.270';
+import { setOverflowTooltip } from './tooltip.js?v=2.5.270';
 
 function bindBreadcrumbLink(element, label, action) {
-  element.setAttribute("role", "button");
-  element.setAttribute("tabindex", "0");
+  element.type = "button";
   element.setAttribute("aria-label", label);
-  element.style.cursor = "pointer";
   element.addEventListener("click", action);
-  element.addEventListener("keydown", (event) => {
-    if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      action();
-    }
-  });
 }
 
 /**
@@ -47,7 +39,7 @@ export function updateBreadcrumb(path) {
     const configItem = document.createElement("span");
     configItem.className = "breadcrumb-item";
     
-    const configLink = document.createElement("span");
+    const configLink = document.createElement("button");
     configLink.className = "breadcrumb-link";
     configLink.textContent = "config";
     bindBreadcrumbLink(configLink, "config", () => {
@@ -77,7 +69,7 @@ export function updateBreadcrumb(path) {
     const connItem = document.createElement("span");
     connItem.className = "breadcrumb-item";
     
-    const connLink = document.createElement("span");
+    const connLink = document.createElement("button");
     connLink.className = "breadcrumb-link";
     connLink.textContent = connId;
     bindBreadcrumbLink(connLink, connId, () => {
@@ -112,7 +104,8 @@ export function updateBreadcrumb(path) {
     const item = document.createElement("span");
     item.className = "breadcrumb-item";
 
-    const link = document.createElement("span");
+    const isLink = index < parts.length - 1;
+    const link = document.createElement(isLink ? "button" : "span");
     link.className = "breadcrumb-link";
     link.textContent = part;
     const fullPath = isSftp
@@ -123,7 +116,7 @@ export function updateBreadcrumb(path) {
     setOverflowTooltip(link, fullPath);
 
     // Make all parts except the last one clickable to open folder
-    if (index < parts.length - 1) {
+    if (isLink) {
       const folderPath = currentPath;
       bindBreadcrumbLink(link, part, () => {
         if (isSftp) {
@@ -139,7 +132,6 @@ export function updateBreadcrumb(path) {
         }
       });
     } else {
-      link.setAttribute("tabindex", "0");
       link.setAttribute("aria-label", fullPath);
       link.setAttribute("aria-current", "location");
     }

@@ -3,8 +3,8 @@ import { state, elements } from './state.js';
 import { showToast, setButtonLoading } from './ui.js';
 import { eventBus } from './event-bus.js';
 import { saveFile } from './file-operations.js';
-import { t } from './translations.js';
-import { startOperationFeedback } from './feedback-service.js?v=2.5.188';
+import { t, tp } from './translations.js?v=2.5.270';
+import { startOperationFeedback } from './feedback-service.js?v=2.5.270';
 
 // Auto-save timer reference
 export let autoSaveTimer = null;
@@ -62,14 +62,14 @@ export async function saveAllFiles(requestOverride = null) {
   const localCount = requests.filter(request => !request.path.startsWith('sftp://')).length;
   const remoteCount = requests.length - localCount;
   const operation = startOperationFeedback({
-    label: `Save ${requests.length} modified file${requests.length === 1 ? '' : 's'}`,
+    label: tp('workspace_ops.save_modified_files', requests.length),
     icon: 'save_as',
-    message: 'Preparing files for save...',
-    scope: 'Workspace documents',
-    target: [localCount ? `${localCount} local` : '', remoteCount ? `${remoteCount} SFTP` : ''].filter(Boolean).join(' + '),
+    message: t('workspace_ops.save_preparing'),
+    scope: t('workspace_ops.documents'),
+    target: [localCount ? tp('workspace_ops.local_files', localCount) : '', remoteCount ? tp('workspace_ops.sftp_files', remoteCount) : ''].filter(Boolean).join(' + '),
     retry: () => saveAllFiles(retryRequests),
     open: () => retryRequests[0] && revealSavedPath(retryRequests[0].path),
-    openLabel: 'Open file',
+    openLabel: t('workspace_ops.open_file'),
     openIcon: 'description',
   });
 
@@ -85,7 +85,7 @@ export async function saveAllFiles(requestOverride = null) {
     }
     eventBus.emit('ui:refresh-tabs');
     operation.update({
-      message: `Saving file ${index + 1} of ${requests.length}...`,
+      message: t('workspace_ops.saving_progress', { current: index + 1, count: requests.length }),
       detail: request.path,
       percent: Math.round(index / requests.length * 100),
     });
@@ -127,13 +127,13 @@ export async function saveAllFiles(requestOverride = null) {
   const succeeded = results.length - failed.length;
   if (failed.length) {
     retryRequests = failed.map(result => ({ path: result.path, content: result.content }));
-    const details = results.map((result) => `${result.success ? 'Saved' : 'Failed'}: ${result.path}${result.message ? ` - ${result.message}` : ''}`).join('\n');
-    operation.fail(`${succeeded} saved, ${failed.length} failed`, details, {
-      detail: 'Retry saves only the files that failed in this attempt.',
+    const details = results.map((result) => `${result.success ? t('workspace_ops.saved') : t('workspace_ops.failed')}: ${result.path}${result.message ? ` - ${result.message}` : ''}`).join('\n');
+    operation.fail(t('workspace_ops.save_partial', { saved: succeeded, failed: failed.length }), details, {
+      detail: t('workspace_ops.save_retry_detail'),
     });
-    showToast(`${succeeded} saved, ${failed.length} failed\n${details}`, "error", 10000);
+    showToast(t('toast.save_batch_failed', { saved: succeeded, failed: failed.length, details }), "error", 10000);
   } else {
-    operation.finish(`${succeeded} file${succeeded === 1 ? '' : 's'} saved`);
+    operation.finish(tp('workspace_ops.files_saved', succeeded));
     showToast(t("toast.saved_files", { count: succeeded }), "success");
   }
   eventBus.emit('file:save-all-complete', { results });

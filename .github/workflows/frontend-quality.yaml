@@ -1,0 +1,29 @@
+name: Frontend quality
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+          cache: pip
+      - name: Install test dependencies
+        run: python -m pip install -r requirements-test.txt
+      - name: Frontend static release gate
+        run: node scripts/audit_frontend_release.mjs
+      - name: Pseudo-locale contract
+        run: node scripts/audit_frontend_pseudo_locale.mjs
+      - name: Contract and integration tests
+        run: pytest -q
+      - name: JavaScript fixture tests
+        run: node tests/js/autocomplete_context.mjs

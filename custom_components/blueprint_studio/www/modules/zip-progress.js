@@ -1,8 +1,9 @@
+import { t } from './translations.js?v=2.5.270';
 /** ZIP-PROGRESS.JS | Purpose: Non-blocking transfer progress UI. */
 import { getAuthToken } from './api.js';
-import { API_BASE } from './constants.js';
+import { API_BASE } from './constants.js?v=2.5.270';
 import { formatBytes } from './utils.js';
-import { removeOperationFeedback, updateOperationFeedback } from './feedback-service.js?v=2.5.188';
+import { removeOperationFeedback, updateOperationFeedback } from './feedback-service.js?v=2.5.270';
 
 function createTransferProgressId(prefix) {
   if (window.crypto?.randomUUID) return window.crypto.randomUUID();
@@ -24,18 +25,18 @@ function updateProgressUi(progressId, progress, options = {}) {
   if (progress?.message) {
       message = progress.message;
     } else if (progress?.status === "pending") {
-      message = "Waiting for download to start...";
+      message = t('transfer.waiting_download');
     } else if (progress?.status === "done") {
-      const filePart = totalFiles ? `${totalFiles} file${totalFiles === 1 ? "" : "s"}` : `${filesDone} file${filesDone === 1 ? "" : "s"}`;
-      message = `Complete: ${filePart}, ${formatBytes(bytesDone)}`;
+      const fileCount = totalFiles || filesDone;
+      message = t('transfer.complete', { count: fileCount, bytes: formatBytes(bytesDone) });
     } else if (progress?.status === "uploading") {
-      const filePart = totalFiles ? `File ${filesDone} of ${totalFiles}` : "Uploading";
-      const bytePart = bytesTotal ? `${formatBytes(bytesDone)} of ${formatBytes(bytesTotal)}` : formatBytes(bytesDone);
-      message = `${filePart} - ${bytePart}`;
+      const filePart = totalFiles ? t('transfer.file_progress', { current: filesDone, total: totalFiles }) : t('transfer.uploading');
+      const bytePart = bytesTotal ? t('transfer.bytes_progress', { loaded: formatBytes(bytesDone), total: formatBytes(bytesTotal) }) : formatBytes(bytesDone);
+      message = t('transfer.progress', { files: filePart, bytes: bytePart });
     } else if (progress?.status === "error") {
-      message = "Transfer failed";
+      message = t('transfer.failed');
     } else {
-      message = `${filesDone} file${filesDone === 1 ? "" : "s"} processed, ${formatBytes(bytesDone)}`;
+      message = t('transfer.processed', { count: filesDone, bytes: formatBytes(bytesDone) });
     }
   updateOperationFeedback(progressId, {
     label: options.label,
@@ -89,14 +90,14 @@ async function cancelZip(progressId) {
   return result;
 }
 
-export function startZipProgress(progressId, label = "Preparing ZIP download...", operation = {}) {
+export function startZipProgress(progressId, label = t('transfer.preparing_zip'), operation = {}) {
   let stopped = false;
   let timeoutId = null;
   let cancellationRequested = false;
 
   const presentation = { label, icon: "folder_zip", ...operation };
   const cancelAction = [{
-    label: "Cancel",
+    label: t('transfer.cancel'),
     icon: "close",
     callback: async () => {
       if (cancellationRequested || stopped) return;
@@ -104,12 +105,12 @@ export function startZipProgress(progressId, label = "Preparing ZIP download..."
       presentation.actions = [];
       updateProgressUi(progressId, {
         status: "cancelling",
-        message: "Cancelling ZIP generation...",
+        message: t('transfer.cancelling_zip'),
       }, { ...presentation, icon: "pending", actions: [] });
       try {
         await cancelZip(progressId);
       } catch (error) {
-        stop(error.message || "Could not cancel ZIP download");
+        stop(error.message || t('transfer.cancel_failed'));
       }
     },
   }];
@@ -153,14 +154,14 @@ export function startZipProgress(progressId, label = "Preparing ZIP download..."
 }
 
 export function startUploadProgress({
-  label = "Uploading...",
+    label = t('transfer.uploading'),
   totalFiles = 1,
   scope = "",
   target = "",
   onCancel = null,
   onRetry = null,
   onOpen = null,
-  openLabel = "Show",
+  openLabel = t('transfer.show'),
   openIcon = "folder_open",
 } = {}) {
   const progressId = createTransferProgressId("upload");
@@ -179,7 +180,7 @@ export function startUploadProgress({
 
   const cancelAction = typeof onCancel === "function"
     ? [{
-        label: "Cancel",
+        label: t('transfer.cancel'),
         icon: "close",
         callback: async () => {
           if (cancellationRequested) return;
@@ -188,7 +189,7 @@ export function startUploadProgress({
             status: "running",
             files_done: 0,
             total_files: totalFiles,
-            message: "Cancelling upload request...",
+            message: t('transfer.cancelling_upload'),
           }, { label, icon: "pending", scope, target, actions: [] });
           await onCancel();
         },
@@ -202,7 +203,7 @@ export function startUploadProgress({
     bytes_done: 0,
     bytes_total: 0,
     percent: 0,
-    message: "Waiting for upload to start...",
+    message: t('transfer.waiting_upload'),
   }, { label, icon: "upload_file", scope, target, actions: cancelAction });
 
   function clearRemoveTimer() {
@@ -227,7 +228,7 @@ export function startUploadProgress({
     }, { label, icon: "upload_file", scope, target, actions: cancellationRequested ? [] : cancelAction });
   }
 
-  function finish(message = "Upload complete") {
+  function finish(message = t('transfer.upload_complete')) {
     updateProgressUi(progressId, {
       status: "done",
       files_done: totalFiles,
@@ -238,7 +239,7 @@ export function startUploadProgress({
     }, { label, icon: "check_circle", scope, target, actions: terminalActions() });
   }
 
-  function fail(message = "Upload failed", failureDetail = message) {
+  function fail(message = t('transfer.upload_failed'), failureDetail = message) {
     updateProgressUi(progressId, {
       status: "error",
       files_done: 0,
@@ -248,7 +249,7 @@ export function startUploadProgress({
     }, { label, icon: "error", scope, target, failureDetail, actions: terminalActions(true) });
   }
 
-  function cancel(message = "Upload cancelled") {
+  function cancel(message = t('transfer.upload_cancelled')) {
     cancellationRequested = true;
     updateProgressUi(progressId, {
       status: "cancelled",
@@ -261,7 +262,7 @@ export function startUploadProgress({
       icon: "cancel",
       scope,
       target,
-      failureDetail: "The browser request was stopped. Files completed before cancellation remain at the destination.",
+      failureDetail: t('transfer.upload_cancelled_detail'),
       actions: terminalActions(true),
     });
   }

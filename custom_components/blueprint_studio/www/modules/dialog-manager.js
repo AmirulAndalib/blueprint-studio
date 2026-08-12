@@ -11,6 +11,23 @@ const FOCUSABLE_SELECTOR = [
 ].join(',');
 
 const dialogStack = [];
+let lastPointerControl = null;
+let lastFocusedControl = null;
+
+function rememberPointerControl(event) {
+  const control = event.target.closest?.(FOCUSABLE_SELECTOR);
+  if (control instanceof HTMLElement && !control.closest('[aria-hidden="true"]')) {
+    lastPointerControl = control;
+  }
+}
+
+document.addEventListener('pointerdown', rememberPointerControl, true);
+document.addEventListener('mousedown', rememberPointerControl, true);
+document.addEventListener('focusin', (event) => {
+  if (event.target instanceof HTMLElement && event.target.matches(FOCUSABLE_SELECTOR)) {
+    lastFocusedControl = event.target;
+  }
+}, true);
 
 function visibleFocusables(overlay) {
   return Array.from(overlay.querySelectorAll(FOCUSABLE_SELECTOR)).filter((element) => {
@@ -56,10 +73,13 @@ export function openDialog(overlay, options = {}) {
   if (existingIndex >= 0) dialogStack.splice(existingIndex, 1);
 
   const activeElement = document.activeElement;
+  const activeControl = activeElement instanceof HTMLElement && activeElement !== document.body
+    ? activeElement
+    : null;
   const entry = {
     overlay,
     initialFocus: options.initialFocus || null,
-    returnFocus: options.returnFocus || (activeElement instanceof HTMLElement ? activeElement : null),
+    returnFocus: options.returnFocus || activeControl || lastFocusedControl || lastPointerControl,
     closeOnEscape: options.closeOnEscape !== false,
     closeOnBackdrop: options.closeOnBackdrop !== false,
     removeOnClose: options.removeOnClose === true,

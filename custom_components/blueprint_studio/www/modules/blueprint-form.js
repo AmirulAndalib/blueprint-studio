@@ -3,12 +3,13 @@
  * "Use Blueprint" — renders a beginner-friendly form to instantiate a blueprint
  * as a ready-to-use automation YAML, then saves it to automations.yaml or a new file.
  */
-import { API_BASE } from './constants.js';
+import { API_BASE } from './constants.js?v=2.5.270';
 import { fetchWithAuth } from './api.js';
 import { showToast } from './ui.js';
+import { t } from './translations.js?v=2.5.270';
 import { eventBus } from './event-bus.js';
 import { state } from './state.js';
-import { startOperationFeedback } from './feedback-service.js?v=2.5.188';
+import { startOperationFeedback } from './feedback-service.js?v=2.5.270';
 
 let _weEnabledSplitView = false;
 let _mobileOverlayEl = null;
@@ -23,7 +24,7 @@ let _editorSyncTimer = null;
 // ─── Public API ─────────────────────────────────────────────────────────────
 
 export async function showBlueprintForm(blueprintContent) {
-    if (!blueprintContent?.trim()) { showToast('No blueprint content', 'warning'); return; }
+    if (!blueprintContent?.trim()) { showToast(t('toast.no_blueprint_content'), 'warning'); return; }
     closeBlueprintForm();
     _blueprintContent = blueprintContent;
 
@@ -406,7 +407,7 @@ async function _renderForm(blueprintContent, bpInfo, preservedValues = {}) {
                 fieldEl.classList.add('bf-field-error');
                 setTimeout(() => fieldEl.classList.remove('bf-field-error'), 2000);
             }
-            showToast('Please fill in all required fields', 'warning');
+            showToast(t('toast.required_fields_missing'), 'warning');
             return;
         }
         const name = previewEl.querySelector('#bf-auto-name').value || bpInfo.name;
@@ -1139,7 +1140,7 @@ async function _generateAutomation(blueprintContent, formData, name, description
         return res.automation;
     } catch (e) {
         if (!notifyOnError) throw e;
-        showToast(`Error: ${e.message}`, 'error');
+        showToast(t('toast.generic_error', { error: e.message }), 'error');
         return null;
     }
 }
@@ -1208,7 +1209,7 @@ async function _showSaveDialog(automationYaml, name, panelEl) {
             saved = await saveBlueprintAutomation({ mode, path: 'automations.yaml', automationYaml });
         } else {
             const path = dialog.querySelector('#bf-new-file-path').value.trim();
-            if (!path) { showToast('Please enter a file path', 'warning'); return; }
+            if (!path) { showToast(t('toast.file_path_required'), 'warning'); return; }
             close();
             saved = await saveBlueprintAutomation({ mode, path, automationYaml });
         }
@@ -1239,13 +1240,13 @@ export async function validateBlueprintAutomation(request) {
         sourcePath: request.sourcePath ? String(request.sourcePath) : '',
     };
     const operation = startOperationFeedback({
-        label: 'Validate blueprint automation',
+        label: t('blueprint_ops.validate_label'),
         icon: 'fact_check',
-        message: 'Step 1 of 2: generating automation YAML...',
-        scope: 'Home Assistant automation',
+        message: t('blueprint_ops.validate_generating'),
+        scope: t('blueprint_ops.ha_automation'),
         target: immutableRequest.name,
         retry: () => validateBlueprintAutomation(immutableRequest),
-        openLabel: immutableRequest.sourcePath ? 'Open blueprint' : 'Open form',
+        openLabel: immutableRequest.sourcePath ? t('blueprint_ops.open_blueprint') : t('blueprint_ops.open_form'),
         openIcon: 'description',
         open: () => immutableRequest.sourcePath
             ? revealAutomationPath(immutableRequest.sourcePath)
@@ -1259,24 +1260,24 @@ export async function validateBlueprintAutomation(request) {
             immutableRequest.description,
             { notifyOnError: false },
         );
-        operation.update({ message: 'Step 2 of 2: checking generated YAML...', percent: 50 });
+        operation.update({ message: t('blueprint_ops.validate_checking'), percent: 50 });
         const result = await fetchWithAuth(API_BASE, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ action: 'check_yaml', content: yaml }),
         });
         if (!result?.valid) {
-            const message = responseFailure(result, 'Generated YAML is invalid');
-            operation.fail('Generated YAML is invalid', message);
-            showToast(`YAML error: ${message}`, 'error', 6000);
+            const message = responseFailure(result, t('blueprint_ops.yaml_invalid'));
+            operation.fail(t('blueprint_ops.yaml_invalid'), message);
+            showToast(t('toast.yaml_error', { error: message }), 'error', 6000);
             return false;
         }
-        operation.finish('Generated automation YAML is valid', { detail: immutableRequest.name });
-        showToast('YAML is valid', 'success');
+        operation.finish(t('blueprint_ops.yaml_valid'), { detail: immutableRequest.name });
+        showToast(t('toast.yaml_valid'), 'success');
         return true;
     } catch (error) {
-        operation.fail('Blueprint automation validation failed', error.message);
-        showToast(`Validation failed: ${error.message}`, 'error');
+        operation.fail(t('blueprint_ops.validation_failed'), error.message);
+        showToast(t('toast.validation_failed', { error: error.message }), 'error');
         return false;
     }
 }
@@ -1289,13 +1290,13 @@ export async function saveBlueprintAutomation(request) {
     };
     const stepCount = immutableRequest.mode === 'append' ? 2 : 3;
     const operation = startOperationFeedback({
-        label: immutableRequest.mode === 'append' ? 'Append blueprint automation' : 'Save blueprint automation',
+        label: immutableRequest.mode === 'append' ? t('blueprint_ops.append_label') : t('blueprint_ops.save_label'),
         icon: 'save',
-        message: `Step 1 of ${stepCount}: checking ${immutableRequest.path}...`,
-        scope: 'Home Assistant configuration',
+        message: t('blueprint_ops.destination_checking', { count: stepCount, path: immutableRequest.path }),
+        scope: t('blueprint_ops.ha_configuration'),
         target: immutableRequest.path,
         retry: () => saveBlueprintAutomation(immutableRequest),
-        openLabel: 'Open file',
+        openLabel: t('workspace_ops.open_file'),
         openIcon: 'description',
         open: () => revealAutomationPath(immutableRequest.path),
     });
@@ -1304,7 +1305,7 @@ export async function saveBlueprintAutomation(request) {
         let existingContent = null;
         try {
             const existing = await fetchWithAuth(`${API_BASE}?action=read_file&path=${encodeURIComponent(immutableRequest.path)}`);
-            if (existing?.success === false) throw new Error(responseFailure(existing, 'Could not read destination'));
+            if (existing?.success === false) throw new Error(responseFailure(existing, t('blueprint_ops.destination_read_failed')));
             existingContent = typeof existing?.content === 'string' ? existing.content : '';
         } catch (_error) {
             existingContent = null;
@@ -1317,7 +1318,9 @@ export async function saveBlueprintAutomation(request) {
 
         if (!alreadyWritten) {
             operation.update({
-                message: `Step 2 of ${stepCount}: ${immutableRequest.mode === 'append' ? 'appending automation' : 'creating automation file'}...`,
+                message: immutableRequest.mode === 'append'
+                    ? t('blueprint_ops.automation_appending', { count: stepCount })
+                    : t('blueprint_ops.automation_creating', { count: stepCount }),
                 percent: Math.round(100 / stepCount),
             });
             const content = immutableRequest.mode === 'append'
@@ -1331,21 +1334,21 @@ export async function saveBlueprintAutomation(request) {
                     : { action: 'create_file', path: immutableRequest.path, content, overwrite: false }),
             });
             if (writeResult?.success === false) {
-                throw new Error(responseFailure(writeResult, 'Home Assistant rejected the file write'));
+                throw new Error(responseFailure(writeResult, t('blueprint_ops.write_rejected')));
             }
         } else {
             operation.update({
-                message: `Step 2 of ${stepCount}: exact automation already present; skipping write...`,
+                message: t('blueprint_ops.write_skipping', { count: stepCount }),
                 percent: Math.round(100 / stepCount),
-                detail: 'Retry did not duplicate the automation.',
+                detail: t('blueprint_ops.retry_no_duplicate'),
             });
         }
 
         if (immutableRequest.mode === 'new' || alreadyWritten) {
             operation.update({
                 message: immutableRequest.mode === 'new'
-                    ? 'Step 3 of 3: reloading automations...'
-                    : 'Step 2 of 2: retrying the automation reload...',
+                    ? t('blueprint_ops.automations_reloading')
+                    : t('blueprint_ops.reload_retrying'),
                 percent: immutableRequest.mode === 'new' ? 67 : 50,
             });
             const reloadResult = await fetchWithAuth(API_BASE, {
@@ -1354,27 +1357,27 @@ export async function saveBlueprintAutomation(request) {
                 body: JSON.stringify({ action: 'reload_automations' }),
             });
             if (reloadResult?.success === false) {
-                const message = responseFailure(reloadResult, 'Automation reload was rejected');
-                operation.fail('File saved, but automations could not be reloaded', message, {
-                    detail: `${immutableRequest.path} already contains the automation. Retry will skip the write and retry only the reload.`,
+                const message = responseFailure(reloadResult, t('blueprint_ops.reload_rejected'));
+                operation.fail(t('blueprint_ops.reload_failed'), message, {
+                    detail: t('blueprint_ops.reload_retry_detail', { path: immutableRequest.path }),
                 });
-                showToast(`Saved ${immutableRequest.path}, but reload failed: ${message}`, 'error');
+                showToast(t('toast.saved_reload_failed', { file: immutableRequest.path, error: message }), 'error');
                 return false;
             }
         }
 
-        operation.finish('Automation saved and loaded', {
+        operation.finish(t('blueprint_ops.saved_loaded'), {
             detail: alreadyWritten
-                ? 'The existing matching file was retained and automations were reloaded.'
+                ? t('blueprint_ops.existing_retained')
                 : immutableRequest.path,
         });
-        showToast(`Automation saved to ${immutableRequest.path} and loaded!`, 'success', 6000);
+        showToast(t('toast.automation_saved_loaded', { file: immutableRequest.path }), 'success', 6000);
         return true;
     } catch (error) {
-        operation.fail('Automation could not be saved', error.message, {
-            detail: 'The write outcome may be ambiguous after a connection failure. Retry checks the destination before writing and will not duplicate an exact match.',
+        operation.fail(t('blueprint_ops.save_failed'), error.message, {
+            detail: t('blueprint_ops.save_retry_detail'),
         });
-        showToast(`Save failed: ${error.message}`, 'error');
+        showToast(t('toast.save_failed', { error: error.message }), 'error');
         return false;
     }
 }

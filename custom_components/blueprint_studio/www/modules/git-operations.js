@@ -1,26 +1,26 @@
 import { state, elements, gitState, giteaState } from './state.js';
 import { fetchWithAuth } from './api.js';
 import { eventBus } from './event-bus.js';
-import { API_BASE } from './constants.js';
+import { API_BASE } from './constants.js?v=2.5.270';
 import {
   showToast,
   showConfirmDialog,
   showModal,
   setButtonLoading
 } from './ui.js';
-import { getGitActionConfirmation } from './git-action-confirmation.js?v=2.5.188';
-import { t } from './translations.js';
-import { startOperationFeedback } from './feedback-service.js?v=2.5.188';
+import { getGitActionConfirmation } from './git-action-confirmation.js?v=2.5.270';
+import { t, tp } from './translations.js?v=2.5.270';
+import { startOperationFeedback } from './feedback-service.js?v=2.5.270';
 
-function startGitOperation(label, icon, message, retry, target = gitState.currentBranch || 'Current branch') {
+function startGitOperation(label, icon, message, retry, target = gitState.currentBranch || t('git_diff_ops.current_branch')) {
   return startOperationFeedback({
     label,
     icon,
     message,
-    scope: 'GitHub repository',
+    scope: t('provider_ops.github_repository'),
     target,
     retry,
-    openLabel: 'Source Control',
+    openLabel: t('sidebar.source_control'),
     openIcon: 'account_tree',
     open: () => eventBus.emit('ui:switch-sidebar-view', 'source-control'),
   });
@@ -31,10 +31,10 @@ function startBranchOperation(label, icon, message, target, retry) {
     label,
     icon,
     message,
-    scope: 'Local Git repository',
+    scope: t('provider_ops.local_git_repository'),
     target,
     retry,
-    openLabel: 'Source Control',
+    openLabel: t('sidebar.source_control'),
     openIcon: 'account_tree',
     open: () => eventBus.emit('ui:switch-sidebar-view', 'source-control'),
   });
@@ -42,9 +42,9 @@ function startBranchOperation(label, icon, message, target, retry) {
 
 function gitFileTarget(files) {
   const paths = Array.from(new Set((files || []).filter(Boolean)));
-  if (paths.length === 0) return 'No files';
+  if (paths.length === 0) return t('git_ops.no_files');
   if (paths.length === 1) return paths[0];
-  return `${paths.length} files, including ${paths[0]}`;
+  return tp('git_ops.file_target', paths.length, { path: paths[0] });
 }
 
 /**
@@ -73,9 +73,9 @@ export async function gitStatus(shouldFetch = false, silent = false) {
   if (!isGitEnabled()) return false;
 
   const operation = silent ? null : startGitOperation(
-    shouldFetch ? 'Fetch GitHub status' : 'Refresh GitHub status',
+    shouldFetch ? t('git_ops.fetch_status') : t('git_ops.refresh_status'),
     'sync',
-    shouldFetch ? 'Fetching remote references and workspace status...' : 'Reading workspace status...',
+    shouldFetch ? t('git_ops.fetching_status') : t('git_ops.reading_status'),
     () => gitStatus(shouldFetch),
     gitState.currentBranch || 'Workspace',
   );
@@ -144,22 +144,22 @@ export async function gitStatus(shouldFetch = false, silent = false) {
         }
       }
       operation?.finish(data.has_changes
-        ? `${gitState.totalChanges} workspace ${gitState.totalChanges === 1 ? 'change' : 'changes'}`
-        : 'Workspace is clean', {
-        detail: `Branch: ${gitState.currentBranch}${shouldFetch ? '\nRemote references fetched.' : ''}`,
+        ? tp('git_ops.workspace_changes', gitState.totalChanges)
+        : t('git_ops.workspace_clean'), {
+        detail: t('git_ops.status_detail', { branch: gitState.currentBranch, fetched: shouldFetch ? t('git_ops.remote_fetched_suffix') : '' }),
       });
       return true;
     } else {
       gitState.lastError = data.message || data.error || "Git status failed";
       eventBus.emit('git:refresh');
-      operation?.fail('Could not refresh GitHub status', gitState.lastError);
+      operation?.fail(t('git_ops.status_failed'), gitState.lastError);
       if (!silent) showToast(t("toast.git_error", { error: gitState.lastError }), "error");
       return false;
     }
   } catch (error) {
     gitState.lastError = error.message || "Git status failed";
     eventBus.emit('git:refresh');
-    operation?.fail('Could not refresh GitHub status', gitState.lastError);
+    operation?.fail(t('git_ops.status_failed'), gitState.lastError);
     if (!silent) {
       showToast(t("toast.git_error", { error: error.message }), "error");
     }
@@ -184,17 +184,17 @@ export async function gitInit(skipConfirm = false) {
   }
 
   const operation = startBranchOperation(
-    'Initialize Git repository',
+    t('git_ops.initialize_label'),
     'source',
-    'Creating local repository...',
+    t('git_ops.initializing'),
     'Configuration workspace -> main',
     () => gitInit(),
   );
   try {
     showToast(t("toast.git_init_started"), "info");
     operation.update({
-      message: 'Creating Git metadata and initial main branch...',
-      detail: 'Initializing repository',
+      message: t('git_ops.initializing_branch'),
+      detail: t('git_ops.initializing_detail'),
       percent: 20,
     });
     const data = await fetchWithAuth(API_BASE, {
@@ -205,7 +205,7 @@ export async function gitInit(skipConfirm = false) {
 
     if (data.success) {
       gitState.isInitialized = true;
-      operation.finish('Local repository initialized', {
+      operation.finish(t('git_ops.repository_initialized'), {
         detail: 'Initial branch: main',
         percent: 100,
       });
@@ -214,11 +214,11 @@ export async function gitInit(skipConfirm = false) {
       return true;
     } else {
       const message = data.message || data.error || "Unknown initialization error";
-      operation.fail('Could not initialize repository', message);
+      operation.fail(t('git_ops.init_failed'), message);
       showToast(t("toast.git_init_failed") + ": " + message, "error");
     }
   } catch (error) {
-    operation.fail('Could not initialize repository', error.message);
+    operation.fail(t('git_ops.init_failed'), error.message);
     showToast(t("toast.git_init_failed") + ": " + error.message, "error");
   }
   return false;
@@ -243,9 +243,9 @@ async function confirmAbortGitOperation(branch) {
   if (!confirmed) return;
 
   const operation = startBranchOperation(
-    'Abort Git operation',
+    t('git_ops.abort_label'),
     'cancel',
-    'Aborting merge or rebase...',
+    t('git_ops.aborting'),
     branch,
     () => confirmAbortGitOperation(branch),
   );
@@ -256,18 +256,18 @@ async function confirmAbortGitOperation(branch) {
       body: JSON.stringify({ action: "git_abort" }),
     });
     if (data.success) {
-      operation.finish('Merge or rebase aborted');
+      operation.finish(t('git_ops.abort_complete'));
       showToast(t("toast.git_abort_success"), "success");
       eventBus.emit('ui:reload-files');
       await gitStatus(false, true);
       return true;
     } else {
       const message = data.message || data.error || 'Unknown abort error';
-      operation.fail('Could not abort Git operation', message);
+      operation.fail(t('git_ops.abort_failed'), message);
       showToast(t("toast.git_abort_fail", { error: message }), "error");
     }
   } catch (e) {
-    operation.fail('Could not abort Git operation', e.message);
+    operation.fail(t('git_ops.abort_failed'), e.message);
     showToast(t("toast.git_error", { error: e.message }), "error");
   }
   return false;
@@ -290,9 +290,9 @@ async function confirmForcePush(branch) {
   if (!confirmed) return;
 
   const operation = startGitOperation(
-    'Force push to GitHub',
+    t('git_ops.force_push_label'),
     'cloud_upload',
-    'Replacing the remote branch...',
+    t('git_ops.force_push_running'),
     () => confirmForcePush(branch),
     `${branch} -> origin/${branch}`,
   );
@@ -303,17 +303,17 @@ async function confirmForcePush(branch) {
       body: JSON.stringify({ action: "git_force_push" }),
     });
     if (data.success) {
-      operation.finish('Remote branch replaced');
+      operation.finish(t('git_ops.remote_replaced'));
       showToast(t("toast.git_push_success"), "success");
       await gitStatus(true, true);
       return true;
     } else {
       const message = data.message || data.error || 'Unknown force-push error';
-      operation.fail('Force push failed', message);
+      operation.fail(t('git_ops.force_push_failed'), message);
       showToast(t("toast.git_force_push_fail", { error: message }), "error");
     }
   } catch (e) {
-    operation.fail('Force push failed', e.message);
+    operation.fail(t('git_ops.force_push_failed'), e.message);
     showToast(t("toast.git_error", { error: e.message }), "error");
   }
   return false;
@@ -336,9 +336,9 @@ async function confirmHardReset(branch) {
   if (!confirmed) return;
 
   const operation = startGitOperation(
-    'Reset from GitHub',
+    t('git_ops.reset_label'),
     'restore',
-    'Replacing local files from the remote branch...',
+    t('git_ops.reset_running'),
     () => confirmHardReset(branch),
     `origin/${branch} -> ${branch}`,
   );
@@ -349,18 +349,18 @@ async function confirmHardReset(branch) {
       body: JSON.stringify({ action: "git_hard_reset", branch }),
     });
     if (data.success) {
-      operation.finish('Local branch reset from GitHub');
+      operation.finish(t('git_ops.reset_from_github'));
       showToast(t("toast.git_reset_success"), "success");
       eventBus.emit('ui:reload-files');
       await gitStatus(true, true);
       return true;
     } else {
       const message = data.message || data.error || 'Unknown reset error';
-      operation.fail('Hard reset failed', message);
+      operation.fail(t('git_ops.hard_reset_failed'), message);
       showToast(t("toast.git_reset_fail", { error: message }), "error");
     }
   } catch (e) {
-    operation.fail('Hard reset failed', e.message);
+    operation.fail(t('git_ops.hard_reset_failed'), e.message);
     showToast(t("toast.git_error", { error: e.message }), "error");
   }
   return false;
@@ -382,9 +382,9 @@ async function confirmDeleteRemoteBranch(branchName) {
   if (!confirmed) return;
 
   const operation = startGitOperation(
-    'Delete GitHub branch',
+    t('git_ops.delete_remote_label'),
     'delete',
-    `Deleting origin/${branchName}...`,
+    t('git_ops.delete_remote_running', { branch: branchName }),
     () => confirmDeleteRemoteBranch(branchName),
     `origin/${branchName}`,
   );
@@ -396,17 +396,17 @@ async function confirmDeleteRemoteBranch(branchName) {
     });
 
     if (data.success) {
-      operation.finish('Remote branch deleted');
-      showToast(data.message || `Branch '${branchName}' deleted from GitHub`, "success");
+      operation.finish(t('git_ops.remote_deleted'));
+      showToast(data.message || t('toast.github_branch_deleted', { branch: branchName }), "success");
       await gitStatus(true, true);
       return true;
     }
     const message = data.message || data.error || 'Unknown remote branch deletion error';
-    operation.fail('Could not delete remote branch', message);
+    operation.fail(t('git_ops.remote_delete_failed'), message);
     await offerDefaultBranchRepair(branchName, message);
   } catch (e) {
     const message = e.message || "Unknown error";
-    operation.fail('Could not delete remote branch', message);
+    operation.fail(t('git_ops.remote_delete_failed'), message);
     await offerDefaultBranchRepair(branchName, message);
   }
   return false;
@@ -426,9 +426,9 @@ async function offerDefaultBranchRepair(branchName, message) {
   if (!confirmed) return false;
 
   const operation = startGitOperation(
-    'Change default branch and delete',
+    t('git_ops.default_repair_label'),
     'swap_horiz',
-    `Setting main as default before deleting origin/${branchName}...`,
+    t('git_ops.default_repair_running', { branch: branchName }),
     () => offerDefaultBranchRepair(branchName, "refusing to delete the current branch"),
     `default: ${branchName} -> main; delete origin/${branchName}`,
   );
@@ -441,13 +441,13 @@ async function offerDefaultBranchRepair(branchName, message) {
     });
     if (!patchData.success) {
       const patchMessage = patchData.message || patchData.error || 'Unknown default branch update error';
-      operation.fail('Could not change GitHub default branch', patchMessage);
+      operation.fail(t('git_ops.default_change_failed'), patchMessage);
       showToast(t("toast.autofix_failed", { error: patchMessage }), "error");
       return false;
     }
 
     defaultBranchChanged = true;
-    operation.update({ message: `Default branch changed; deleting origin/${branchName}...` });
+    operation.update({ message: t('git_ops.default_repair_deleting', { branch: branchName }) });
     const deleteData = await fetchWithAuth(API_BASE, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -455,20 +455,20 @@ async function offerDefaultBranchRepair(branchName, message) {
     });
     if (!deleteData.success) {
       const deleteMessage = deleteData.message || deleteData.error || 'Unknown remote branch deletion error';
-      operation.fail('Default changed, but branch deletion failed', deleteMessage);
+      operation.fail(t('git_ops.default_changed_delete_failed'), deleteMessage);
       showToast(t("toast.autofix_failed", { error: deleteMessage }), "error");
       return false;
     }
 
-    operation.finish('Default branch changed and remote branch deleted');
+    operation.finish(t('git_ops.default_changed_deleted'));
     showToast(deleteData.message || t("toast.success"), "success");
     await gitStatus(true, true);
     return true;
   } catch (error) {
     operation.fail(
       defaultBranchChanged
-        ? 'Default changed, but branch deletion failed'
-        : 'Could not change GitHub default branch',
+        ? t('git_ops.default_changed_delete_failed')
+        : t('git_ops.default_change_failed'),
       error.message,
     );
     showToast(t("toast.autofix_failed", { error: error.message }), "error");
@@ -496,14 +496,14 @@ export async function gitGetRemotes() {
  * Set git credentials
  */
 export async function gitSetCredentials(username, token, rememberMe = true) {
-  const account = String(username || '').trim() || 'GitHub account';
+  const account = String(username || '').trim() || t('git_ops.github_account');
   const operation = startOperationFeedback({
-    label: 'Save GitHub credentials',
+    label: t('git_ops.credentials_label'),
     icon: 'key',
-    message: 'Saving GitHub credentials...',
-    scope: 'GitHub authentication',
+    message: t('git_ops.credentials_saving'),
+    scope: t('git_ops.github_authentication'),
     target: account,
-    openLabel: 'GitHub Settings',
+    openLabel: t('git_ops.github_settings'),
     openIcon: 'settings',
     open: () => eventBus.emit('git:show-settings'),
   });
@@ -514,23 +514,23 @@ export async function gitSetCredentials(username, token, rememberMe = true) {
       body: JSON.stringify({ action: "git_set_credentials", username, token, remember_me: rememberMe }),
     });
     if (data.success) {
-      operation.finish('GitHub credentials saved', {
-        detail: rememberMe ? 'Credentials saved for future sessions' : 'Credentials available for this session',
+      operation.finish(t('git_ops.credentials_saved'), {
+        detail: rememberMe ? t('git_ops.credentials_persisted') : t('git_ops.credentials_session'),
       });
       showToast(t("toast.git_creds_saved"), "success");
       return true;
     }
-    const message = data.message || data.error || 'Credential save was rejected';
-    operation.fail('Could not save GitHub credentials', message, {
-      detail: 'The token was not retained for Retry. Reopen GitHub Settings to try again.',
+    const message = data.message || data.error || t('git_ops.credentials_rejected');
+    operation.fail(t('git_ops.credentials_save_failed'), message, {
+      detail: t('git_ops.credentials_retry_detail'),
     });
-    showToast("Failed to save GitHub credentials: " + message, "error");
+    showToast(t('toast.github_credentials_failed', { error: message }), "error");
     return false;
   } catch (error) {
-    operation.fail('Could not save GitHub credentials', error.message, {
-      detail: 'The token was not retained for Retry. Reopen GitHub Settings to try again.',
+    operation.fail(t('git_ops.credentials_save_failed'), error.message, {
+      detail: t('git_ops.credentials_retry_detail'),
     });
-    showToast("Failed to save GitHub credentials: " + error.message, "error");
+    showToast(t('toast.github_credentials_failed', { error: error.message }), "error");
     return false;
   }
 }
@@ -543,9 +543,9 @@ export async function gitStage(files) {
   const request = Object.freeze(Array.from(new Set(files)));
   let retry = () => gitStage(request);
   const operation = startBranchOperation(
-    `Stage ${request.length} ${request.length === 1 ? 'file' : 'files'}`,
+    tp('git_ops.stage_label', request.length),
     'add',
-    'Updating the Git index...',
+    t('git_ops.index_updating'),
     gitFileTarget(request),
     () => retry(),
   );
@@ -557,7 +557,7 @@ export async function gitStage(files) {
     });
 
     if (data.success) {
-      operation.finish(`${request.length} ${request.length === 1 ? 'file' : 'files'} staged`);
+      operation.finish(tp('git_ops.files_staged', request.length));
       showToast(data.message, "success");
       await gitStatus(false, true);
       return true;
@@ -565,7 +565,7 @@ export async function gitStage(files) {
       const errorMsg = data.message || data.error || "Staging failed";
       if (errorMsg.includes("index.lock") || errorMsg.includes("File exists")) {
         retry = () => handleGitLockAndRetry(request);
-        operation.fail('Git index is locked', errorMsg, {
+        operation.fail(t('git_ops.index_locked'), errorMsg, {
           detail: 'Retry can clean stale recovery state and stage the same files.',
         });
         showToast(t("toast.git_lock_fail"), "error", 0, {
@@ -573,13 +573,13 @@ export async function gitStage(files) {
           callback: retry
         });
       } else {
-        operation.fail('Could not stage files', errorMsg);
+        operation.fail(t('git_ops.stage_failed'), errorMsg);
         showToast(t("toast.git_stage_fail", { error: errorMsg }), "error");
       }
       return false;
     }
   } catch (error) {
-    operation.fail('Could not stage files', error.message);
+    operation.fail(t('git_ops.stage_failed'), error.message);
     showToast(t("toast.git_stage_fail", { error: error.message }), "error");
     return false;
   }
@@ -597,14 +597,14 @@ export async function handleGitLockAndRetry(files) {
 
   let cleanupComplete = false;
   const operation = startBranchOperation(
-    'Clean Git state and retry staging',
+    t('git_ops.cleanup_retry_label'),
     'cleaning_services',
-    'Cleaning stale Git recovery state...',
+    t('git_ops.cleanup_running'),
     `${branch}; ${gitFileTarget(request)}`,
     () => handleGitLockAndRetry(request),
   );
   try {
-    operation.update({ message: 'Cleaning stale Git recovery state...', detail: 'Step 1 of 2', percent: 15 });
+    operation.update({ message: t('git_ops.cleanup_running'), detail: t('git_ops.step_detail', { current: 1, count: 2 }), percent: 15 });
     const cleanData = await fetchWithAuth(API_BASE, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -613,7 +613,7 @@ export async function handleGitLockAndRetry(files) {
     if (!cleanData.success) throw new Error(cleanData.message || cleanData.error || 'Git recovery cleanup failed');
     cleanupComplete = true;
 
-    operation.update({ message: 'Retrying staging...', detail: 'Step 2 of 2', percent: 60 });
+    operation.update({ message: t('git_ops.staging_retrying'), detail: t('git_ops.step_detail', { current: 2, count: 2 }), percent: 60 });
     const retryData = await fetchWithAuth(API_BASE, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -621,7 +621,7 @@ export async function handleGitLockAndRetry(files) {
     });
     if (!retryData.success) throw new Error(retryData.message || retryData.error || 'Staging retry failed');
 
-    operation.finish(`${request.length} ${request.length === 1 ? 'file' : 'files'} staged after cleanup`, {
+    operation.finish(tp('git_ops.files_staged_after_cleanup', request.length), {
       detail: cleanData.message || 'Git recovery state cleaned',
       percent: 100,
     });
@@ -629,7 +629,7 @@ export async function handleGitLockAndRetry(files) {
     await gitStatus(false, true);
     return true;
   } catch (error) {
-    operation.fail(cleanupComplete ? 'Staging still failed after cleanup' : 'Could not clean Git recovery state', error.message, {
+    operation.fail(cleanupComplete ? t('git_ops.stage_after_cleanup_failed') : t('git_ops.cleanup_failed'), error.message, {
       detail: cleanupComplete
         ? 'Git recovery state was removed. The selected files were not staged.'
         : 'No staging retry was attempted.',
@@ -647,9 +647,9 @@ export async function gitCleanLocks() {
   const confirmed = await showConfirmDialog(getGitActionConfirmation('clean-locks', { currentBranch: branch }));
   if (!confirmed) return false;
   const operation = startBranchOperation(
-    'Clean Git recovery state',
+    t('git_ops.cleanup_label'),
     'cleaning_services',
-    'Removing stale locks and operation state...',
+    t('git_ops.cleanup_running'),
     `${branch} -> .git recovery metadata`,
     gitCleanLocks,
   );
@@ -661,7 +661,7 @@ export async function gitCleanLocks() {
     });
     if (data.success) {
       const removed = Array.isArray(data.removed) ? data.removed : [];
-      operation.finish('Git recovery state cleaned', {
+      operation.finish(t('git_ops.cleanup_complete'), {
         detail: removed.length ? removed.join('\n') : (data.message || 'No stale recovery entries found'),
       });
       showToast(data.message, "success");
@@ -669,12 +669,12 @@ export async function gitCleanLocks() {
       return true;
     } else {
       const message = data.message || data.error || 'Git recovery cleanup was rejected';
-      operation.fail('Could not clean Git recovery state', message);
+      operation.fail(t('git_ops.cleanup_failed'), message);
       showToast(t("toast.github_clean_locks_fail") + ': ' + message, "error");
       return false;
     }
   } catch (error) {
-    operation.fail('Could not clean Git recovery state', error.message);
+    operation.fail(t('git_ops.cleanup_failed'), error.message);
     showToast(t("toast.github_clean_locks_fail") + ": " + error.message, "error");
     return false;
   }
@@ -688,9 +688,9 @@ export async function gitRepairIndex() {
   const confirmed = await showConfirmDialog(getGitActionConfirmation('repair-index', { currentBranch: branch }));
   if (!confirmed) return false;
   const operation = startBranchOperation(
-    'Repair Git index',
+    t('git_ops.repair_index_label'),
     'build',
-    'Rebuilding the Git index...',
+    t('git_ops.repair_index_running'),
     `${branch} -> .git/index`,
     gitRepairIndex,
   );
@@ -701,18 +701,18 @@ export async function gitRepairIndex() {
       body: JSON.stringify({ action: "git_repair_index" }),
     });
     if (data.success) {
-      operation.finish('Git index repaired');
+      operation.finish(t('git_ops.index_repaired'));
       showToast(data.message, "success");
       await gitStatus(false, true);
       return true;
     } else {
       const message = data.message || data.error || "Unknown index repair error";
-      operation.fail('Could not repair Git index', message);
+      operation.fail(t('git_ops.index_repair_failed'), message);
       showToast(t("toast.github_repair_failed", { error: message }), "error");
       return false;
     }
   } catch (error) {
-    operation.fail('Could not repair Git index', error.message);
+    operation.fail(t('git_ops.index_repair_failed'), error.message);
     showToast(t("toast.github_repair_failed", { error: error.message }), "error");
     return false;
   }
@@ -725,9 +725,9 @@ export async function gitUnstage(files) {
   if (!files || files.length === 0) return;
   const request = Object.freeze(Array.from(new Set(files)));
   const operation = startBranchOperation(
-    `Unstage ${request.length} ${request.length === 1 ? 'file' : 'files'}`,
+    tp('git_ops.unstage_label', request.length),
     'remove',
-    'Updating the Git index...',
+    t('git_ops.index_updating'),
     gitFileTarget(request),
     () => gitUnstage(request),
   );
@@ -738,17 +738,17 @@ export async function gitUnstage(files) {
       body: JSON.stringify({ action: "git_unstage", files: request }),
     });
     if (data.success) {
-      operation.finish(`${request.length} ${request.length === 1 ? 'file' : 'files'} unstaged`);
+      operation.finish(tp('git_ops.files_unstaged', request.length));
       showToast(data.message, "success");
       await gitStatus(false, true);
       return true;
     }
     const message = data.message || data.error || 'Unstage failed';
-    operation.fail('Could not unstage files', message);
+    operation.fail(t('git_ops.unstage_failed'), message);
     showToast(t("toast.git_unstage_fail", { error: message }), "error");
     return false;
   } catch (error) {
-    operation.fail('Could not unstage files', error.message);
+    operation.fail(t('git_ops.unstage_failed'), error.message);
     showToast(t("toast.git_unstage_fail", { error: error.message }), "error");
     return false;
   }
@@ -763,9 +763,9 @@ export async function gitReset(files) {
   const confirmed = await showConfirmDialog(getGitActionConfirmation('discard', { files: request }));
   if (!confirmed) return;
   const operation = startBranchOperation(
-    `Discard changes in ${request.length} ${request.length === 1 ? 'file' : 'files'}`,
+    tp('git_ops.discard_label', request.length),
     'undo',
-    'Restoring committed content...',
+    t('git_ops.discard_running'),
     gitFileTarget(request),
     () => gitReset(request),
   );
@@ -776,17 +776,17 @@ export async function gitReset(files) {
       body: JSON.stringify({ action: "git_reset", files: request }),
     });
     if (data.success) {
-      operation.finish('Working changes discarded');
+      operation.finish(t('git_ops.changes_discarded'));
       showToast(data.message, "success");
       await gitStatus(false, true);
       return true;
     }
     const message = data.message || data.error || 'Discard failed';
-    operation.fail('Could not discard working changes', message);
+    operation.fail(t('git_ops.discard_failed'), message);
     showToast(t("toast.git_reset_fail", { error: message }), "error");
     return false;
   } catch (error) {
-    operation.fail('Could not discard working changes', error.message);
+    operation.fail(t('git_ops.discard_failed'), error.message);
     showToast(t("toast.git_reset_fail", { error: error.message }), "error");
     return false;
   }
@@ -796,7 +796,7 @@ export async function gitReset(files) {
  * Commit staged changes
  */
 export async function gitCommit(commitMessage) {
-  const operation = startGitOperation('Commit staged changes', 'commit', 'Creating local commit...', () => gitCommit(commitMessage));
+  const operation = startGitOperation(t('git_ops.commit_label'), 'commit', t('git_ops.commit_running'), () => gitCommit(commitMessage));
   try {
     showToast(t("toast.git_commit_started"), "success");
     const data = await fetchWithAuth(API_BASE, {
@@ -805,13 +805,13 @@ export async function gitCommit(commitMessage) {
       body: JSON.stringify({ action: "git_commit", commit_message: commitMessage }),
     });
     if (data.success) {
-      operation.finish('Commit created');
+      operation.finish(t('git_ops.commit_created'));
       showToast(t("toast.git_commit_success"), "success");
       await gitStatus(false, true);
       return true;
     }
     const message = data.message || data.error || 'Commit failed';
-    operation.fail('Commit failed', message);
+    operation.fail(t('git_ops.commit_failed'), message);
     return false;
   } catch (error) {
     const errorMsg = error.message || "";
@@ -823,7 +823,7 @@ export async function gitCommit(commitMessage) {
     } else {
       showToast(t("toast.git_commit_fail", { error: error.message }), "error");
     }
-    operation.fail('Commit failed', error.message);
+    operation.fail(t('git_ops.commit_failed'), error.message);
     return false;
   }
 }
@@ -839,7 +839,7 @@ export async function gitPull() {
     cancelText: t("modal.cancel_button")
   });
   if (!confirmed) return;
-  const operation = startGitOperation('Pull from GitHub', 'cloud_download', 'Downloading remote changes...', gitPull);
+  const operation = startGitOperation(t('git_ops.pull_label'), 'cloud_download', t('git_ops.pull_running'), gitPull);
   try {
     setButtonLoading(elements.btnGitPull, true);
     showToast(t("toast.git_pull_started"), "success");
@@ -850,7 +850,7 @@ export async function gitPull() {
     });
     setButtonLoading(elements.btnGitPull, false);
     if (data.success) {
-      operation.finish('Pull complete');
+      operation.finish(t('git_ops.pull_complete'));
       showToast(t("toast.git_pull_success"), "success");
       await new Promise(resolve => setTimeout(resolve, 500));
       eventBus.emit('ui:reload-files');
@@ -859,13 +859,13 @@ export async function gitPull() {
       return true;
     }
     const message = data.message || data.error || 'Pull failed';
-    operation.fail('Pull failed', message);
+    operation.fail(t('git_ops.pull_failed'), message);
     showToast(t("toast.gitea_pull_failed", { error: message }), "error");
     return false;
   } catch (error) {
     setButtonLoading(elements.btnGitPull, false);
     showToast(t("toast.gitea_pull_failed", { error: error.message }), "error");
-    operation.fail('Pull failed', error.message);
+    operation.fail(t('git_ops.pull_failed'), error.message);
     return false;
   }
 }
@@ -876,9 +876,9 @@ export async function gitPull() {
 export async function gitCheckoutBranch(branch) {
   const sourceBranch = gitState.currentBranch || 'Current branch';
   const operation = startBranchOperation(
-    `Switch to ${branch}`,
+    t('git_ops.switch_label', { branch }),
     'swap_horiz',
-    'Checking out branch...',
+    t('git_ops.switch_running'),
     `${sourceBranch} -> ${branch}`,
     () => gitCheckoutBranch(branch),
   );
@@ -889,16 +889,16 @@ export async function gitCheckoutBranch(branch) {
       body: JSON.stringify({ action: "git_checkout_branch", branch }),
     });
     if (data.success) {
-      operation.finish(`Switched to ${branch}`);
+      operation.finish(t('git_ops.switched_to', { branch }));
       eventBus.emit('ui:reload-files');
       await gitStatus(false, true);
       return true;
     } else {
-      operation.fail(`Could not switch to ${branch}`, data.message || "Unknown checkout error");
+      operation.fail(t('git_ops.switch_failed', { branch }), data.message || t('git_ops.checkout_unknown'));
       return false;
     }
   } catch (e) {
-    operation.fail(`Could not switch to ${branch}`, e.message);
+    operation.fail(t('git_ops.switch_failed', { branch }), e.message);
     return false;
   }
 }
@@ -920,9 +920,9 @@ export async function gitCreateBranch() {
 async function runGitCreateBranch(name) {
   const sourceBranch = gitState.currentBranch || 'Current HEAD';
   const operation = startBranchOperation(
-    `Create ${name}`,
+    t('git_ops.create_branch_label', { branch: name }),
     'add_circle_outline',
-    'Creating and checking out branch...',
+    t('git_ops.create_branch_running'),
     `${sourceBranch} -> ${name}`,
     () => runGitCreateBranch(name),
   );
@@ -933,16 +933,16 @@ async function runGitCreateBranch(name) {
       body: JSON.stringify({ action: "git_create_branch", name, checkout: true }),
     });
     if (data.success) {
-      operation.finish(`${name} created and checked out`);
+      operation.finish(t('git_ops.branch_created', { branch: name }));
       eventBus.emit('ui:reload-files');
       await gitStatus(false, true);
       return true;
     } else {
-      operation.fail(`Could not create ${name}`, data.message || "Unknown branch creation error");
+      operation.fail(t('git_ops.branch_create_failed', { branch: name }), data.message || t('git_ops.branch_create_unknown'));
       return false;
     }
   } catch (e) {
-    operation.fail(`Could not create ${name}`, e.message);
+    operation.fail(t('git_ops.branch_create_failed', { branch: name }), e.message);
     return false;
   }
 }
@@ -959,9 +959,9 @@ export async function gitDeleteLocalBranch(branch, force = false) {
 
 async function runGitDeleteLocalBranch(branch, force = false) {
   const operation = startBranchOperation(
-    `${force ? 'Force delete' : 'Delete'} ${branch}`,
+    t(force ? 'git_ops.force_delete_branch_label' : 'git_ops.delete_branch_label', { branch }),
     'delete_outline',
-    `${force ? 'Force deleting' : 'Deleting'} local branch...`,
+    t(force ? 'git_ops.force_delete_branch_running' : 'git_ops.delete_branch_running'),
     branch,
     () => gitDeleteLocalBranch(branch, force),
   );
@@ -972,21 +972,21 @@ async function runGitDeleteLocalBranch(branch, force = false) {
       body: JSON.stringify({ action: "git_delete_local_branch", branch, force }),
     });
     if (!force && !data.success && data.message?.includes("not fully merged")) {
-      operation.fail(`${branch} is not fully merged`, data.message);
+      operation.fail(t('git_ops.branch_not_merged', { branch }), data.message);
       const forceConfirmed = await showConfirmDialog(getGitActionConfirmation('force-delete-local-branch', { branch }));
       if (forceConfirmed) return runGitDeleteLocalBranch(branch, true);
       return false;
     }
     if (data.success) {
-      operation.finish(`${branch} deleted`);
+      operation.finish(t('git_ops.branch_deleted', { branch }));
       await gitStatus(false, true);
       return true;
     } else {
-      operation.fail(`Could not delete ${branch}`, data.message || "Unknown branch deletion error");
+      operation.fail(t('git_ops.branch_delete_failed', { branch }), data.message || t('git_ops.branch_delete_unknown'));
       return false;
     }
   } catch (e) {
-    operation.fail(`Could not delete ${branch}`, e.message);
+    operation.fail(t('git_ops.branch_delete_failed', { branch }), e.message);
     return false;
   }
 }
@@ -1003,9 +1003,9 @@ export async function gitMergeBranch(branch) {
   if (!confirmed) return;
 
   const operation = startBranchOperation(
-    `Merge ${branch}`,
+    t('git_ops.merge_label', { branch }),
     'merge',
-    `Merging into ${destinationBranch}...`,
+    t('git_ops.merge_running', { branch: destinationBranch }),
     `${branch} -> ${destinationBranch}`,
     () => gitMergeBranch(branch),
   );
@@ -1016,17 +1016,17 @@ export async function gitMergeBranch(branch) {
       body: JSON.stringify({ action: "git_merge_branch", branch }),
     });
     if (data.success) {
-      operation.finish(`${branch} merged into ${destinationBranch}`);
+      operation.finish(t('git_ops.branch_merged', { branch, destination: destinationBranch }));
       eventBus.emit('ui:reload-files');
       await gitStatus(false, true);
       return true;
     } else {
-      operation.fail(`Could not merge ${branch}`, data.message || "Unknown merge error");
+      operation.fail(t('git_ops.merge_failed', { branch }), data.message || t('git_ops.merge_unknown'));
       await gitStatus(false, true);
       return false;
     }
   } catch (e) {
-    operation.fail(`Could not merge ${branch}`, e.message);
+    operation.fail(t('git_ops.merge_failed', { branch }), e.message);
     return false;
   }
 }
@@ -1038,9 +1038,9 @@ export async function gitResolveConflict(path, resolution) {
   const targetPath = String(path || 'Unknown file');
   const resolutionLabel = resolution === 'ours' ? 'local version' : resolution === 'theirs' ? 'incoming version' : String(resolution || 'selected version');
   const operation = startBranchOperation(
-    `Resolve conflict in ${targetPath.split('/').pop()}`,
+    t('git_ops.resolve_conflict_label', { file: targetPath.split('/').pop() }),
     'rule',
-    `Accepting ${resolutionLabel}...`,
+    t('git_ops.resolve_conflict_running', { resolution: resolutionLabel }),
     `${targetPath} -> ${resolutionLabel}`,
     () => gitResolveConflict(targetPath, resolution),
   );
@@ -1051,19 +1051,19 @@ export async function gitResolveConflict(path, resolution) {
       body: JSON.stringify({ action: "git_resolve_conflict", path: targetPath, resolution }),
     });
     if (data.success) {
-      operation.finish(`Conflict resolved with ${resolutionLabel}`);
+      operation.finish(t('git_ops.conflict_resolved', { resolution: resolutionLabel }));
       showToast(data.message, "success");
       await gitStatus(false, true);
       return true;
     } else {
       const message = data.message || data.error || "Unknown conflict resolution error";
-      operation.fail('Could not resolve conflict', message);
-      showToast("Resolve failed: " + message, "error");
+      operation.fail(t('git_ops.conflict_failed'), message);
+      showToast(t('toast.resolve_failed', { error: message }), "error");
       return false;
     }
   } catch (e) {
-    operation.fail('Could not resolve conflict', e.message);
-    showToast("Resolve failed: " + e.message, "error");
+    operation.fail(t('git_ops.conflict_failed'), e.message);
+    showToast(t('toast.resolve_failed', { error: e.message }), "error");
     return false;
   }
 }
@@ -1090,7 +1090,7 @@ export async function gitGetConflictFiles() {
  */
 export async function showBranchManager() {
   if (!gitState.isInitialized) {
-    showToast("Git repository not initialized", "warning");
+    showToast(t('toast.git_not_initialized'), "warning");
     return;
   }
 
@@ -1241,7 +1241,7 @@ export async function gitPush() {
       }
     }
 
-    operation = startGitOperation('Push to GitHub', 'cloud_upload', 'Uploading local commits...', gitPush);
+    operation = startGitOperation(t('git_ops.push_label'), 'cloud_upload', t('git_ops.push_running'), gitPush);
     setButtonLoading(elements.btnGitPush, true);
     showToast(t("toast.git_push_started"), "info");
 
@@ -1254,7 +1254,7 @@ export async function gitPush() {
     if (pushData.success) {
       setButtonLoading(elements.btnGitPush, false);
       showToast(t("toast.git_push_success"), "success");
-      operation.finish('Push complete');
+      operation.finish(t('git_ops.push_complete'));
       await gitStatus(false, true);
       return true;
     }
@@ -1281,25 +1281,25 @@ export async function gitPush() {
       });
       setButtonLoading(elements.btnGitPush, false);
       if (data.success) {
-        operation.finish('Commit and push complete');
+        operation.finish(t('git_ops.commit_push_complete'));
         showToast(t("toast.git_push_success"), "success");
         await gitStatus(false, true);
         return true;
       } else {
         const message = data.message || data.error || 'Push failed';
-        operation.fail('Push failed', message);
+        operation.fail(t('git_ops.push_failed'), message);
         showToast(t("toast.gitea_push_failed", { error: message }), "error");
       }
     } else {
       setButtonLoading(elements.btnGitPush, false);
-      operation.fail('Push failed', errorMessage);
+      operation.fail(t('git_ops.push_failed'), errorMessage);
       showToast(t("toast.gitea_push_failed", { error: errorMessage }), "error");
     }
     return false;
   } catch (error) {
     setButtonLoading(elements.btnGitPush, false);
     showToast(t("toast.gitea_push_failed", { error: error.message }), "error");
-    operation?.fail('Push failed', error.message);
+    operation?.fail(t('git_ops.push_failed'), error.message);
     return false;
   }
 }

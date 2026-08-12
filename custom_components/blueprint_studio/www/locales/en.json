@@ -29,6 +29,8 @@
   "gitea.logged_in_as": "You are logged in as <strong>{username}</strong>",
   "gitea.no_commits": "No commits to push.",
   "gitea.private_repo": "Private repository",
+  "gitea.repository_description": "Repository description",
+  "gitea.repository_name": "Repository name",
   "gitea.pull_confirm": "Are you sure you want to pull changes from Gitea? This will update your local files.",
   "gitea.remotes_title": "Current Remotes",
   "gitea.remove_remote_error": "Error removing remote: {error}",
@@ -114,6 +116,8 @@
   "modal.yaml_error": "YAML Error",
   "palette.search_files": "Search files by name...",
   "palette.type_command": "Type a command...",
+  "palette.available": "Available",
+  "palette.unavailable_reason": "Unavailable: {reason}",
   "palette.goto_line": "Go to line...",
   "palette.goto_line_instruction": "Type a line number to jump to",
   "palette.no_results": "No results found",
@@ -168,6 +172,11 @@
   "search.match_case": "Match Case",
   "search.match_word": "Match Whole Word",
   "search.no_results": "No results found",
+  "search.no_results_short": "No results",
+  "search.matches_found.one": "1 match found",
+  "search.matches_found.other": "{count} matches found",
+  "search.global_failed": "Search failed: {error}",
+  "search.global_failed_log": "Global search failed",
   "search.refresh": "Refresh",
   "search.replace_all": "Replace All",
   "search.replace_confirm_message": "Replace all occurrences of <b>\"{query}\"</b> with <b>\"{replacement}\"</b>?<br><br>This will affect <b>{occurrences} occurrences</b> across <b>{files} files</b>.",
@@ -277,6 +286,82 @@
   "settings.tabs.general": "General",
   "settings.tabs.integrations": "Integrations",
   "settings.title": "Blueprint Studio Settings",
+  "settings.navigation_label": "Settings sections",
+  "settings.navigation_back": "Back",
+  "settings.search_title": "Search settings",
+  "settings.guidance.title": "Getting Started",
+  "settings.guidance.hint": "Open focused guidance without changing your files or workspace.",
+  "settings.guidance.file": "First file",
+  "settings.guidance.file_hint": "Create or open a file",
+  "settings.guidance.git": "Git workflow",
+  "settings.guidance.git_hint": "Review and commit changes",
+  "settings.guidance.sftp": "SFTP workflow",
+  "settings.guidance.sftp_hint": "Connect to remote files",
+  "settings.guidance.validation": "Validation",
+  "settings.guidance.validation_hint": "Check the active document",
+  "settings.guidance.terminal": "Terminal",
+  "settings.guidance.terminal_hint": "Open a local or SSH shell",
+  "settings.guidance.ai": "AI assistant",
+  "settings.guidance.ai_hint": "Open reviewed AI help",
+  "settings.guidance.resume": "Resume onboarding",
+  "settings.sections.workspace": "Workspace",
+  "settings.sections.editor": "Editor",
+  "settings.sections.appearance": "Appearance",
+  "settings.sections.features": "Features",
+  "settings.sections.connections": "Connections",
+  "settings.sections.source_control": "Source Control",
+  "settings.sections.ai_privacy": "AI and Privacy",
+  "settings.sections.advanced": "Advanced",
+  "settings.search_placeholder": "Search settings by name or purpose",
+  "settings.ai.fetching_models": "Fetching...",
+  "settings.ai.fetch_models": "Fetch Models",
+  "settings.cache.clearing": "Clearing...",
+  "settings.cache.clear_reload": "Clear & Reload",
+  "settings.reset.title": "Reset Application",
+  "settings.reset.confirm": "Are you sure you want to reset the application? This will:",
+  "settings.reset.clear_settings": "Clear all settings and preferences",
+  "settings.reset.theme": "Reset theme to default",
+  "settings.reset.recent": "Clear recent files and favorites",
+  "settings.reset.onboarding": "Remove onboarding completion flag",
+  "settings.reset.credentials": "Clear Git/Gitea credentials (optional)",
+  "settings.reset.repository": "Delete local repository (optional)",
+  "settings.reset.warning": "This action cannot be undone, but your files will remain safe.",
+  "settings.reset.options": "Reset Options",
+  "settings.reset.repository_folder": "Delete local repository (.git folder)",
+  "settings.reset.note": "Your configuration files will not be deleted. Only application settings will be reset.",
+  "settings.search_clear": "Clear settings search",
+  "settings.search_count": "{count} matching settings",
+  "settings.search_empty": "No settings match your search.",
+  "settings.meta.default": "Default: {value}",
+  "settings.meta.immediate": "Applies immediately",
+  "settings.meta.next_reload": "Applies on next reload",
+  "settings.meta.reset": "Reset to default",
+  "settings.meta.unavailable": "Unavailable: {reason}",
+  "settings.meta.on": "On",
+  "settings.meta.off": "Off",
+  "settings.dependencies.autosave": "Enable Auto-Save to set its delay.",
+  "settings.dependencies.terminal": "Enable Terminal integration to choose an SSH target.",
+  "settings.dependencies.source_control": "Enable GitHub or Gitea integration to configure repository polling.",
+  "settings.dependencies.ai": "Enable AI Studio Copilot to configure providers and privacy-sensitive credentials.",
+  "settings.ai.type": "AI mode",
+  "settings.ai.rule_based": "Built-in",
+  "settings.ai.local": "Local AI",
+  "settings.ai.cloud": "Cloud AI",
+  "settings.ai.ha_agent": "HA Agent",
+  "settings.ai.rule_based_hint": "Pattern-based assistance runs inside Blueprint Studio without an external provider.",
+  "settings.ai.local_ai_hint": "Use Ollama, LM Studio, or another OpenAI-compatible server on your network.",
+  "settings.ai.cloud_hint": "Use Gemini, OpenAI, Claude, or an OpenAI-compatible hosted endpoint.",
+  "settings.ai.hass_agent_hint": "Route requests through a Home Assistant conversation agent with reviewed file diffs.",
+  "settings.credentials.title": "Credentials",
+  "settings.credentials.private_hint": "Saved API keys are never placed back into this page. Enter a new key only to replace the saved credential.",
+  "settings.credentials.get_key": "Get key",
+  "settings.credentials.replace_placeholder": "Enter a new key to replace the saved key",
+  "settings.credentials.enter_placeholder": "Enter API key",
+  "settings.credentials.clear": "Clear saved credential",
+  "settings.credentials.saved_hidden": "Credential saved and hidden",
+  "settings.credentials.not_saved": "No credential saved",
+  "settings.credentials.saved": "Credential saved",
+  "settings.credentials.cleared": "Credential cleared",
   "sidebar.added": "Added",
   "sidebar.ahead_push": "{count} commits to push",
   "sidebar.behind_pull": "{count} commits to pull",
@@ -373,6 +458,23 @@
   "ssh.port": "Port",
   "ssh.save": "Save",
   "ssh.username": "Username",
+  "ssh.name": "Name",
+  "ssh.host": "Host",
+  "ssh.user": "User",
+  "ssh.auth": "Authentication",
+  "ssh.password": "Password",
+  "ssh.key": "Key",
+  "ssh.key_pem": "Key (PEM)",
+  "terminal.hide_active_title": "Hide active terminal?",
+  "terminal.hide_active_message": "A command may still be running. Hiding the terminal will keep the session connected and will not stop the command.",
+  "terminal.hide": "Hide Terminal",
+  "terminal.keep_open": "Keep Open",
+  "terminal.connecting": "Connecting",
+  "terminal.key_auth": "Key",
+  "terminal.password_auth": "Password",
+  "terminal.delete_host": "Delete Host",
+  "terminal.delete_host_confirm": "Are you sure?",
+  "terminal.edit_ssh_host": "Edit SSH Host",
   "status.connected": "Connected",
   "status.disconnected": "Disconnected",
   "status.indent": "Spaces: {size}",
@@ -389,6 +491,21 @@
   "support.github_star": "Give a Star",
   "support.github_follow": "Follow Author",
   "support.title": "Help & Support",
+  "help.title": "Blueprint Studio Help",
+  "help.close": "Close help",
+  "help.search": "Search help",
+  "help.group": "Help and Support",
+  "help.troubleshooting": "Troubleshooting",
+  "help.about_support": "About and Support",
+  "help.version_hint": "Include these version details when reporting a problem.",
+  "help.browser": "Browser",
+  "help.project_github": "Project on GitHub",
+  "common.unknown": "Unknown",
+  "onboarding.not_now": "Not now",
+  "onboarding.settings_later": "You can change this later in Settings.",
+  "onboarding.paused": "Onboarding paused. Resume it from Settings > Advanced.",
+  "diff.change_position.one": "{current} / {count} difference",
+  "diff.change_position.other": "{current} / {count} differences",
   "terminal.close_panel": "Close Panel",
   "terminal.move_to_tab": "Move to Editor Tab",
   "toast.accent_reset": "Accent color reset to theme default",
@@ -805,5 +922,1084 @@
   "common.edit": "Edit",
   "common.refresh": "Refresh",
   "common.save": "Save",
-  "common.add": "Add"
+  "common.add": "Add",
+  "common.dismiss": "Dismiss",
+  "common.note": "Note",
+  "favorites.unpin": "Unpin from favorites",
+  "menu.copy_virtual_path": "Copy Virtual Path",
+  "search.replace_match": "Replace this match",
+  "search.replace_file": "Replace in this file",
+  "search.dismiss_file": "Dismiss file",
+  "ai.diff_history_empty": "No AI diff history yet",
+  "toast.favorite_removed": "Removed {file} from favorites",
+  "toast.favorite_added": "Added {file} to favorites",
+  "toast.file_updated_externally": "File updated externally: {file}",
+  "toast.external_save_conflict": "Save conflict: {file} changed outside Blueprint Studio",
+  "toast.copied_value": "Copied: {value}",
+  "toast.copy_failed": "Copy failed",
+  "toast.replacement_applied": "Applied replacement in editor",
+  "toast.git_recovery_cleaned": "Git recovery state cleaned",
+  "toast.ai_diff_nothing_to_undo": "No AI diff to undo",
+  "toast.ai_diff_reverted": "Reverted: {file}",
+  "toast.ai_diff_already_undone": "Already undone",
+  "toast.ai_diff_summary": "{accepted} accepted, {rejected} rejected",
+  "toast.ai_diff_history_cleared": "Diff history cleared",
+  "toast.ai_diff_accepted": "Accepted changes to {file}",
+  "toast.ai_diff_revert_failed": "Failed to revert: {error}",
+  "toast.no_blueprint_content": "No blueprint content",
+  "toast.required_fields_missing": "Please fill in all required fields",
+  "toast.file_path_required": "Please enter a file path",
+  "toast.yaml_error": "YAML error: {error}",
+  "toast.yaml_valid": "YAML is valid",
+  "toast.validation_failed": "Validation failed: {error}",
+  "toast.saved_reload_failed": "Saved {file}, but reload failed: {error}",
+  "toast.automation_saved_loaded": "Automation saved to {file} and loaded",
+  "toast.terminal_library_failed": "Failed to load terminal libraries: {error}",
+  "toast.terminal_connection_failed": "Terminal connection failed: {error}",
+  "toast.formatting_failed": "Formatting failed: {error}",
+  "dev_tools.title": "Developer Tools",
+  "dev_tools.action_failed": "{service} failed",
+  "dev_tools.raw_action_failed": "{service} failed",
+  "dev_tools.action_completed": "{service} completed",
+  "dev_tools.action_success": "Action performed successfully",
+  "dev_tools.action_loading": "Waiting for Home Assistant action completion...",
+  "dev_tools.template_label": "Render Home Assistant template",
+  "dev_tools.template_loading": "Rendering with the Home Assistant template engine...",
+  "dev_tools.template_scope": "Home Assistant template engine",
+  "dev_tools.template_rendering": "Rendering...",
+  "dev_tools.template_failed": "Template rendering failed",
+  "dev_tools.template_rendered": "Template rendered",
+  "dev_tools.output_characters": "{count} output characters",
+  "dev_tools.ha_instance": "Home Assistant instance",
+  "dev_tools.states_refresh": "Refresh Home Assistant states",
+  "dev_tools.states_loading": "Loading entity states and attributes...",
+  "dev_tools.state_registry": "Entity state registry",
+  "dev_tools.states_loaded.one": "{count} entity state loaded",
+  "dev_tools.states_loaded.other": "{count} entity states loaded",
+  "dev_tools.states_failed": "Home Assistant states could not be loaded",
+  "dev_tools.config_check": "Check Home Assistant configuration",
+  "dev_tools.yaml_configuration": "YAML configuration",
+  "dev_tools.config_checking": "Checking configuration...",
+  "dev_tools.config_valid": "Configuration is valid",
+  "dev_tools.config_errors.one": "{count} configuration error found",
+  "dev_tools.config_errors.other": "{count} configuration errors found",
+  "dev_tools.config_not_valid": "Configuration check did not pass",
+  "dev_tools.config_rejected": "Home Assistant reported an invalid configuration",
+  "dev_tools.config_failed": "Configuration check failed",
+  "dev_tools.reload_label": "Reload {target}",
+  "dev_tools.reload_applying": "Applying YAML configuration...",
+  "dev_tools.reload_complete": "{target} reloaded",
+  "dev_tools.reload_failed": "{target} reload failed",
+  "dev_tools.reload_rejected": "Home Assistant rejected the reload",
+  "dev_tools.perform_action": "Perform action",
+  "dev_tools.perform_label": "Perform {service}",
+  "dev_tools.action_scope": "Home Assistant action",
+  "dev_tools.calling": "Calling...",
+  "dev_tools.action_rejected": "Home Assistant rejected the action",
+  "dev_tools.configuration_check_heading": "Configuration check",
+  "dev_tools.reload_heading": "Reload YAML configuration",
+  "dev_tools.reload_description": "Apply YAML changes without restarting the Home Assistant instance.",
+  "dev_tools.reload_core": "All YAML configuration",
+  "dev_tools.reload_automation": "Automations",
+  "dev_tools.reload_script": "Scripts",
+  "dev_tools.reload_scene": "Scenes",
+  "dev_tools.reload_group": "Groups",
+  "dev_tools.reload_template": "Template entities",
+  "dev_tools.reload_input_boolean": "Input booleans",
+  "dev_tools.reload_input_number": "Input numbers",
+  "dev_tools.reload_input_select": "Input selects",
+  "dev_tools.reload_input_text": "Input texts",
+  "dev_tools.reload_input_datetime": "Input datetimes",
+  "dev_tools.reload_input_button": "Input buttons",
+  "dev_tools.reload_timer": "Timers",
+  "dev_tools.reload_counter": "Counters",
+  "dev_tools.reload_schedule": "Schedules",
+  "dev_tools.reload_unknown": "YAML configuration",
+  "dev_tools.views_label": "Developer Tool views",
+  "dev_tools.states_tab": "States",
+  "dev_tools.actions_tab": "Actions",
+  "dev_tools.templates_tab": "Templates",
+  "dev_tools.configuration_tab": "Configuration",
+  "dev_tools.reload_tab": "Reload",
+  "dev_tools.close": "Close Developer Tools",
+  "dev_tools.no_explicit_target": "No explicit target",
+  "dev_tools.run_tool_to_inspect": "Run a developer tool to inspect its raw response.",
+  "dev_tools.copied": "Copied",
+  "dev_tools.copy_raw_result": "Copy raw result",
+  "dev_tools.empty_response": "(empty response)",
+  "dev_tools.raw_result_truncated": "Result truncated at {count} characters",
+  "dev_tools.search_actions": "Search actions",
+  "dev_tools.search_actions_placeholder": "Search for an action... (e.g. light.turn_on)",
+  "dev_tools.switch_yaml_mode": "Switch to YAML mode",
+  "dev_tools.yaml_mode": "YAML mode",
+  "dev_tools.select_action": "Select an action above to get started",
+  "dev_tools.action": "Action",
+  "dev_tools.action_yaml_hint": "- enter the full action call as YAML",
+  "dev_tools.action_yaml": "Action YAML",
+  "dev_tools.action_targets": "Action targets",
+  "dev_tools.no_configurable_fields": "This action has no configurable fields.",
+  "dev_tools.select_option": "- select -",
+  "dev_tools.entity_id": "entity_id",
+  "dev_tools.yaml_parse_error": "YAML parse error: {error}",
+  "dev_tools.copy_entity_id": "Click to copy entity ID",
+  "dev_tools.result_inspector": "Result inspector",
+  "dev_tools.no_results_yet": "No results yet",
+  "dev_tools.search_raw_result": "Search raw developer tool result",
+  "dev_tools.search_this_result": "Search this result",
+  "dev_tools.no_matching_lines": "No lines match this search.",
+  "dev_tools.template": "Template",
+  "dev_tools.template_hint": "(Jinja2 - renders live)",
+  "dev_tools.template_input": "Template input",
+  "dev_tools.render": "Render",
+  "dev_tools.clear": "Clear",
+  "dev_tools.result": "Result",
+  "dev_tools.template_output_placeholder": "- output appears here -",
+  "dev_tools.filter_states": "Filter states",
+  "dev_tools.filter_states_placeholder": "Filter by entity_id or friendly name...",
+  "dev_tools.filter_states_domain": "Filter states by domain",
+  "dev_tools.all_domains": "All domains",
+  "dev_tools.no_entities_match": "No entities match.",
+  "dev_tools.no_attributes": "No attributes",
+  "dev_tools.refresh": "Refresh",
+  "dev_tools.refresh_states": "Refresh states",
+  "dev_tools.config_checking_short": "Checking...",
+  "dev_tools.entity": "Entity",
+  "dev_tools.state": "State",
+  "dev_tools.attributes": "Attributes",
+  "dev_tools.error_detail": "Error: {error}",
+  "problems.recovery_instance": "Check the target or action against the connected Home Assistant instance, then validate again.",
+  "problems.recovery_deprecation": "Review the current Home Assistant syntax and replace the deprecated form.",
+  "problems.recovery_error": "Correct the highlighted syntax or schema value, then validate again.",
+  "problems.severity_error": "Error",
+  "problems.severity_warning": "Warning",
+  "problems.recovery_recommendation": "Review this recommendation and update the file if it applies.",
+  "problems.review_fix": "Review fix",
+  "problems.apply_fix": "Apply fix",
+  "problems.fix_stale": "Fix preview is stale; validate again",
+  "problems.fix_applied": "Quick fix applied; Undo is available",
+  "problems.undo_fix": "Undo fix",
+  "problems.fix_undone": "Quick fix undone; validate again",
+  "problems.error_count.one": "1 error",
+  "problems.error_count.other": "{count} errors",
+  "problems.advisory_count.one": "1 advisory finding",
+  "problems.advisory_count.other": "{count} advisory findings",
+  "problems.finding_count.one": "1 finding",
+  "problems.finding_count.other": "{count} findings",
+  "problems.none_found": "No problems found",
+  "problems.no_filter_match": "No problems match this filter.",
+  "problems.validation_empty": "Validation has not found any problems.",
+  "problems.go_to_line": "Go to {path}, line {line}: {message}",
+  "problems.line": "Line {line}",
+  "problems.column": "column {column}",
+  "problems.show_more": "Show {visible} more of {total}",
+  "problems.aria_status": "Problems: {message}",
+  "problems.validation_unavailable": "Validation unavailable",
+  "problems.validation_failed": "Validation failed, {count}",
+  "problems.validation_warnings": "Validation passed with {count}",
+  "problems.validation_passed": "Validation passed, no findings",
+  "problems.validating": "Validating {file}",
+  "problems.validation_stale": "Validation is stale; run validation again",
+  "completion.entity": "Entity",
+  "completion.device": "Device",
+  "completion.area": "Area",
+  "completion.label": "Label",
+  "completion.floor": "Floor",
+  "completion.entity_registry": "Live Home Assistant entity registry",
+  "completion.device_registry": "Live Home Assistant device registry",
+  "completion.area_registry": "Live Home Assistant area registry",
+  "completion.label_registry": "Live Home Assistant label registry",
+  "completion.floor_registry": "Live Home Assistant floor registry",
+  "completion.search_targets": "Search {target} targets",
+  "completion.search_placeholder": "Name or {target} ID",
+  "completion.showing_first": "showing first {count}",
+  "completion.unnamed_target": "Unnamed {target}",
+  "completion.no_matches": "No targets match this search.",
+  "completion.no_targets": "No {target} targets are available from this instance.",
+  "completion.required": "Required field",
+  "completion.optional": "Optional field",
+  "completion.selector": "{selector} selector",
+  "completion.example": "Example",
+  "completion.target_title": "{target} target",
+  "completion.installed_action": "Installed action",
+  "completion.available_targets": "{count} {target} targets are available from the connected instance.",
+  "completion.action_field_detail": "Action field provided by the connected Home Assistant instance.",
+  "completion.blueprint_selector": "Blueprint selector",
+  "completion.blueprint_schema": "Blueprint schema",
+  "completion.selector_detail": "Choose a selector type to control how Blueprint users supply this input.",
+  "diff_review.controls": "Diff controls",
+  "diff_review.review_controls": "Diff review controls",
+  "diff_review.showing_lines": "Showing {visible} of {total} lines to keep review responsive.",
+  "diff_review.show_more": "Show more",
+  "diff_review.no_changes": "No changes to display.",
+  "diff_review.no_content_changes": "No content changes.",
+  "diff_review.previous_change": "Previous change",
+  "diff_review.next_change": "Next change",
+  "diff_review.hide_whitespace": "Hide whitespace-only changes",
+  "diff_review.show_whitespace": "Show whitespace-only changes",
+  "diff_review.wrap_lines": "Wrap long lines",
+  "diff_review.calculating": "Calculating changes...",
+  "diff_review.changed_files": "Changed files",
+  "diff_review.change_count.one": "change",
+  "diff_review.change_count.other": "changes",
+  "diff_review.no_change_count": "changes",
+  "diff_review.in_file": "in {file}",
+  "editor.format_complete": "Formatting complete",
+  "editor.format_complete_detail": "{file} was formatted without moving the editor view.",
+  "editor.already_formatted": "Already formatted",
+  "editor.already_formatted_detail": "{file} did not need changes.",
+  "editor.near_line": " near line {line}",
+  "editor.syntax_error_detail": "{file} has a syntax error{location}.",
+  "editor.format_failed": "Formatting failed",
+  "editor.format_error_detail": "{file}: {error}",
+  "toast.virtual_path_copied": "Virtual path copied",
+  "toast.git_exclusions_saved": "Git exclusions saved",
+  "toast.git_exclusions_failed": "Failed to save Git exclusions: {error}",
+  "toast.github_credentials_failed": "Failed to save GitHub credentials: {error}",
+  "toast.resolve_failed": "Resolve failed: {error}",
+  "toast.git_not_initialized": "Git repository not initialized",
+  "toast.application_reset_failed": "Application reset failed: {error}",
+  "toast.models_fetched": "Fetched {count} models",
+  "toast.models_fetch_failed": "Failed to fetch models: {error}",
+  "toast.agents_found": "Found {count} conversation agents",
+  "toast.agents_fetch_failed": "Failed to fetch agents: {error}",
+  "toast.theme_changed": "Theme changed to {theme}",
+  "toast.indent_tabs_enabled": "Indent with tabs enabled",
+  "toast.indent_tabs_disabled": "Indent with tabs disabled",
+  "toast.minimap_enabled": "Minimap enabled",
+  "toast.minimap_disabled": "Minimap disabled",
+  "toast.autocomplete_enabled": "Autocomplete enabled",
+  "toast.autocomplete_disabled": "Autocomplete disabled",
+  "toast.ai_type_set": "AI type set to {type}",
+  "toast.syntax_theme_changed": "Syntax theme: {theme}",
+  "toast.cache_clear_failed": "Cache clear failed: {error}",
+  "toast.polling_interval_set": "Polling interval set to {seconds} seconds",
+  "toast.remote_fetch_interval_set": "Remote fetch interval set to {seconds} seconds",
+  "toast.save_batch_failed": "{saved} saved, {failed} failed\n{details}",
+  "toast.download_started": "Download started for {file}",
+  "toast.download_file_failed": "Failed to download {file}: {error}",
+  "toast.downloaded_file": "Downloaded {file}",
+  "toast.upload_skipped": "Upload completed with {count} skipped items{examples}",
+  "toast.unzip_failed": "Failed to unzip {file}: {error}",
+  "toast.remote_unzip_failed": "Failed to unzip on remote: {error}",
+  "toast.upload_file_failed": "Failed to upload {file}: {error}",
+  "toast.blueprint_created": "Blueprint created from {source} to {destination}",
+  "toast.operation_failed": "{operation}: {error}",
+  "toast.saved_plain": "Saved",
+  "toast.text_decode_failed": "Could not decode {file} as text: {error}",
+  "toast.no_file_to_convert": "No file open to convert",
+  "toast.donation_address_copied": "Donation address copied",
+  "toast.donation_address_copy_failed": "Could not copy donation address",
+  "toast.restart_ha_failed": "Home Assistant restart failed: {error}",
+  "toast.github_branch_deleted": "Branch '{branch}' deleted from GitHub",
+  "settings.ai_type_rule": "Rule-based",
+  "settings.ai_type_local": "Local AI",
+  "settings.ai_type_hass": "Home Assistant Agent",
+  "settings.ai_type_cloud": "Cloud AI",
+  "toast.file_too_large": "Cannot open {file}: File is {size} (max {max})",
+  "notification.show_full": "Show full notification",
+  "notification.show_full_message": "Show full message",
+  "notification.collapse": "Collapse notification",
+  "notification.collapse_message": "Collapse message",
+  "notification.dismiss": "Dismiss notification",
+  "operations.title": "Operations",
+  "operations.clear_completed": "Clear completed operations",
+  "operations.clear_completed_short": "Clear completed",
+  "operations.minimize": "Minimize operations",
+  "operations.minimize_short": "Minimize",
+  "operations.expand": "Expand operations",
+  "operations.expand_short": "Expand",
+  "operations.active": "Active",
+  "operations.recent": "Recent",
+  "operations.active_count.one": "{count} active",
+  "operations.active_count.other": "{count} active",
+  "operations.recent_count.one": "{count} recent",
+  "operations.recent_count.other": "{count} recent",
+  "operations.elapsed_seconds": "{seconds}s",
+  "operations.elapsed_minutes": "{minutes}m {seconds}s",
+  "operations.details": "Details",
+  "operations.operation": "Operation",
+  "operations.in_progress": "Operation in progress",
+  "operations.in_progress_short": "In progress",
+  "operations.in_progress_ellipsis": "Operation in progress...",
+  "operations.status_complete": "Complete",
+  "operations.status_failed": "Failed",
+  "operations.status_cancelled": "Cancelled",
+  "operations.status_cancelling": "Cancelling",
+  "operations.status_running": "Running",
+  "operations.card_label": "{operation}: {status}",
+  "operations.open": "Open",
+  "operations.complete": "Operation complete",
+  "operations.failed": "Operation failed",
+  "operations.cancelled": "Operation cancelled"
+  ,"transfer.waiting_download": "Waiting for download to start..."
+  ,"transfer.complete": "Complete: {count} files, {bytes}"
+  ,"transfer.file_progress": "File {current} of {total}"
+  ,"transfer.uploading": "Uploading"
+  ,"transfer.bytes_progress": "{loaded} of {total}"
+  ,"transfer.progress": "{files} - {bytes}"
+  ,"transfer.failed": "Transfer failed"
+  ,"transfer.processed": "{count} files processed, {bytes}"
+  ,"transfer.preparing_zip": "Preparing ZIP download..."
+  ,"transfer.cancel": "Cancel"
+  ,"transfer.cancelling_zip": "Cancelling ZIP generation..."
+  ,"transfer.cancel_failed": "Could not cancel ZIP download"
+  ,"transfer.show": "Show"
+  ,"transfer.cancelling_upload": "Cancelling upload request..."
+  ,"transfer.waiting_upload": "Waiting for upload to start..."
+  ,"transfer.upload_complete": "Upload complete"
+  ,"transfer.upload_failed": "Upload failed"
+  ,"transfer.upload_cancelled": "Upload cancelled"
+  ,"transfer.upload_cancelled_detail": "The browser request was stopped. Files completed before cancellation remain at the destination."
+  ,"transfer.remote_sftp": "Remote SFTP · {name}"
+  ,"transfer.local_home_assistant": "Local Home Assistant"
+  ,"transfer.local_workspace": "Local Home Assistant workspace"
+  ,"transfer.destination": "Destination · {path}"
+  ,"transfer.this_zip": "this ZIP archive"
+  ,"transfer.file_count.one": "{count} file"
+  ,"transfer.file_count.other": "{count} files"
+  ,"transfer.upload_folder_title": "Upload Folder?"
+  ,"transfer.upload_files_title": "Upload Files?"
+  ,"transfer.upload_question": "Upload {item} to this destination?"
+  ,"transfer.preparing_archive": "Preparing {name}.zip..."
+  ,"transfer.preparing_selected": "Preparing selected items ZIP..."
+  ,"transfer.this_device": "This device"
+  ,"transfer.sftp": "SFTP"
+  ,"transfer.mixed_selection": "Select either local or SFTP items, not both"
+  ,"transfer.multiple_connections": "Select SFTP items from one connection at a time"
+  ,"transfer.uploading_file.one": "Uploading 1 file..."
+  ,"transfer.uploading_file.other": "Uploading {count} files..."
+  ,"transfer.uploading_file_name": "Uploading {name}..."
+  ,"transfer.sftp_connection": "SFTP {id}"
+  ,"transfer.sftp_connection_missing": "SFTP connection not found"
+  ,"transfer.uploading_zip": "Uploading ZIP"
+  ,"transfer.reading": "Reading {name}"
+  ,"transfer.saving": "Saving {name}"
+  ,"transfer.uploaded_count": "Uploaded {count} of {total} files"
+  ,"transfer.no_files_uploaded": "No files uploaded"
+  ,"selection.mixed_locations": "Mixed locations"
+  ,"selection.remote_sftp": "Remote SFTP"
+  ,"selection.local_home_assistant": "Local Home Assistant"
+  ,"selection.location_counts": "{local} local · {remote} remote"
+  ,"selection.delete_title": "Delete Selected Items?"
+  ,"selection.delete_message": "Are you sure you want to permanently delete {count} selected items? This action cannot be undone."
+  ,"selection.delete_all": "Delete All"
+  ,"selection.item_count.one": "{count} item"
+  ,"selection.item_count.other": "{count} items"
+  ,"selection.local_and_sftp": "Local Home Assistant and SFTP"
+  ,"selection.sftp_workspaces": "SFTP workspaces"
+  ,"selection.target": "{count} items: {preview}{suffix}"
+  ,"selection.more": " and {count} more"
+  ,"selection.delete_label": "Delete {count} selected items"
+  ,"selection.deleting_one_location": "Deleting from 1 location..."
+  ,"selection.deleting_many_locations": "Deleting from {count} locations..."
+  ,"selection.browse": "Browse"
+  ,"selection.local_delete_request_failed": "Local deletion request failed"
+  ,"selection.local_delete_request_completed": "Local deletion request completed"
+  ,"selection.sftp_connection": "SFTP {name}"
+  ,"selection.connection_not_found": "connection not found"
+  ,"selection.sftp_unavailable": "SFTP {name} is unavailable"
+  ,"selection.remote_delete_request_failed": "Remote deletion request failed"
+  ,"selection.remote_delete_request_completed": "SFTP {name} deletion request completed"
+  ,"selection.accepted_groups": "Accepted request groups:\n- {groups}"
+  ,"selection.no_groups_completed": "No deletion request groups completed."
+  ,"selection.failed_groups": "Failed request groups:\n- {groups}"
+  ,"selection.partial_detail": "Items in accepted groups may already be deleted. No changes were rolled back."
+  ,"selection.deletion_incomplete": "Deletion incomplete"
+  ,"selection.deletion_complete": "Deletion requests completed for {count} items"
+  ,"format_ops.unavailable": "Format unavailable"
+  ,"format_ops.open_editable": "Open an editable file first."
+  ,"format_ops.unsupported": "{file} is not a supported format."
+  ,"format_ops.label": "Format {file}"
+  ,"format_ops.document": "Document"
+  ,"format_ops.preparing": "Preparing {parser} formatter..."
+  ,"format_ops.loading_libraries": "Loading formatting libraries..."
+  ,"format_ops.formatting": "Formatting {file}..."
+  ,"format_ops.document_changed_detail": "The document changed while formatting. No formatted text was applied; Retry uses the current document content."
+  ,"format_ops.not_applied": "Formatting was not applied"
+  ,"format_ops.formatted": "Formatted {file}"
+  ,"format_ops.parser": "Parser: {parser}"
+  ,"format_ops.already_formatted": "{file} is already formatted"
+  ,"format_ops.failed": "Could not format {file}"
+  ,"file_ops.file": "file"
+  ,"file_ops.save_label": "Save {file}"
+  ,"file_ops.save_writing": "Writing file to Local Home Assistant..."
+  ,"file_ops.local_ha": "Local Home Assistant"
+  ,"file_ops.local_workspace": "Local Home Assistant workspace"
+  ,"file_ops.open_file": "Open file"
+  ,"file_ops.open_folder": "Open folder"
+  ,"file_ops.saved": "{file} saved"
+  ,"file_ops.save_failed": "Could not save {file}"
+  ,"file_ops.create_file": "Create local file"
+  ,"file_ops.create_folder": "Create local folder"
+  ,"file_ops.creating": "Creating {path}..."
+  ,"file_ops.created": "Created {path}"
+  ,"file_ops.create_failed": "Could not create {path}"
+  ,"file_ops.delete_local": "Delete local {item}"
+  ,"file_ops.deleting": "Deleting {path}..."
+  ,"file_ops.browse": "Browse"
+  ,"file_ops.deleted": "Deleted {path}"
+  ,"file_ops.delete_permanent": "Deletion is permanent and was not moved to a recovery location."
+  ,"file_ops.delete_partial": "Some contents may already be deleted. No changes were rolled back."
+  ,"file_ops.delete_failed": "Could not delete {path}"
+  ,"file_ops.copy_local": "Copy local {item}"
+  ,"file_ops.copying": "Copying {source}..."
+  ,"file_ops.browse_destination": "Browse Destination"
+  ,"file_ops.copied": "Copied {source}"
+  ,"file_ops.copy_failed": "Could not copy {source}"
+  ,"file_ops.rename_item": "Rename local item"
+  ,"file_ops.renaming": "Renaming {source}..."
+  ,"file_ops.renamed_to": "Renamed to {destination}"
+  ,"file_ops.rename_failed": "Could not rename {source}"
+  ,"download.operation_label": "Download {file}"
+  ,"download.browser_downloads": "Browser downloads"
+  ,"download.preparing": "Preparing {file}..."
+  ,"download.open_source": "Open Source"
+  ,"download.started": "Download started for {file}"
+  ,"download.browser_owns_completion": "The browser owns the download destination and completion state."
+  ,"download.prepare_failed": "Could not prepare {file}"
+  ,"ha_restart.label": "Restart Home Assistant"
+  ,"ha_restart.saving_state": "Saving Blueprint Studio state..."
+  ,"ha_restart.instance": "Home Assistant instance"
+  ,"ha_restart.target": "Instance-wide restart"
+  ,"ha_restart.requesting": "Requesting Home Assistant restart..."
+  ,"ha_restart.rejected": "Restart request was rejected"
+  ,"ha_restart.waiting": "Restart accepted; waiting for Home Assistant..."
+  ,"ha_restart.restarting": "Home Assistant is restarting..."
+  ,"ha_restart.online": "Home Assistant is online; reloading Blueprint Studio"
+  ,"ha_restart.complete_detail": "The restart completed and the instance API is responding."
+  ,"ha_restart.unconfirmed": "Home Assistant restart could not be confirmed"
+  ,"git_ops.repository_initialized": "Local repository initialized"
+  ,"git_ops.init_failed": "Could not initialize repository"
+  ,"git_ops.files_staged.one": "1 file staged"
+  ,"git_ops.files_staged.other": "{count} files staged"
+  ,"git_ops.files_unstaged.one": "1 file unstaged"
+  ,"git_ops.files_unstaged.other": "{count} files unstaged"
+  ,"git_ops.index_locked": "Git index is locked"
+  ,"git_ops.stage_failed": "Could not stage files"
+  ,"git_ops.unstage_failed": "Could not unstage files"
+  ,"git_ops.changes_discarded": "Working changes discarded"
+  ,"git_ops.discard_failed": "Could not discard working changes"
+  ,"git_ops.commit_created": "Commit created"
+  ,"git_ops.commit_failed": "Commit failed"
+  ,"git_ops.pull_complete": "Pull complete"
+  ,"git_ops.pull_failed": "Pull failed"
+  ,"git_ops.push_complete": "Push complete"
+  ,"git_ops.commit_push_complete": "Commit and push complete"
+  ,"git_ops.push_failed": "Push failed"
+  ,"git_ops.abort_complete": "Merge or rebase aborted"
+  ,"git_ops.abort_failed": "Could not abort Git operation"
+  ,"git_ops.remote_replaced": "Remote branch replaced"
+  ,"git_ops.force_push_failed": "Force push failed"
+  ,"git_ops.reset_from_github": "Local branch reset from GitHub"
+  ,"git_ops.hard_reset_failed": "Hard reset failed"
+  ,"git_ops.remote_deleted": "Remote branch deleted"
+  ,"git_ops.remote_delete_failed": "Could not delete remote branch"
+  ,"git_ops.default_change_failed": "Could not change GitHub default branch"
+  ,"git_ops.default_changed_delete_failed": "Default changed, but branch deletion failed"
+  ,"git_ops.default_changed_deleted": "Default branch changed and remote branch deleted"
+  ,"git_ops.credentials_saved": "GitHub credentials saved"
+  ,"git_ops.credentials_save_failed": "Could not save GitHub credentials"
+  ,"git_ops.files_staged_after_cleanup.one": "1 file staged after cleanup"
+  ,"git_ops.files_staged_after_cleanup.other": "{count} files staged after cleanup"
+  ,"git_ops.stage_after_cleanup_failed": "Staging still failed after cleanup"
+  ,"git_ops.cleanup_complete": "Git recovery state cleaned"
+  ,"git_ops.cleanup_failed": "Could not clean Git recovery state"
+  ,"git_ops.index_repaired": "Git index repaired"
+  ,"git_ops.index_repair_failed": "Could not repair Git index"
+  ,"git_ops.switched_to": "Switched to {branch}"
+  ,"git_ops.switch_failed": "Could not switch to {branch}"
+  ,"git_ops.checkout_unknown": "Unknown checkout error"
+  ,"git_ops.branch_created": "{branch} created and checked out"
+  ,"git_ops.branch_create_failed": "Could not create {branch}"
+  ,"git_ops.branch_create_unknown": "Unknown branch creation error"
+  ,"git_ops.branch_not_merged": "{branch} is not fully merged"
+  ,"git_ops.branch_deleted": "{branch} deleted"
+  ,"git_ops.branch_delete_failed": "Could not delete {branch}"
+  ,"git_ops.branch_delete_unknown": "Unknown branch deletion error"
+  ,"git_ops.branch_merged": "{branch} merged into {destination}"
+  ,"git_ops.merge_failed": "Could not merge {branch}"
+  ,"git_ops.merge_unknown": "Unknown merge error"
+  ,"git_ops.conflict_resolved": "Conflict resolved with {resolution}"
+  ,"git_ops.conflict_failed": "Could not resolve conflict"
+  ,"git_ops.fetch_status": "Fetch GitHub status"
+  ,"git_ops.refresh_status": "Refresh GitHub status"
+  ,"git_ops.fetching_status": "Fetching remote references and workspace status..."
+  ,"git_ops.reading_status": "Reading workspace status..."
+  ,"git_ops.workspace_changes.one": "1 workspace change"
+  ,"git_ops.workspace_changes.other": "{count} workspace changes"
+  ,"git_ops.workspace_clean": "Workspace is clean"
+  ,"git_ops.status_detail": "Branch: {branch}{fetched}"
+  ,"git_ops.remote_fetched_suffix": "\nRemote references fetched."
+  ,"git_ops.status_failed": "Could not refresh GitHub status"
+  ,"git_ops.initialize_label": "Initialize Git repository"
+  ,"git_ops.initializing": "Creating local repository..."
+  ,"git_ops.initializing_branch": "Creating Git metadata and initial main branch..."
+  ,"git_ops.initializing_detail": "Initializing repository"
+  ,"git_ops.abort_label": "Abort Git operation"
+  ,"git_ops.aborting": "Aborting merge or rebase..."
+  ,"git_ops.force_push_label": "Force push to GitHub"
+  ,"git_ops.force_push_running": "Replacing the remote branch..."
+  ,"git_ops.reset_label": "Reset from GitHub"
+  ,"git_ops.reset_running": "Replacing local files from the remote branch..."
+  ,"git_ops.delete_remote_label": "Delete GitHub branch"
+  ,"git_ops.delete_remote_running": "Deleting origin/{branch}..."
+  ,"git_ops.default_repair_label": "Change default branch and delete"
+  ,"git_ops.default_repair_running": "Setting main as default before deleting origin/{branch}..."
+  ,"git_ops.default_repair_deleting": "Default branch changed; deleting origin/{branch}..."
+  ,"git_ops.stage_label.one": "Stage 1 file"
+  ,"git_ops.stage_label.other": "Stage {count} files"
+  ,"git_ops.index_updating": "Updating the Git index..."
+  ,"git_ops.cleanup_retry_label": "Clean Git state and retry staging"
+  ,"git_ops.step_detail": "Step {current} of {count}"
+  ,"git_ops.staging_retrying": "Retrying staging..."
+  ,"git_ops.repair_index_label": "Repair Git index"
+  ,"git_ops.repair_index_running": "Rebuilding the Git index..."
+  ,"git_ops.unstage_label.one": "Unstage 1 file"
+  ,"git_ops.unstage_label.other": "Unstage {count} files"
+  ,"git_ops.discard_label.one": "Discard changes in 1 file"
+  ,"git_ops.discard_label.other": "Discard changes in {count} files"
+  ,"git_ops.discard_running": "Restoring committed content..."
+  ,"git_ops.commit_label": "Commit staged changes"
+  ,"git_ops.commit_running": "Creating local commit..."
+  ,"git_ops.pull_label": "Pull from GitHub"
+  ,"git_ops.pull_running": "Downloading remote changes..."
+  ,"git_ops.switch_label": "Switch to {branch}"
+  ,"git_ops.switch_running": "Checking out branch..."
+  ,"git_ops.create_branch_label": "Create {branch}"
+  ,"git_ops.create_branch_running": "Creating and checking out branch..."
+  ,"git_ops.force_delete_branch_label": "Force delete {branch}"
+  ,"git_ops.delete_branch_label": "Delete {branch}"
+  ,"git_ops.force_delete_branch_running": "Force deleting local branch..."
+  ,"git_ops.delete_branch_running": "Deleting local branch..."
+  ,"git_ops.merge_label": "Merge {branch}"
+  ,"git_ops.merge_running": "Merging into {branch}..."
+  ,"git_ops.resolve_conflict_label": "Resolve conflict in {file}"
+  ,"git_ops.resolve_conflict_running": "Accepting {resolution}..."
+  ,"git_ops.push_label": "Push to GitHub"
+  ,"git_ops.push_running": "Uploading local commits..."
+  ,"github_ops.remote_configured": "{remote} remote configured"
+  ,"github_ops.remote_configure_failed": "Could not configure {remote} remote"
+  ,"github_ops.remote_removed": "{remote} remote removed"
+  ,"github_ops.remote_remove_failed": "Could not remove {remote} remote"
+  ,"github_ops.repository_created": "Repository created"
+  ,"github_ops.repository_create_failed": "Repository creation failed"
+  ,"github_ops.branch_repaired": "Branch mismatch repaired"
+  ,"github_ops.repair_stopped": "Repair stopped at step {step} of {total}"
+  ,"github_ops.repair_incomplete": "Branch repair incomplete"
+  ,"github_ops.connection_verified": "GitHub connection verified"
+  ,"github_ops.connection_failed": "GitHub connection failed"
+  ,"github_ops.signed_out": "Signed out from GitHub"
+  ,"github_ops.signout_failed": "Could not sign out from GitHub"
+  ,"github_ops.signin_start_failed": "Could not start GitHub sign-in"
+  ,"github_ops.signin_failed": "GitHub sign-in failed"
+  ,"github_ops.account_connected": "GitHub account connected"
+  ,"github_ops.exclusions_saved": "Git exclusions saved"
+  ,"github_ops.gitignore_index_failed": ".gitignore saved; index update failed"
+  ,"github_ops.gitignore_save_failed": "Could not save .gitignore"
+  ,"github_ops.exclusions_ready": "Git exclusions ready"
+  ,"github_ops.exclusions_load_failed": "Could not load Git exclusions"
+  ,"gitea_ops.push_complete": "Push complete"
+  ,"gitea_ops.commit_push_complete": "Commit and push complete"
+  ,"gitea_ops.push_failed": "Push failed"
+  ,"gitea_ops.no_commits": "No commits to push"
+  ,"gitea_ops.pull_complete": "Pull complete"
+  ,"gitea_ops.pull_failed": "Pull failed"
+  ,"gitea_ops.commit_created": "Commit created"
+  ,"gitea_ops.commit_failed": "Commit failed"
+  ,"gitea_ops.abort_failed": "Could not abort Gitea Git operation"
+  ,"gitea_ops.abort_complete": "Merge or rebase aborted"
+  ,"gitea_ops.force_push_failed": "Force push to Gitea failed"
+  ,"gitea_ops.branch_replaced": "Gitea branch replaced"
+  ,"gitea_ops.reset_failed": "Reset from Gitea failed"
+  ,"gitea_ops.reset_complete": "Local branch reset from Gitea"
+  ,"gitea_ops.remote_configured": "Gitea remote configured"
+  ,"gitea_ops.remote_configure_failed": "Could not configure Gitea remote"
+  ,"gitea_ops.remote_removed": "{remote} remote removed"
+  ,"gitea_ops.remote_remove_failed": "Could not remove {remote} remote"
+  ,"gitea_ops.credentials_saved": "Gitea credentials saved"
+  ,"gitea_ops.credentials_save_failed": "Could not save Gitea credentials"
+  ,"gitea_ops.signed_out": "Signed out from Gitea"
+  ,"gitea_ops.signout_failed": "Could not sign out from Gitea"
+  ,"gitea_ops.connection_verified": "Gitea connection verified"
+  ,"gitea_ops.connection_failed": "Gitea connection failed"
+  ,"gitea_ops.repository_created": "Repository created"
+  ,"gitea_ops.repository_create_failed": "Repository creation failed"
+  ,"gitea_ops.server_required": "A Gitea server URL is required."
+  ,"gitea_ops.workspace_changes.one": "1 workspace change"
+  ,"gitea_ops.workspace_changes.other": "{count} workspace changes"
+  ,"gitea_ops.workspace_clean": "Workspace is clean"
+  ,"gitea_ops.status_failed": "Could not refresh Gitea status"
+  ,"settings.general.show_operation_center": "Operations Center"
+  ,"settings.general.show_operation_center_hint": "Show persistent progress and recent operation details"
+  ,"toast.operation_center_enabled": "Operations center enabled"
+  ,"toast.operation_center_disabled": "Operations center disabled"
+  ,"settings_ops.browser_preferences": "browser settings and preferences"
+  ,"settings_ops.provider_credentials": "GitHub and Gitea credentials"
+  ,"settings_ops.local_git_metadata": "local .git repository metadata"
+  ,"settings_ops.reset_resume_title": "Resume Application Reset?"
+  ,"settings_ops.reset_title": "Reset Application?"
+  ,"settings_ops.reset_selection": "This will reset {selection}."
+  ,"settings_ops.reset_consequence": "Configuration files remain unchanged. Completed reset steps cannot be rolled back."
+  ,"settings_ops.reset_resume": "Resume Reset"
+  ,"settings_ops.reset_confirm": "Reset Application"
+  ,"settings_ops.github_credentials_removing": "Removing GitHub credentials..."
+  ,"settings_ops.github_credentials_removed": "GitHub credentials removed"
+  ,"settings_ops.gitea_credentials_removing": "Removing Gitea credentials..."
+  ,"settings_ops.gitea_credentials_removed": "Gitea credentials removed"
+  ,"settings_ops.git_metadata_deleting": "Deleting local Git repository metadata..."
+  ,"settings_ops.git_metadata_deleted": "Local Git repository metadata deleted"
+  ,"settings_ops.server_settings_resetting": "Resetting server settings..."
+  ,"settings_ops.server_settings_reset": "Server settings reset"
+  ,"settings_ops.reset_label": "Reset Blueprint Studio"
+  ,"settings_ops.reset_preparing": "Preparing application reset..."
+  ,"settings_ops.application_data": "Blueprint Studio application data"
+  ,"settings_ops.application_settings": "Application Settings"
+  ,"settings_ops.step_progress": "Step {current} of {count}"
+  ,"settings_ops.step_rejected": "{step} was rejected"
+  ,"settings_ops.reset_complete": "Application reset complete; reloading..."
+  ,"settings_ops.configuration_unchanged": "Configuration files were not changed"
+  ,"settings_ops.completed_this_attempt": "Completed during this attempt:"
+  ,"settings_ops.completed_remain_applied": "Completed steps remain applied."
+  ,"settings_ops.previous_steps_remain_applied": "Steps completed before this Retry remain applied."
+  ,"settings_ops.no_steps_completed": "No reset steps completed during this attempt."
+  ,"settings_ops.reset_stopped": "Reset stopped at step {current} of {count}"
+  ,"settings_ops.reset_incomplete": "Application reset incomplete"
+  ,"settings_ops.browser_not_cleared": "Browser settings were not cleared and the page was not reloaded."
+  ,"settings_ops.discover_models": "Discover {provider} models"
+  ,"settings_ops.models_fetching": "Fetching available models..."
+  ,"settings_ops.model_discovery": "AI provider model discovery"
+  ,"settings_ops.ai_settings": "AI Settings"
+  ,"settings_ops.models_discovered.one": "{count} model discovered"
+  ,"settings_ops.models_discovered.other": "{count} models discovered"
+  ,"settings_ops.no_models": "Provider returned no models"
+  ,"settings_ops.models_fetch_failed_detail": "Failed to fetch models."
+  ,"settings_ops.model_discovery_failed": "Model discovery failed"
+  ,"settings_ops.discover_agents": "Discover Home Assistant agents"
+  ,"settings_ops.agents_loading": "Loading conversation agents..."
+  ,"settings_ops.local_ha_instance": "Local Home Assistant instance"
+  ,"settings_ops.conversation_agents": "Conversation agents"
+  ,"settings_ops.agent_discovery_rejected": "Conversation-agent discovery was rejected"
+  ,"settings_ops.agents_discovered.one": "{count} conversation agent discovered"
+  ,"settings_ops.agents_discovered.other": "{count} conversation agents discovered"
+  ,"settings_ops.agent_discovery_failed": "Conversation-agent discovery failed"
+  ,"ai_ops.no_file_target": "No file target"
+  ,"ai_ops.files_target.one": "1 file -> {path}"
+  ,"ai_ops.files_target.other": "{count} files -> {path}"
+  ,"ai_ops.cloud_provider": "Cloud provider"
+  ,"ai_ops.local_ai": "Local AI"
+  ,"ai_ops.hass_agent": "Home Assistant agent"
+  ,"ai_ops.rule_based_assistant": "Rule-based assistant"
+  ,"ai_ops.ai_studio": "AI Studio"
+  ,"ai_ops.proposal_scope": "Reviewed AI proposal"
+  ,"ai_ops.undo_label": "Undo AI proposal apply"
+  ,"ai_ops.undo_restoring": "Restoring files from the one-time undo record..."
+  ,"ai_ops.undo_rejected": "Proposal could not be undone"
+  ,"ai_ops.restored_files.one": "Restored 1 file"
+  ,"ai_ops.restored_files.other": "Restored {count} files"
+  ,"ai_ops.undo_failed": "AI proposal apply could not be undone"
+  ,"ai_ops.undo_retry_detail": "The one-time undo record may still be usable. Retry preserves the original undo identifier and file scope."
+  ,"ai_ops.cancel_requesting": "Requesting provider cancellation..."
+  ,"ai_ops.cancel_confirmed": "Provider cancellation was confirmed."
+  ,"ai_ops.cancel_unconfirmed": "The browser stopped waiting, but provider cancellation was not confirmed: {error}"
+  ,"ai_ops.cancel_error": "The browser stopped waiting, but provider cancellation could not be confirmed: {error}"
+  ,"ai_ops.unknown_response": "Unknown response"
+  ,"ai_ops.check_label": "Check configuration from AI review"
+  ,"ai_ops.checking_configuration": "Checking Home Assistant configuration..."
+  ,"ai_ops.ha_instance": "Home Assistant instance"
+  ,"ai_ops.active_configuration": "Active configuration"
+  ,"ai_ops.developer_tools": "Developer Tools"
+  ,"ai_ops.check_rejected": "Configuration check was rejected"
+  ,"ai_ops.check_failed": "Home Assistant configuration check failed"
+  ,"ai_ops.check_passed": "Home Assistant configuration check passed"
+  ,"ai_ops.apply_label": "Apply reviewed AI proposal"
+  ,"ai_ops.applying_files.one": "Applying reviewed changes to 1 file..."
+  ,"ai_ops.applying_files.other": "Applying reviewed changes to {count} files..."
+  ,"ai_ops.conflict_fallback": "Files changed after this proposal was created"
+  ,"ai_ops.conflict_title": "AI proposal conflicts with current files"
+  ,"ai_ops.conflict_detail": "The original proposal cannot be retried safely. Open AI Studio to compare, regenerate, or discard the refreshed proposal."
+  ,"ai_ops.apply_rejected": "Proposal could not be applied"
+  ,"ai_ops.applied_files.one": "Applied reviewed changes to 1 file"
+  ,"ai_ops.applied_files.other": "Applied reviewed changes to {count} files"
+  ,"ai_ops.apply_failed": "Reviewed AI proposal could not be applied"
+  ,"ai_ops.generate_label": "Generate AI response"
+  ,"ai_ops.waiting_provider": "Waiting for the configured AI provider..."
+  ,"ai_ops.generation_scope": "AI generation request"
+  ,"ai_ops.response_validating": "Provider response received; validating output..."
+  ,"ai_ops.proposal_ready": "AI proposal ready for review"
+  ,"ai_ops.response_complete": "AI response complete"
+  ,"ai_ops.provider_response": "{provider} response"
+  ,"ai_ops.generation_failed": "AI generation request failed"
+  ,"ai_ops.generation_cancelled": "AI generation request cancelled"
+  ,"ai_ops.browser_stopped_waiting": "The browser stopped waiting for the provider response."
+  ,"provider_ops.configure_remote": "Configure {remote} remote"
+  ,"provider_ops.remove_remote": "Remove {remote} remote"
+  ,"provider_ops.remote_removing": "Removing local remote..."
+  ,"provider_ops.local_git_repository": "Local Git repository"
+  ,"provider_ops.github_repository": "GitHub repository"
+  ,"provider_ops.repository_creating": "Creating remote repository..."
+  ,"provider_ops.private": "Private"
+  ,"provider_ops.public": "Public"
+  ,"provider_ops.saved_credentials": "Saved credentials"
+  ,"provider_ops.current_branch": "Current branch"
+  ,"provider_ops.workspace": "Workspace"
+  ,"provider_ops.step_progress": "Step {current} of {count}"
+  ,"github_ops.remote_saving": "Saving GitHub remote..."
+  ,"github_ops.create_repository": "Create GitHub repository"
+  ,"github_ops.account": "GitHub account"
+  ,"github_ops.repair_label": "Repair GitHub branch mismatch"
+  ,"github_ops.repair_preparing": "Preparing branch repair..."
+  ,"github_ops.repair_scope": "Local Git repository and GitHub"
+  ,"github_ops.repair_clearing": "Clearing merge or rebase state..."
+  ,"github_ops.repair_cleared": "Merge or rebase state cleared"
+  ,"github_ops.repair_renaming": "Renaming master to main..."
+  ,"github_ops.repair_renamed": "Local branch renamed to main"
+  ,"github_ops.repair_merging": "Merging origin/main into main..."
+  ,"github_ops.repair_merged": "GitHub history merged into main"
+  ,"github_ops.repair_complete_detail": "Local main now includes origin/main"
+  ,"github_ops.repair_completed_steps": "Completed during this attempt:\n- {steps}\n\nCompleted steps remain applied."
+  ,"github_ops.repair_no_steps": "No repair steps completed during this attempt."
+  ,"github_ops.repair_refresh": "Refresh Source Control before retrying"
+  ,"github_ops.test_connection": "Test GitHub connection"
+  ,"github_ops.remote_contacting": "Contacting GitHub remote..."
+  ,"github_ops.remote": "GitHub remote"
+  ,"github_ops.settings": "GitHub Settings"
+  ,"github_ops.signout_label": "Sign out from GitHub"
+  ,"github_ops.credentials_removing": "Removing saved GitHub credentials..."
+  ,"github_ops.authentication": "GitHub authentication"
+  ,"github_ops.signin_label": "Sign in to GitHub"
+  ,"github_ops.device_code_requesting": "Requesting a GitHub device authorization code..."
+  ,"github_ops.device_authorization": "Device authorization"
+  ,"github_ops.authorization_stopped": "GitHub authorization polling stopped."
+  ,"github_ops.authorization_waiting": "Waiting for GitHub authorization..."
+  ,"github_ops.authorization_slow": "GitHub requested slower authorization checks..."
+  ,"github_ops.device_code": "Code {code}"
+  ,"github_ops.authorized_account": "Authorized account"
+  ,"github_ops.exclusions_save_label": "Save Git exclusions"
+  ,"github_ops.gitignore_writing": "Writing .gitignore..."
+  ,"github_ops.exclusions_target.one": ".gitignore; 1 path to untrack"
+  ,"github_ops.exclusions_target.other": ".gitignore; {count} paths to untrack"
+  ,"github_ops.index_removing": "Removing ignored paths from the Git index..."
+  ,"github_ops.exclusions_load_label": "Load Git exclusions"
+  ,"github_ops.exclusions_loading": "Loading repository file list..."
+  ,"github_ops.exclusions_load_target": ".gitignore and workspace paths"
+  ,"github_ops.paths_untracked.one": "1 path removed from tracking"
+  ,"github_ops.paths_untracked.other": "{count} paths removed from tracking"
+  ,"github_ops.no_paths_untracked": "No tracked paths required removal"
+  ,"github_ops.exclusions_partial_detail": "The exclusion file is already updated. Some paths may still be tracked until Retry succeeds."
+  ,"github_ops.index_not_attempted": "No index update was attempted."
+  ,"github_ops.workspace_entries_loaded.one": "1 workspace entry loaded"
+  ,"github_ops.workspace_entries_loaded.other": "{count} workspace entries loaded"
+  ,"gitea_ops.repository": "Gitea repository"
+  ,"gitea_ops.push_label": "Push to Gitea"
+  ,"gitea_ops.commits_uploading": "Uploading local commits..."
+  ,"gitea_ops.push_cancelled_before_commit": "Push cancelled before commit"
+  ,"gitea_ops.pull_label": "Pull from Gitea"
+  ,"gitea_ops.changes_downloading": "Downloading remote changes..."
+  ,"gitea_ops.commit_label": "Commit staged changes"
+  ,"gitea_ops.commit_creating": "Creating local commit..."
+  ,"gitea_ops.abort_label": "Abort Gitea Git operation"
+  ,"gitea_ops.abort_running": "Aborting merge or rebase..."
+  ,"gitea_ops.force_push_label": "Force push to Gitea"
+  ,"gitea_ops.remote_branch_replacing": "Replacing the remote branch..."
+  ,"gitea_ops.reset_label": "Reset from Gitea"
+  ,"gitea_ops.local_files_replacing": "Replacing local files from the remote branch..."
+  ,"gitea_ops.configure_remote": "Configure Gitea remote"
+  ,"gitea_ops.remote_saving": "Saving Gitea remote..."
+  ,"gitea_ops.account": "Gitea account"
+  ,"gitea_ops.credentials_save_label": "Save Gitea credentials"
+  ,"gitea_ops.credentials_saving": "Saving Gitea credentials..."
+  ,"gitea_ops.authentication": "Gitea authentication"
+  ,"gitea_ops.settings": "Gitea Settings"
+  ,"gitea_ops.credentials_persisted": "Credentials saved for future sessions"
+  ,"gitea_ops.credentials_session": "Credentials available for this session"
+  ,"gitea_ops.credentials_retry_detail": "The token was not retained for Retry. Reopen Gitea Settings to try again."
+  ,"gitea_ops.signout_label": "Sign out from Gitea"
+  ,"gitea_ops.credentials_removing": "Removing saved Gitea credentials..."
+  ,"gitea_ops.test_connection": "Test Gitea connection"
+  ,"gitea_ops.remote_contacting": "Contacting Gitea remote..."
+  ,"gitea_ops.remote": "Gitea remote"
+  ,"gitea_ops.server": "Gitea server"
+  ,"gitea_ops.create_repository": "Create Gitea repository"
+  ,"gitea_ops.status_fetch_label": "Fetch Gitea status"
+  ,"gitea_ops.status_refresh_label": "Refresh Gitea status"
+  ,"gitea_ops.status_fetching": "Fetching remote references and workspace status..."
+  ,"gitea_ops.status_reading": "Reading workspace status..."
+  ,"gitea_ops.branch_status": "Branch: {branch}"
+  ,"gitea_ops.branch_status_fetched": "Branch: {branch}\nRemote references fetched."
+  ,"workspace_ops.save_modified_files.one": "Save 1 modified file"
+  ,"workspace_ops.save_modified_files.other": "Save {count} modified files"
+  ,"workspace_ops.save_preparing": "Preparing files for save..."
+  ,"workspace_ops.documents": "Workspace documents"
+  ,"workspace_ops.local_files.one": "1 local"
+  ,"workspace_ops.local_files.other": "{count} local"
+  ,"workspace_ops.sftp_files.one": "1 SFTP"
+  ,"workspace_ops.sftp_files.other": "{count} SFTP"
+  ,"workspace_ops.open_file": "Open file"
+  ,"workspace_ops.saving_progress": "Saving file {current} of {count}..."
+  ,"workspace_ops.saved": "Saved"
+  ,"workspace_ops.failed": "Failed"
+  ,"workspace_ops.save_partial": "{saved} saved, {failed} failed"
+  ,"workspace_ops.save_retry_detail": "Retry saves only the files that failed in this attempt."
+  ,"workspace_ops.files_saved.one": "1 file saved"
+  ,"workspace_ops.files_saved.other": "{count} files saved"
+  ,"blueprint_ops.validate_label": "Validate blueprint automation"
+  ,"blueprint_ops.validate_generating": "Step 1 of 2: generating automation YAML..."
+  ,"blueprint_ops.ha_automation": "Home Assistant automation"
+  ,"blueprint_ops.open_blueprint": "Open blueprint"
+  ,"blueprint_ops.open_form": "Open form"
+  ,"blueprint_ops.validate_checking": "Step 2 of 2: checking generated YAML..."
+  ,"blueprint_ops.yaml_invalid": "Generated YAML is invalid"
+  ,"blueprint_ops.yaml_valid": "Generated automation YAML is valid"
+  ,"blueprint_ops.validation_failed": "Blueprint automation validation failed"
+  ,"blueprint_ops.append_label": "Append blueprint automation"
+  ,"blueprint_ops.save_label": "Save blueprint automation"
+  ,"blueprint_ops.destination_checking": "Step 1 of {count}: checking {path}..."
+  ,"blueprint_ops.ha_configuration": "Home Assistant configuration"
+  ,"blueprint_ops.automation_appending": "Step 2 of {count}: appending automation..."
+  ,"blueprint_ops.automation_creating": "Step 2 of {count}: creating automation file..."
+  ,"blueprint_ops.write_skipping": "Step 2 of {count}: exact automation already present; skipping write..."
+  ,"blueprint_ops.retry_no_duplicate": "Retry did not duplicate the automation."
+  ,"blueprint_ops.automations_reloading": "Step 3 of 3: reloading automations..."
+  ,"blueprint_ops.reload_retrying": "Step 2 of 2: retrying the automation reload..."
+  ,"blueprint_ops.reload_failed": "File saved, but automations could not be reloaded"
+  ,"blueprint_ops.reload_retry_detail": "{path} already contains the automation. Retry will skip the write and retry only the reload."
+  ,"blueprint_ops.saved_loaded": "Automation saved and loaded"
+  ,"blueprint_ops.existing_retained": "The existing matching file was retained and automations were reloaded."
+  ,"blueprint_ops.save_failed": "Automation could not be saved"
+  ,"blueprint_ops.save_retry_detail": "The write outcome may be ambiguous after a connection failure. Retry checks the destination before writing and will not duplicate an exact match."
+  ,"blueprint_ops.destination_read_failed": "Could not read destination"
+  ,"blueprint_ops.write_rejected": "Home Assistant rejected the file write"
+  ,"blueprint_ops.reload_rejected": "Automation reload was rejected"
+  ,"blueprint_ops.conversion_retry_title": "Retry blueprint conversion?"
+  ,"blueprint_ops.conversion_retry_message": "Convert the original {kind} snapshot again and replace {path} with the result?"
+  ,"blueprint_ops.conversion_retry_confirm": "Retry Conversion"
+  ,"blueprint_ops.conversion_label": "Convert to blueprint"
+  ,"blueprint_ops.converting": "Converting {source}..."
+  ,"blueprint_ops.destination_saving": "Saving {path}..."
+  ,"blueprint_ops.destination_created": "Created {path}"
+  ,"blueprint_ops.converted_save_failed": "Blueprint converted but could not be saved"
+  ,"blueprint_ops.conversion_failed": "Blueprint conversion failed"
+  ,"blueprint_ops.no_content": "Home Assistant returned no blueprint content"
+  ,"blueprint_ops.generated_write_rejected": "Home Assistant rejected the generated file write"
+  ,"git_ops.cleanup_label": "Clean Git recovery state"
+  ,"git_ops.cleanup_target": "{branch} -> .git locks and operation state"
+  ,"git_ops.cleanup_running": "Removing stale Git recovery state..."
+  ,"git_ops.cleanup_failed": "Could not clean Git recovery state"
+  ,"git_ops.cleanup_removed.one": "Removed 1 Git state entry"
+  ,"git_ops.cleanup_removed.other": "Removed {count} Git state entries"
+  ,"git_ops.cleanup_removed_detail": "Removed: {entries}"
+  ,"git_ops.cleanup_none": "No stale Git recovery state was found."
+  ,"git_ops.cleanup_unknown_error": "Unknown Git cleanup error"
+  ,"git_diff_ops.history": "History"
+  ,"git_diff_ops.load_file_diff": "Load diff for {file}"
+  ,"git_diff_ops.local_repository_provider": "Local Git repository ({provider})"
+  ,"git_diff_ops.head_to_path": "HEAD -> {path}"
+  ,"git_diff_ops.preparing_components": "Preparing diff components..."
+  ,"git_diff_ops.open_file": "Open File"
+  ,"git_diff_ops.loading_file_content": "Loading HEAD and working content for {path}..."
+  ,"git_diff_ops.head_load_failed": "Could not load the HEAD version"
+  ,"git_diff_ops.diff_title": "Diff: {path}"
+  ,"git_diff_ops.no_differences": "No differences"
+  ,"git_diff_ops.calculating": "Calculating..."
+  ,"git_diff_ops.previous_difference": "Previous difference"
+  ,"git_diff_ops.next_difference": "Next difference"
+  ,"git_diff_ops.hide_whitespace": "Hide whitespace-only changes"
+  ,"git_diff_ops.show_whitespace": "Show whitespace-only changes"
+  ,"git_diff_ops.wrap_lines": "Wrap long lines"
+  ,"git_diff_ops.stage_file": "Stage file"
+  ,"git_diff_ops.unstage_file": "Unstage file"
+  ,"git_diff_ops.file_diff_ready": "Diff ready for {file}"
+  ,"git_diff_ops.file_diff_detail": "Compared HEAD with the current working content for {path}"
+  ,"git_diff_ops.file_diff_failed": "Could not load diff for {file}"
+  ,"git_diff_ops.current_branch": "Current branch"
+  ,"git_diff_ops.load_history": "Load Git history"
+  ,"git_diff_ops.history_target": "{branch} -> latest {count} commits"
+  ,"git_diff_ops.fetching_history": "Fetching commit history..."
+  ,"git_diff_ops.no_commits": "No commits found"
+  ,"git_diff_ops.by_author": "by {author}"
+  ,"git_diff_ops.commits_loaded.one": "1 commit loaded"
+  ,"git_diff_ops.commits_loaded.other": "{count} commits loaded"
+  ,"git_diff_ops.commit_history": "Commit History"
+  ,"git_diff_ops.unknown_history_error": "Unknown history error"
+  ,"git_diff_ops.history_failed": "Could not load Git history"
+  ,"git_diff_ops.load_commit": "Load commit {hash}"
+  ,"git_diff_ops.commit_target": "{branch} -> {hash}"
+  ,"git_diff_ops.loading_commit": "Loading diff for {hash}..."
+  ,"git_diff_ops.diff_lines_loaded.one": "1 diff line loaded"
+  ,"git_diff_ops.diff_lines_loaded.other": "{count} diff lines loaded"
+  ,"git_diff_ops.commit_title": "Commit: {hash}"
+  ,"git_diff_ops.author": "Author"
+  ,"git_diff_ops.date": "Date"
+  ,"git_diff_ops.back_to_history": "Back to History"
+  ,"git_diff_ops.commit_empty": "No changes to display in this commit"
+  ,"git_diff_ops.commit_controls": "Commit diff controls"
+  ,"git_diff_ops.unknown_commit_error": "Unknown commit diff error"
+  ,"git_diff_ops.commit_failed": "Could not load commit diff"
+  ,"git_diff_ops.reject_file_title": "Reject File: {file}"
+  ,"git_diff_ops.keep_changes": "Keep Changes"
+  ,"git_diff_ops.reject_file": "Reject File"
+  ,"git_diff_ops.previous_edit": "Previous edit"
+  ,"git_diff_ops.next_edit": "Next edit"
+  ,"git_diff_ops.accept_file": "Accept File"
+  ,"git_diff_ops.accept_file_shortcut": "Accept File ({shortcut})"
+  ,"git_diff_ops.reject_file_shortcut": "Reject File ({shortcut})"
+  ,"git_diff_ops.toggle_preview": "Toggle diff preview"
+  ,"git_diff_ops.previous_file": "Previous file"
+  ,"git_diff_ops.next_file": "Next file"
+  ,"git_diff_ops.undo_last": "Undo last accepted AI diff"
+  ,"git_diff_ops.file_position": "{current} of {total} {files}"
+  ,"git_diff_ops.no_visible_changes": "No visible changes"
+  ,"git_diff_ops.ai_history_count": "AI Diff History ({count}/{max})"
+  ,"git_diff_ops.accepted": "accepted"
+  ,"git_diff_ops.rejected": "rejected"
+  ,"git_diff_ops.undone": "undone"
+  ,"git_diff_ops.view_diff": "View diff"
+  ,"git_diff_ops.undo_change": "Undo this change"
+  ,"git_diff_ops.clear_history": "Clear All History"
+  ,"git_diff_ops.edits.one": "1 edit"
+  ,"git_diff_ops.edits.other": "{count} edits"
+  ,"git_diff_ops.files.one": "file"
+  ,"git_diff_ops.files.other": "files"
+  ,"asset_preview.unavailable": "Preview unavailable"
+  ,"asset_preview.unsupported_format": "{filename} is not a supported preview format."
+  ,"asset_preview.open_as_text": "Open as text"
+  ,"asset_preview.download_file": "Download {filename}"
+  ,"asset_preview.loading": "Loading preview"
+  ,"asset_preview.failed": "Preview failed"
+  ,"asset_preview.decode_failed": "The file could not be decoded or loaded."
+  ,"asset_preview.previous_image": "Previous image"
+  ,"asset_preview.next_image": "Next image"
+  ,"asset_preview.download_image": "Download image"
+  ,"asset_preview.image_decode_failed": "Image could not be decoded"
+  ,"asset_preview.page": "Page"
+  ,"asset_preview.previous_page": "Previous page"
+  ,"asset_preview.next_page": "Next page"
+  ,"asset_preview.download_pdf": "Download PDF"
+  ,"asset_preview.pdf_decode_failed": "PDF could not be decoded"
+  ,"asset_preview.download_video": "Download video"
+  ,"asset_preview.video_not_supported": "Your browser does not support the video tag."
+  ,"asset_preview.video_unavailable": "Video preview unavailable"
+  ,"asset_preview.browser_could_not_load": "{filename} could not be loaded by this browser."
+  ,"asset_preview.download_audio": "Download audio"
+  ,"asset_preview.audio_not_supported": "Your browser does not support the audio tag."
+  ,"asset_preview.audio_unavailable": "Audio preview unavailable"
+  ,"asset_preview.copy_to_clipboard": "Copy to clipboard"
+  ,"toolbar.more_commands": "More commands"
+  ,"toolbar.close_menu": "Close {label}"
+  ,"toolbar.menu_label": "More toolbar commands"
+  ,"settings.pwa.install": "Install as App"
+  ,"settings.pwa.hint": "Open in a new window to install Blueprint Studio as a PWA on your device"
+  ,"settings.pwa.open_window": "Open in new window"
+  ,"settings.appearance.theme_default": "Use Theme Default"
+  ,"settings.units.seconds_short": "{count}s"
+  ,"settings.units.files": "{count} files"
+  ,"settings.ai.auto_detect": "Auto-detect"
+  ,"settings.ai.custom_model_name": "Custom Model Name"
+  ,"settings.ai.model_name": "Model Name"
+  ,"settings.ai.model_name_optional": "Model Name (optional)"
+  ,"settings.ai.gemini_model_hint": "Choose a built-in Gemini model or type any Gemini model name manually."
+  ,"settings.ai.openai_model_hint": "Use the dropdown for known models, or type any OpenAI-compatible model name from your relay."
+  ,"settings.ai.claude_model_hint": "Models are fetched from Anthropic automatically; you can also type a model name manually."
+  ,"settings.ai.ollama_model_hint": "Fetch installed Ollama models, or type a tag manually."
+  ,"settings.ai.lm_studio_model_hint": "Fetch models from the LM Studio OpenAI-compatible server, or type a model name manually."
+  ,"settings.ai.custom_model_hint": "Fetch models from your custom OpenAI-compatible endpoint, or type a model name manually."
+  ,"git_ops.github_account": "GitHub account"
+  ,"git_ops.credentials_label": "Save GitHub credentials"
+  ,"git_ops.credentials_saving": "Saving GitHub credentials..."
+  ,"git_ops.github_authentication": "GitHub authentication"
+  ,"git_ops.github_settings": "GitHub Settings"
+  ,"git_ops.credentials_persisted": "Credentials saved for future sessions"
+  ,"git_ops.credentials_session": "Credentials available for this session"
+  ,"git_ops.credentials_rejected": "Credential save was rejected"
+  ,"git_ops.credentials_retry_detail": "The token was not retained for Retry. Reopen GitHub Settings to try again."
+  ,"git_ops.no_files": "No files"
+  ,"git_ops.file_target.one": "{path}"
+  ,"git_ops.file_target.other": "{count} files, including {path}"
+  ,"common.close": "Close"
+  ,"search_ops.replace_label": "Replace \"{query}\""
+  ,"search_ops.workspace_scope": "Workspace search"
+  ,"search_ops.matches_in_files": "{matches} matches in {files} files"
+  ,"search_ops.replacing_files.one": "Replacing matches across 1 file..."
+  ,"search_ops.replacing_files.other": "Replacing matches across {count} files..."
+  ,"search_ops.open": "Open"
+  ,"search_ops.files_updated.one": "1 file updated"
+  ,"search_ops.files_updated.other": "{count} files updated"
+  ,"search_ops.matches_reviewed.one": "1 matching result was reviewed"
+  ,"search_ops.matches_reviewed.other": "{count} matching results were reviewed"
+  ,"search_ops.workspace_replace_failed": "Workspace replace failed"
+  ,"search_ops.file_replace_failed": "File replace failed"
+  ,"search_ops.replace_not_applied": "The replacement was not applied"
+  ,"search_ops.replace_in_file_title": "Replace in File"
+  ,"search_ops.replace_in_file_message": "Replace all occurrences of <b>\"{query}\"</b> with <b>\"{replacement}\"</b> in <b>{file}</b>?"
+  ,"search_ops.replace_confirm": "Replace"
+  ,"search_ops.replace_file_label": "Replace in {file}"
+  ,"search_ops.replacing_file": "Replacing matches in file..."
+  ,"search_ops.file_updated": "{file} updated"
+  ,"sftp_ops.scope": "SFTP {connection}"
+  ,"sftp_ops.connect_label": "Connect to {connection}"
+  ,"sftp_ops.connecting": "Opening remote workspace..."
+  ,"sftp_ops.open_sftp": "Open SFTP"
+  ,"sftp_ops.connected": "Connected to {connection}"
+  ,"sftp_ops.root_contents": "{folders} folders · {files} files at /"
+  ,"sftp_ops.connection_failed": "SFTP connection failed"
+  ,"sftp_ops.connect_failed": "Could not connect to {connection}"
+  ,"sftp_ops.open_file_label": "Open {file}"
+  ,"sftp_ops.reading_file": "Reading remote file..."
+  ,"sftp_ops.open": "Open"
+  ,"sftp_ops.stream_ready": "{file} is ready to stream"
+  ,"sftp_ops.open_file_failed": "Could not open {file}"
+  ,"sftp_ops.remote_read_failed": "The remote file could not be read"
+  ,"sftp_ops.file_opened": "{file} opened"
+  ,"sftp_ops.save_file_label": "Save {file}"
+  ,"sftp_ops.writing_file": "Writing file to the remote server..."
+  ,"sftp_ops.browse": "Browse"
+  ,"sftp_ops.save_file_failed": "Could not save {file}"
+  ,"sftp_ops.file_saved": "{file} saved"
+  ,"sftp_ops.remote_write_rejected": "Remote server rejected the file write"
+  ,"sftp_ops.refresh_label": "Refresh SFTP workspace"
+  ,"sftp_ops.refreshing_path": "Refreshing {path}..."
+  ,"sftp_ops.refreshed_path": "Refreshed {path}"
+  ,"sftp_ops.directory_contents": "{folders} folders · {files} files"
+  ,"sftp_ops.refresh_failed": "SFTP refresh failed"
+  ,"sftp_ops.refresh_path_failed": "Could not refresh {path}"
+  ,"sftp_ops.folder": "folder"
+  ,"sftp_ops.file": "file"
+  ,"sftp_ops.open_folder": "Open folder"
+  ,"sftp_ops.open_file": "Open file"
+  ,"sftp_ops.retry": "Retry"
+  ,"sftp_ops.create_label": "Create remote {item}"
+  ,"sftp_ops.creating_path": "Creating {path}..."
+  ,"sftp_ops.create_failed": "Could not create remote {item}"
+  ,"sftp_ops.create_request_failed": "Remote {item} creation failed"
+  ,"sftp_ops.created_path": "Created {path}"
+  ,"sftp_ops.retry_create_title": "Retry creating remote file?"
+  ,"sftp_ops.retry_create_message": "Create {path} on SFTP {connection} again? The destination will be replaced with an empty file if it now exists."
+  ,"sftp_ops.retry_create_confirm": "Retry Create"
+  ,"sftp_ops.rename_label": "Rename remote {item}"
+  ,"sftp_ops.move_label": "Move remote {item}"
+  ,"sftp_ops.duplicate_label": "Duplicate remote {item}"
+  ,"sftp_ops.retry_mutation_title": "Retry {action}?"
+  ,"sftp_ops.retry_mutation_message": "Retry {source} to {destination} on SFTP {connection}? If the destination now exists, it will be replaced."
+  ,"sftp_ops.mutation_running": "{action}..."
+  ,"sftp_ops.mutation_failed": "{action} failed"
+  ,"sftp_ops.mutation_complete": "{action} complete"
+  ,"sftp_ops.mutation_detail": "{source} -> {destination}"
+  ,"sftp_ops.retry_delete_title": "Retry deleting remote {item}?"
+  ,"sftp_ops.retry_delete_message": "Permanently delete {path} from SFTP {connection}? A previous recursive attempt may already have removed some contents. This cannot be undone."
+  ,"sftp_ops.retry_delete_confirm": "Retry Delete"
+  ,"sftp_ops.delete_label": "Delete remote {item}"
+  ,"sftp_ops.deleting_path": "Deleting {path}..."
+  ,"sftp_ops.delete_failed": "Could not delete {path}"
+  ,"sftp_ops.delete_request_failed": "Remote deletion request failed"
+  ,"sftp_ops.deleted_path": "Deleted {path}"
+  ,"sftp_ops.delete_permanent_detail": "Remote deletion is permanent and was not moved to a recovery location."
+  ,"sftp_ops.delete_partial_detail": "Some contents may already be deleted. No changes were rolled back."
+  ,"sftp_ops.connection": "connection"
+  ,"sftp_ops.test_label": "Test SFTP connection"
+  ,"sftp_ops.testing": "Testing authentication and remote access..."
+  ,"sftp_ops.connection_settings": "Connection settings"
+  ,"sftp_ops.test_failed": "SFTP connection test failed"
+  ,"sftp_ops.test_verified": "SFTP connection verified"
+  ,"sftp_ops.test_credentials_detail": "Credentials are stored only after this successful test."
+  ,"sftp_ops.test_retry_detail": "Credentials are not stored in operation history. Correct them in Connection settings."
 }

@@ -1,5 +1,5 @@
 /** EDITORCONFIG.JS | Reads and applies .editorconfig rules to files. */
-import { API_BASE } from './constants.js';
+import { API_BASE } from './constants.js?v=2.5.270';
 
 // Cache: directory path → parsed rules object (null = confirmed missing)
 const cache = new Map();

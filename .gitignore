@@ -70,6 +70,13 @@ dmypy.json
 /*_BASELINE.md
 /*_PARITY.md
 /LIVE_*_TESTING.md
+# Internal modernization evidence and release-slice notes
+/FRONTEND_*.md
+/BACKEND_*.md
+/EDITOR_AI_*.md
+/ACCESSIBILITY_RELEASE_CHECKLIST.md
+/WCAG_2_2_AA_CONFORMANCE.md
+/RELEASE_NOTES_*.md
 
 # Home Assistant
 .storage/

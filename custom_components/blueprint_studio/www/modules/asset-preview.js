@@ -1,16 +1,38 @@
 /** ASSET-PREVIEW.JS | Purpose: * Handles preview rendering for non-code files including images, PDFs, videos, */
 import { state, elements } from './state.js';
-import { isSftpPath, parseSftpPath, sftpStreamUrl } from './sftp.js?v=2.5.188';
-import { t } from './translations.js';
+import { isSftpPath, parseSftpPath, sftpStreamUrl } from './sftp.js?v=2.5.270';
+import { t } from './translations.js?v=2.5.270';
 import { eventBus } from './event-bus.js';
-import { copyToClipboard } from './utils.js';
-import { saveSettings } from './settings.js?v=2.5.188';
-import { IMAGE_EXTENSIONS, AUDIO_EXTENSIONS } from './constants.js';
+import { copyToClipboard, loadScript } from './utils.js';
+import { saveSettings } from './settings.js?v=2.5.270';
+import { IMAGE_EXTENSIONS, AUDIO_EXTENSIONS } from './constants.js?v=2.5.270';
 import { urlWithTicket, serveFileUrl } from './api.js';
 
 const escapeHtml = (value) => String(value ?? '').replace(/[&<>\"']/g, (char) => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;', "'": '&#39;'
 }[char]));
+
+let markdownDependenciesPromise = null;
+
+export function ensureMarkdownDependencies() {
+  if (window.marked && window.hljs) return Promise.resolve();
+  if (!markdownDependenciesPromise) {
+    const version = encodeURIComponent(window.__BS_VERSION__ || '');
+    const vendor = path => `/local/blueprint_studio/vendor/${path}${version ? `?v=${version}` : ''}`;
+    markdownDependenciesPromise = loadScript(vendor('marked/marked.min.js'))
+      .then(() => Promise.all([
+        loadScript(vendor('marked/marked-gfm-heading-id.umd.js')),
+        loadScript(vendor('marked/marked-mangle.umd.js')),
+        loadScript(vendor('marked/marked-highlight.umd.js')),
+        loadScript(vendor('highlight/highlight.min.js')),
+      ]))
+      .catch(error => {
+        markdownDependenciesPromise = null;
+        throw error;
+      });
+  }
+  return markdownDependenciesPromise;
+}
 
 function renderPreviewState(container, { title, message, tone = 'secondary', actions = '' } = {}) {
   container.classList.add('visible');
@@ -25,11 +47,11 @@ function renderPreviewState(container, { title, message, tone = 'secondary', act
 function renderUnsupportedPreview(tab, filename, previewContainer) {
   const safeName = escapeHtml(filename);
   renderPreviewState(previewContainer, {
-    title: 'Preview unavailable',
-    message: `${filename} is not a supported preview format.`,
+    title: t('asset_preview.unavailable'),
+    message: t('asset_preview.unsupported_format', { filename }),
     tone: 'warning',
-    actions: `<button type="button" class="ui-button" id="asset-open-text">Open as text</button>
-      <button type="button" class="ui-button" id="asset-download">Download ${safeName}</button>`
+    actions: `<button type="button" class="ui-button" id="asset-open-text">${t('asset_preview.open_as_text')}</button>
+      <button type="button" class="ui-button" id="asset-download">${t('asset_preview.download_file', { filename: safeName })}</button>`
   });
   previewContainer.querySelector('#asset-open-text')?.addEventListener('click', () => {
     eventBus.emit('file:open', { path: tab.path, forceText: true });
@@ -50,7 +72,7 @@ export async function renderAssetPreview(tab, container = null) {
 
   const filename = tab.path.split("/").pop();
 
-  renderPreviewState(previewContainer, { title: 'Loading preview', message: filename });
+  renderPreviewState(previewContainer, { title: t('asset_preview.loading'), message: filename });
 
   try {
     if (tab.isImage) renderImagePreview(tab, filename, previewContainer);
@@ -61,10 +83,10 @@ export async function renderAssetPreview(tab, container = null) {
   } catch (error) {
     console.error('Asset preview error:', error);
     renderPreviewState(previewContainer, {
-      title: 'Preview failed',
-      message: error?.message || 'The file could not be decoded or loaded.',
+      title: t('asset_preview.failed'),
+      message: error?.message || t('asset_preview.decode_failed'),
       tone: 'error',
-      actions: `<button type="button" class="ui-button" id="asset-download">Download ${escapeHtml(filename)}</button>`
+      actions: `<button type="button" class="ui-button" id="asset-download">${t('asset_preview.download_file', { filename: escapeHtml(filename) })}</button>`
     });
     previewContainer.querySelector('#asset-download')?.addEventListener('click', () => {
       eventBus.emit('file:download-content', { filename, content: tab.content, isBase64: true, mimeType: tab.mimeType });
@@ -140,16 +162,16 @@ function renderImagePreview(tab, filename, previewContainer) {
         </div>
         <div style="display: flex; align-items: center; gap: 12px;">
           <div style="display: flex; align-items: center; gap: 4px;">
-            <button id="img-prev" class="toolbar-btn" title="Previous Image" ${!prevImage ? 'disabled style="opacity: 0.5; cursor: default;"' : ''}>
+            <button id="img-prev" class="toolbar-btn" title="${t('asset_preview.previous_image')}" aria-label="${t('asset_preview.previous_image')}" ${!prevImage ? 'disabled style="opacity: 0.5; cursor: default;"' : ''}>
               <span class="ui-icon material-icons">chevron_left</span>
             </button>
             <span style="font-size: 13px; color: var(--text-secondary); min-width: 60px; text-align: center;">${currentIndex + 1} / ${imageFiles.length}</span>
-            <button id="img-next" class="toolbar-btn" title="Next Image" ${!nextImage ? 'disabled style="opacity: 0.5; cursor: default;"' : ''}>
+            <button id="img-next" class="toolbar-btn" title="${t('asset_preview.next_image')}" aria-label="${t('asset_preview.next_image')}" ${!nextImage ? 'disabled style="opacity: 0.5; cursor: default;"' : ''}>
               <span class="ui-icon material-icons">chevron_right</span>
             </button>
           </div>
           <div style="width: 1px; height: 24px; background: var(--borderColor);"></div>
-          <button id="img-download" class="toolbar-btn" title="Download Image">
+          <button id="img-download" class="toolbar-btn" title="${t('asset_preview.download_image')}" aria-label="${t('asset_preview.download_image')}">
             <span class="ui-icon material-icons">download</span>
           </button>
         </div>
@@ -164,10 +186,10 @@ function renderImagePreview(tab, filename, previewContainer) {
 
   previewContainer.querySelector('img')?.addEventListener('error', () => {
     renderPreviewState(previewContainer, {
-      title: 'Image could not be decoded',
+      title: t('asset_preview.image_decode_failed'),
       message: filename,
       tone: 'error',
-      actions: `<button type="button" class="ui-button" id="asset-download">Download ${escapeHtml(filename)}</button>`
+      actions: `<button type="button" class="ui-button" id="asset-download">${t('asset_preview.download_file', { filename: escapeHtml(filename) })}</button>`
     });
     previewContainer.querySelector('#asset-download')?.addEventListener('click', () => {
       eventBus.emit('file:download-content', { filename, content: tab.content, isBase64: true, mimeType: tab.mimeType });
@@ -252,12 +274,12 @@ async function renderPdfPreview(tab, filename, previewContainer) {
         </div>
         <div style="display: flex; align-items: center; gap: 12px;">
           <div style="display: flex; align-items: center; gap: 4px; color: var(--text-secondary); font-size: 13px;">
-            <button id="pdf-prev" class="toolbar-btn" style="min-width: 32px; height: 32px; padding: 0;"><span class="ui-icon material-icons">chevron_left</span></button>
-            <span>Page <span id="pdf-page-num">1</span> / <span id="pdf-page-count">-</span></span>
-            <button id="pdf-next" class="toolbar-btn" style="min-width: 32px; height: 32px; padding: 0;"><span class="ui-icon material-icons">chevron_right</span></button>
+            <button id="pdf-prev" class="toolbar-btn" title="${t('asset_preview.previous_page')}" aria-label="${t('asset_preview.previous_page')}" style="min-width: 32px; height: 32px; padding: 0;"><span class="ui-icon material-icons">chevron_left</span></button>
+            <span>${t('asset_preview.page')} <span id="pdf-page-num">1</span> / <span id="pdf-page-count">-</span></span>
+            <button id="pdf-next" class="toolbar-btn" title="${t('asset_preview.next_page')}" aria-label="${t('asset_preview.next_page')}" style="min-width: 32px; height: 32px; padding: 0;"><span class="ui-icon material-icons">chevron_right</span></button>
           </div>
           <div style="width: 1px; height: 24px; background: var(--borderColor);"></div>
-          <button id="btn-download-pdf" class="toolbar-btn" title="Download"><span class="ui-icon material-icons">download</span></button>
+          <button id="btn-download-pdf" class="toolbar-btn" title="${t('asset_preview.download_pdf')}" aria-label="${t('asset_preview.download_pdf')}"><span class="ui-icon material-icons">download</span></button>
         </div>
       </div>
       <div id="pdf-viewer-viewport" style="flex-grow: 1; overflow: auto; display: flex; justify-content: center; align-items: flex-start; padding: 20px; background: var(--bg-primary);">
@@ -320,10 +342,10 @@ async function renderPdfPreview(tab, filename, previewContainer) {
   }).catch(err => {
     console.error('PDF.js error:', err);
     renderPreviewState(previewContainer, {
-      title: 'PDF could not be decoded',
+      title: t('asset_preview.pdf_decode_failed'),
       message: err.message,
       tone: 'error',
-      actions: `<button type="button" class="ui-button" id="asset-download">Download ${escapeHtml(filename)}</button>`
+      actions: `<button type="button" class="ui-button" id="asset-download">${t('asset_preview.download_file', { filename: escapeHtml(filename) })}</button>`
     });
     previewContainer.querySelector('#asset-download')?.addEventListener('click', () => {
       eventBus.emit('file:download-content', { filename, content: tab.content, isBase64: true, mimeType: tab.mimeType });
@@ -382,8 +404,8 @@ async function renderVideoPreview(tab, filename, previewContainer) {
         </div>
         <div style="display: flex; align-items: center; gap: 12px;">
           ${isSftp
-            ? `<button id="video-download" class="toolbar-btn" title="Download Video"><span class="ui-icon material-icons">download</span></button>`
-            : `<a href="${srcUrl}" download="${filename}" class="toolbar-btn" title="Download Video" style="text-decoration:none;color:inherit;display:flex;align-items:center;"><span class="ui-icon material-icons">download</span></a>`
+            ? `<button id="video-download" class="toolbar-btn" title="${t('asset_preview.download_video')}" aria-label="${t('asset_preview.download_video')}"><span class="ui-icon material-icons">download</span></button>`
+            : `<a href="${srcUrl}" download="${filename}" class="toolbar-btn" title="${t('asset_preview.download_video')}" aria-label="${t('asset_preview.download_video')}" style="text-decoration:none;color:inherit;display:flex;align-items:center;"><span class="ui-icon material-icons">download</span></a>`
           }
         </div>
       </div>
@@ -393,7 +415,7 @@ async function renderVideoPreview(tab, filename, previewContainer) {
           preload="metadata"
           style="max-width: 100%; max-height: 100%; box-shadow: 0 4px 12px rgba(0,0,0,0.3); background: #000;">
           <source src="${srcUrl}" type="${tab.mimeType || ""}">
-          Your browser does not support the video tag.
+          ${t('asset_preview.video_not_supported')}
         </video>
       </div>
     </div>
@@ -411,7 +433,7 @@ async function renderVideoPreview(tab, filename, previewContainer) {
   }
   previewContainer.querySelector('video')?.addEventListener('error', () => {
     renderPreviewState(previewContainer, {
-      title: 'Video preview unavailable', message: `${filename} could not be loaded by this browser.`, tone: 'error'
+      title: t('asset_preview.video_unavailable'), message: t('asset_preview.browser_could_not_load', { filename }), tone: 'error'
     });
   }, { once: true });
 }
@@ -447,8 +469,8 @@ async function renderAudioPreview(tab, filename, previewContainer) {
         </div>
         <div style="display: flex; align-items: center; gap: 12px;">
           ${isSftp
-            ? `<button id="audio-download" class="toolbar-btn" title="Download Audio"><span class="ui-icon material-icons">download</span></button>`
-            : `<a href="${srcUrl}" download="${filename}" class="toolbar-btn" title="Download Audio" style="text-decoration:none;color:inherit;display:flex;align-items:center;"><span class="ui-icon material-icons">download</span></a>`
+            ? `<button id="audio-download" class="toolbar-btn" title="${t('asset_preview.download_audio')}" aria-label="${t('asset_preview.download_audio')}"><span class="ui-icon material-icons">download</span></button>`
+            : `<a href="${srcUrl}" download="${filename}" class="toolbar-btn" title="${t('asset_preview.download_audio')}" aria-label="${t('asset_preview.download_audio')}" style="text-decoration:none;color:inherit;display:flex;align-items:center;"><span class="ui-icon material-icons">download</span></a>`
           }
         </div>
       </div>
@@ -460,7 +482,7 @@ async function renderAudioPreview(tab, filename, previewContainer) {
             preload="metadata"
             style="width: 100%; box-shadow: 0 4px 12px rgba(0,0,0,0.3); border-radius: 8px;">
             <source src="${srcUrl}" type="${tab.mimeType || ""}">
-            Your browser does not support the audio tag.
+            ${t('asset_preview.audio_not_supported')}
           </audio>
         </div>
       </div>
@@ -479,7 +501,7 @@ async function renderAudioPreview(tab, filename, previewContainer) {
   }
   previewContainer.querySelector('audio')?.addEventListener('error', () => {
     renderPreviewState(previewContainer, {
-      title: 'Audio preview unavailable', message: `${filename} could not be loaded by this browser.`, tone: 'error'
+      title: t('asset_preview.audio_unavailable'), message: t('asset_preview.browser_could_not_load', { filename }), tone: 'error'
     });
   }, { once: true });
 }
@@ -503,7 +525,9 @@ export function addCodeCopyButtons(container) {
     const copyBtn = document.createElement('button');
     copyBtn.className = 'code-copy-btn';
     copyBtn.innerHTML = '<span class="ui-icon material-icons code-copy-icon">content_copy</span>';
-    copyBtn.title = 'Copy to clipboard';
+    copyBtn.title = t('asset_preview.copy_to_clipboard');
+    copyBtn.setAttribute('aria-label', copyBtn.title);
+    copyBtn.setAttribute('aria-label', t('asset_preview.copy_to_clipboard'));
     copyBtn.style.cssText = `
       position: absolute;
       top: 8px;
@@ -706,12 +730,13 @@ export function cleanupMarkdownPreview(resetState = false) {
  * Toggles markdown preview mode for .md files
  * @param {boolean} forceState - Optional: force a specific state (true for on, false for off)
  */
-export function toggleMarkdownPreview(forceState = null) {
+export async function toggleMarkdownPreview(forceState = null) {
   if (!state.activeTab || !state.activeTab.path.endsWith(".md")) return;
 
   const isPreview = forceState !== null ? forceState : !state.markdownPreviewActive;
   
   if (isPreview) {
+    await ensureMarkdownDependencies();
     state.markdownPreviewActive = true;
     if (elements.btnMarkdownPreview) {
       elements.btnMarkdownPreview.classList.add("active");

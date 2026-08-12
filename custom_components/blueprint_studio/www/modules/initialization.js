@@ -1,6 +1,6 @@
 /** INITIALIZATION.JS | Purpose: * Handles complete application initialization including DOM element caching, */
 
-import { API_BASE } from './constants.js';
+import { API_BASE } from './constants.js?v=2.5.270';
 import { eventBus } from './event-bus.js';
 
 import {
@@ -15,7 +15,7 @@ import {
   defineHAYamlMode,
   defineCSVMode,
   defineShowWhitespaceMode
-} from './ha-autocomplete.js?v=2.5.188';
+} from './ha-autocomplete.js?v=2.5.270';
 
 import {
   state,
@@ -43,7 +43,7 @@ import {
   isMobile
 } from './utils.js';
 
-import { t, initTranslations, refreshAllUIStrings } from './translations.js';
+import { t, initTranslations, refreshAllUIStrings } from './translations.js?v=2.5.270';
 
 
 import {
@@ -58,7 +58,7 @@ import {
 
 import {
   initResizeHandle
-} from './resize.js?v=2.5.188';
+} from './resize.js?v=2.5.270';
 
 import {
   initStatusBarEvents
@@ -85,17 +85,17 @@ import {
   parseSftpPath,
   uploadSftpFile,
   refreshSftp
-} from './sftp.js?v=2.5.188';
+} from './sftp.js?v=2.5.270';
 
 import {
   loadSettings,
   saveSettings,
   updateShowHiddenButton
-} from './settings.js?v=2.5.188';
+} from './settings.js?v=2.5.270';
 
 import {
   showAppSettings
-} from './settings-ui.js';
+} from './settings-ui.js?v=2.5.270';
 
 import {
   toggleSelectionMode,
@@ -117,7 +117,7 @@ import {
   gitInit,
   gitGetRemotes,
   gitSetCredentials
-} from "./git-operations.js";
+} from "./git-operations.js?v=2.5.270";
 
 import {
   gitAddRemote,
@@ -130,58 +130,63 @@ import {
 import {
   giteaStatus,
   giteaCreateRepo
-} from "./gitea-integration.js?v=2.5.188";
+} from "./gitea-integration.js?v=2.5.270";
 
 import {
   initResponsiveSplitView,
   updateResponsiveSplitView,
   updateSplitViewButtons
-} from './split-view.js?v=2.5.188';
+} from './split-view.js?v=2.5.270';
 import {
   hideSidebar,
   showSidebar,
   syncActivityState
 } from './sidebar.js';
 import { initAiDiffListener, enqueueAiDiff } from './git-diff.js';
-import { initializeEventHandlers } from './coordinators/index.js?v=2.5.188';
+import { initializeEventHandlers } from './coordinators/index.js?v=2.5.270';
 import { 
   isTextFile, 
   copyToClipboard 
 } from './utils.js';
-import { initializeToolbarControls, updateToolbarState } from './toolbar.js';
+import { initializeToolbarControls, observeIconButtonAccessibility, updateToolbarState } from './toolbar.js';
 import { updateStatusBar } from './status-bar.js';
-import { initTooltips } from './tooltip.js?v=2.5.188';
-import { initToolbarOverflow } from './toolbar-overflow.js?v=2.5.188';
-import { initEditorWorkflow } from './editor-workflow.js?v=2.5.188';
+import { initTooltips } from './tooltip.js?v=2.5.270';
+import { initToolbarOverflow } from './toolbar-overflow.js?v=2.5.270';
+import { initEditorWorkflow } from './editor-workflow.js?v=2.5.270';
 import { initActivityRail } from './activity-rail.js';
-import { initPhoneNavigation } from './phone-navigation.js?v=2.5.188';
+import { initPhoneNavigation } from './phone-navigation.js?v=2.5.270';
 import {
   captureEditorViewports,
   scheduleEditorViewportRestore,
-} from './editor-viewport.js?v=2.5.188';
+} from './editor-viewport.js?v=2.5.270';
 import {
   initViewportEnvironment,
   initWorkspaceMode,
   isWorkspaceDrawerMode,
   refreshViewportEnvironment,
-} from './workspace-layout.js?v=2.5.188';
+} from './workspace-layout.js?v=2.5.270';
 
 let isInitializing = false;
+let hasInitialized = false;
 
 /**
  * Main initialization function
  * Initializes the entire Blueprint Studio application
  */
 export async function init() {
-  if (isInitializing) {
-    console.warn("[Init] Already initializing, ignoring second call.");
+  if (isInitializing || hasInitialized) {
+    console.warn(`[Init] ${hasInitialized ? 'Already initialized' : 'Already initializing'}, ignoring second call.`);
     return;
   }
   isInitializing = true;
   
   try {
     initElements();
+    // Static modules may call t() while evaluating. Load the fallback bundle
+    // before any coordinator renders user-facing content or settings events fire.
+    await initTranslations('en');
     initializeToolbarControls();
+    observeIconButtonAccessibility();
     initTooltips();
     initResponsiveSplitView();
 
@@ -195,6 +200,7 @@ export async function init() {
 
     await loadSettings();
     await initTranslations(state.language);
+    eventBus.on('onboarding:start', ({ force = false } = {}) => startOnboarding({ force }));
 
     let workspaceEditorSnapshots = [];
     initWorkspaceMode({
@@ -433,6 +439,8 @@ export async function init() {
         showToast(t("toast.initialization_error_some_feat"), "error");
     }
   } finally {
+    hasInitialized = true;
+    isInitializing = false;
     // ALWAYS dismiss initial loading screen
     hideGlobalLoading();
 
@@ -449,8 +457,8 @@ export async function init() {
  * Start the onboarding wizard for new users
  * Guides users through setting up Git integration
  */
-export async function startOnboarding() {
-    if (state.onboardingCompleted) return;
+export async function startOnboarding({ force = false } = {}) {
+    if (state.onboardingCompleted || (state.onboardingPaused && !force)) return;
 
     let shouldOpenSettings = false;
 
@@ -498,7 +506,8 @@ export async function startOnboarding() {
                         </div>
                     </button>
                 </div>
-                <p style="font-size: 12px; color: var(--text-secondary); margin-top: 20px;">You can change this later in Settings.</p>
+                <button class="ui-button ui-button--ghost onboarding-choice-btn" data-value="pause" style="margin-top: 12px; width: 100%;">${t('onboarding.not_now')}</button>
+                <p style="font-size: 12px; color: var(--text-secondary); margin-top: 20px;">${t('onboarding.settings_later')}</p>
             </div>
         `;
 
@@ -515,6 +524,12 @@ export async function startOnboarding() {
     });
 
     const provider = choiceResult;
+    if (provider === 'pause') {
+        state.onboardingPaused = true;
+        await saveSettings();
+        showToast(t('onboarding.paused'), 'info');
+        return;
+    }
     const useGit = provider !== 'none';
 
     if (useGit) {
@@ -655,6 +670,7 @@ export async function startOnboarding() {
     });
 
     state.onboardingCompleted = true;
+    state.onboardingPaused = false;
     saveSettings();
 
     // If they chose to connect Gitea (or GitHub failed login), open the settings modal now

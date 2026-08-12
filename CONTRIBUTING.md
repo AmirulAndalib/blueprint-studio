@@ -161,6 +161,10 @@ Before submitting a pull request:
    - Test in Safari (if available)
    - Test on mobile browsers
 
+4. **Accessibility Testing**:
+   - Complete [ACCESSIBILITY_RELEASE_CHECKLIST.md](ACCESSIBILITY_RELEASE_CHECKLIST.md)
+   - Treat any automated accessibility audit failure as release-blocking
+
 ## Commit Messages
 
 Write clear, descriptive commit messages:

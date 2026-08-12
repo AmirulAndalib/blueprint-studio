@@ -1,18 +1,18 @@
 /** UI.JS | Purpose: * Provides core UI utilities including modals, toasts, themes, loading states, */
 import { state, elements } from './state.js';
-import { THEME_PRESETS, ACCENT_COLORS, SYNTAX_THEMES } from './constants.js';
+import { THEME_PRESETS, ACCENT_COLORS, SYNTAX_THEMES } from './constants.js?v=2.5.270';
 import { lightenColor } from './utils.js';
-import { t } from './translations.js';
+import { t } from './translations.js?v=2.5.270';
 import { eventBus } from './event-bus.js';
 import { applyMinimapState } from './minimap.js';
-import { closeDialog, openDialog } from './dialog-manager.js';
-import { constrainSidebarWidth } from './workspace-layout.js?v=2.5.188';
+import { closeDialog, openDialog } from './dialog-manager.js?v=2.5.270';
+import { constrainSidebarWidth } from './workspace-layout.js?v=2.5.270';
 import {
   hideGlobalPending,
   notify,
   setControlPending,
   showGlobalPending,
-} from './feedback-service.js?v=2.5.188';
+} from './feedback-service.js?v=2.5.270';
 
 const HA_VAR_MAPPING = {
     '--bg-primary': '--primary-background-color',
@@ -234,7 +234,7 @@ function updateThemeToggleDisplay() {
     if (elements.themeIcon) elements.themeIcon.textContent = themeIcons[displayKey] || "dark_mode";
     if (elements.themeLabel) elements.themeLabel.textContent = themeLabels[displayKey] || "Dark";
 
-    document.querySelectorAll(".theme-menu-item").forEach(item => {
+    elements.themeMenu?.querySelectorAll(".theme-menu-item").forEach(item => {
       const itemTheme = item.dataset.theme;
       const isActive = (state.themePreset === 'auto' && itemTheme === 'auto') || 
                        (state.themePreset !== 'auto' && itemTheme === state.themePreset);
@@ -276,10 +276,12 @@ function preferredModalControl(preferInput = false) {
     : elements.modalConfirm;
 }
 
-export const DEFAULT_MODAL_BODY_HTML = `
-    <input type="text" class="modal-input" id="modal-input" placeholder="${t("modal.new_file_placeholder")}">
-    <div class="modal-hint" id="modal-hint"></div>
-`;
+function defaultModalBodyHtml() {
+  return `
+      <input type="text" class="modal-input" id="modal-input" placeholder="${t("modal.new_file_placeholder")}">
+      <div class="modal-hint" id="modal-hint"></div>
+  `;
+}
 
 export function resetModalToDefault() {
     const modalBody = document.getElementById("modal-body");
@@ -289,7 +291,7 @@ export function resetModalToDefault() {
 
     // Reset modal body to default
     if (modalBody) {
-      modalBody.innerHTML = DEFAULT_MODAL_BODY_HTML;
+      modalBody.innerHTML = defaultModalBodyHtml();
 
       // Re-bind element references after HTML reset
       elements.modalInput = document.getElementById("modal-input");
@@ -312,7 +314,7 @@ export function resetModalToDefault() {
 
     // Reset modal width
     if (modal) {
-      modal.classList.remove("modal--full-workflow", "modal--tall-sheet");
+      modal.classList.remove("modal--full-workflow", "modal--tall-sheet", "modal--settings-workbench");
       modal.style.maxWidth = "";
       modal.style.width = "";
     }

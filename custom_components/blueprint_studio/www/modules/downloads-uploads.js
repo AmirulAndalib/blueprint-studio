@@ -1,9 +1,9 @@
-import { t } from './translations.js';
+import { t } from './translations.js?v=2.5.270';
 /** DOWNLOADS-UPLOADS.JS | Purpose: File transfers - download files/folders, upload files via drag-drop */
 import { state, elements } from './state.js';
 import { fetchWithAuth, downloadFileUrl, downloadFolderUrl, getAuthToken, urlWithTicket } from './api.js';
 import { eventBus } from './event-bus.js';
-import { API_BASE, STREAM_BASE, UPLOAD_BASE } from './constants.js';
+import { API_BASE, STREAM_BASE, UPLOAD_BASE } from './constants.js?v=2.5.270';
 import { 
   showToast, 
   showConfirmDialog,
@@ -11,7 +11,7 @@ import {
 } from './ui.js';
 import { isTextFile } from './utils.js';
 import { createZipProgressId, startUploadProgress, startZipProgress } from './zip-progress.js';
-import { startOperationFeedback } from './feedback-service.js?v=2.5.188';
+import { startOperationFeedback } from './feedback-service.js?v=2.5.270';
 import {
   isSftpPath,
   parseSftpPath,
@@ -22,7 +22,7 @@ import {
   sftpStreamUrl,
   sftpSelectedZipUrl,
   getSftpConnectionDetails
-} from './sftp.js?v=2.5.188';
+} from './sftp.js?v=2.5.270';
 
 function parentPath(path) {
   const clean = String(path || "").replace(/\/+$/g, "");
@@ -68,19 +68,19 @@ function uploadDestinationMarkup({ isSftp, connId, path }) {
   if (isSftp) {
     const connection = state.sftpConnections.find((candidate) => candidate.id === connId);
     const connectionName = connection?.name || connId;
-    return `<div class="operation-location is-remote"><span class="ui-icon material-icons" aria-hidden="true">cloud_upload</span><span><strong>Remote SFTP · ${escapeMarkup(connectionName)}</strong><small>Destination · ${escapeMarkup(path || "/")}</small></span></div>`;
+    return `<div class="operation-location is-remote"><span class="ui-icon material-icons" aria-hidden="true">cloud_upload</span><span><strong>${escapeMarkup(t('transfer.remote_sftp', { name: connectionName }))}</strong><small>${escapeMarkup(t('transfer.destination', { path: path || "/" }))}</small></span></div>`;
   }
-  return `<div class="operation-location is-local"><span class="ui-icon material-icons" aria-hidden="true">home</span><span><strong>Local Home Assistant</strong><small>Destination · ${escapeMarkup(localConfigPath(path))}</small></span></div>`;
+  return `<div class="operation-location is-local"><span class="ui-icon material-icons" aria-hidden="true">home</span><span><strong>${escapeMarkup(t('transfer.local_home_assistant'))}</strong><small>${escapeMarkup(t('transfer.destination', { path: localConfigPath(path) }))}</small></span></div>`;
 }
 
 async function confirmUploadDestination({ count, isSftp, connId, path, folderArchive = false }) {
   const itemLabel = folderArchive
-    ? "this ZIP archive"
-    : `${count} ${count === 1 ? "file" : "files"}`;
+    ? t('transfer.this_zip')
+    : t(count === 1 ? 'transfer.file_count.one' : 'transfer.file_count.other', { count });
   return showConfirmDialog({
-    title: folderArchive ? "Upload Folder?" : "Upload Files?",
-    message: `${uploadDestinationMarkup({ isSftp, connId, path })}Upload ${itemLabel} to this destination?`,
-    confirmText: "Upload",
+    title: folderArchive ? t('transfer.upload_folder_title') : t('transfer.upload_files_title'),
+    message: `${uploadDestinationMarkup({ isSftp, connId, path })}${t('transfer.upload_question', { item: itemLabel })}`,
+    confirmText: t('menu.upload'),
     cancelText: t("modal.cancel_button"),
     isDanger: false,
   });
@@ -132,7 +132,7 @@ function downloadRequest(path) {
       path,
       filename: path.split('/').pop(),
       isSftp: false,
-      scope: 'Local Home Assistant workspace',
+      scope: t('transfer.local_workspace'),
       source: path,
     });
   }
@@ -144,21 +144,21 @@ function downloadRequest(path) {
     isSftp: true,
     connId,
     remotePath,
-    scope: `SFTP ${connection?.name || connId}`,
+    scope: t('transfer.sftp_connection', { id: connection?.name || connId }),
     source: remotePath,
   });
 }
 
 async function runFileDownload(request) {
   const operation = startOperationFeedback({
-    label: `Download ${request.filename}`,
+    label: t('download.operation_label', { file: request.filename }),
     icon: 'download',
     scope: request.scope,
-    target: `${request.source} -> Browser downloads`,
-    message: `Preparing ${request.filename}...`,
+    target: `${request.source} -> ${t('download.browser_downloads')}`,
+    message: t('download.preparing', { file: request.filename }),
     retry: () => runFileDownload(request),
     open: () => showDownloadSource(request),
-    openLabel: 'Open Source',
+    openLabel: t('download.open_source'),
     openIcon: 'open_in_new',
   });
   try {
@@ -171,15 +171,15 @@ async function runFileDownload(request) {
     document.body.appendChild(anchor);
     anchor.click();
     anchor.remove();
-    operation.finish(`Download started for ${request.filename}`, {
-      detail: 'The browser owns the download destination and completion state.',
+    operation.finish(t('download.started', { file: request.filename }), {
+      detail: t('download.browser_owns_completion'),
     });
-    showToast(`Download started for ${request.filename}`, 'success');
+    showToast(t('toast.download_started', { file: request.filename }), 'success');
     return true;
   } catch (error) {
     const message = error?.message || String(error);
-    operation.fail(`Could not prepare ${request.filename}`, message);
-    showToast(`Failed to download ${request.filename}: ${message}`, 'error');
+    operation.fail(t('download.prepare_failed', { file: request.filename }), message);
+    showToast(t('toast.download_file_failed', { file: request.filename, error: message }), 'error');
     return false;
   }
 }
@@ -225,9 +225,9 @@ export function downloadContent(filename, content, is_base64 = false, mimeType =
     document.body.removeChild(a);
 
     setTimeout(() => URL.revokeObjectURL(url), 1000);
-    showToast(`Downloaded ${filename}`, "success");
+    showToast(t('toast.downloaded_file', { file: filename }), "success");
   } catch (error) {
-    showToast(`Failed to download ${filename}: ${error.message}`, "error");
+    showToast(t('toast.download_file_failed', { file: filename, error: error.message }), "error");
   }
 }
 
@@ -237,9 +237,9 @@ export function downloadContent(filename, content, is_base64 = false, mimeType =
 export async function downloadFolder(path) {
   const folderName = path.split('/').filter(Boolean).pop() || "download";
   const progressId = createZipProgressId();
-  const stopProgress = startZipProgress(progressId, `Preparing ${folderName}.zip...`, {
-    scope: "Local Home Assistant",
-    target: "This device",
+  const stopProgress = startZipProgress(progressId, t('transfer.preparing_archive', { name: folderName }), {
+    scope: t('transfer.local_home_assistant'),
+    target: t('transfer.this_device'),
   });
   try {
     const url = await downloadFolderUrl(path, progressId);
@@ -263,21 +263,21 @@ export async function downloadSelectedItems() {
   const paths = Array.from(state.selectedItems);
   const progressId = createZipProgressId();
   const selectedAreRemote = paths.every(isSftpPath);
-  const stopProgress = startZipProgress(progressId, "Preparing selected items ZIP...", {
-    scope: selectedAreRemote ? "SFTP" : "Local Home Assistant",
-    target: "This device",
+  const stopProgress = startZipProgress(progressId, t('transfer.preparing_selected'), {
+    scope: selectedAreRemote ? t('transfer.sftp') : t('transfer.local_home_assistant'),
+    target: t('transfer.this_device'),
   });
 
   try {
     const sftpPaths = paths.filter(isSftpPath);
     if (sftpPaths.length > 0) {
       if (sftpPaths.length !== paths.length) {
-        throw new Error("Select either local or SFTP items, not both");
+            throw new Error(t('transfer.mixed_selection'));
       }
       const parsedPaths = sftpPaths.map(parseSftpPath);
       const connectionIds = new Set(parsedPaths.map(({ connId }) => connId));
       if (connectionIds.size !== 1) {
-        throw new Error("Select SFTP items from one connection at a time");
+        throw new Error(t('transfer.multiple_connections'));
       }
       const connId = parsedPaths[0].connId;
       const url = await sftpSelectedZipUrl(
@@ -401,7 +401,7 @@ function buildUploadedFolderPath(basePath, folderName) {
 }
 
 function formatUploadLabel(totalFiles) {
-  return totalFiles === 1 ? "Uploading 1 file..." : `Uploading ${totalFiles} files...`;
+  return t(totalFiles === 1 ? 'transfer.uploading_file.one' : 'transfer.uploading_file.other', { count: totalFiles });
 }
 
 function uploadProgressFor(progress, file, fileIndex, phase = "Uploading") {
@@ -438,7 +438,7 @@ function showUploadWarnings(result) {
   const examples = Array.isArray(result.skipped_examples) && result.skipped_examples.length
     ? `: ${result.skipped_examples.slice(0, 3).join(", ")}`
     : "";
-  showToast(`Upload completed with ${result.skipped_files} skipped item(s)${examples}`, "warning", 8000);
+  showToast(t('toast.upload_skipped', { count: result.skipped_files, examples }), "warning", 8000);
 }
 
 /**
@@ -479,7 +479,7 @@ export async function processUploads(files, targetFolder = null) {
   const progress = startUploadProgress({
     label: formatUploadLabel(totalFiles),
     totalFiles,
-    scope: isSftp ? `SFTP ${connId}` : "Local Home Assistant",
+    scope: isSftp ? t('transfer.sftp_connection', { id: connId }) : t('transfer.local_home_assistant'),
     target: isSftp ? remoteBaseDir : basePath || "/config",
     onCancel: () => uploadController.abort(),
     onRetry: () => processUploads(uploadFiles, targetFolder),
@@ -515,7 +515,7 @@ export async function processUploads(files, targetFolder = null) {
           if (isSftp) {
             const connDetails = getSftpConnectionDetails(connId);
             if (!connDetails) {
-              showToast(`Failed to unzip ${file.name}: SFTP connection not found`, "error");
+              showToast(t('toast.unzip_failed', { file: file.name, error: t('toast.sftp_conn_not_found') }), "error");
               continue;
             }
             // Try without overwrite first
@@ -523,7 +523,7 @@ export async function processUploads(files, targetFolder = null) {
               progress,
               file,
               processedCount,
-              "Uploading ZIP",
+              t('transfer.uploading_zip'),
               (onProgress) => uploadFolderMultipartSftp(connDetails, targetPath, file, "merge", false, onProgress, uploadController.signal)
             );
             
@@ -534,7 +534,7 @@ export async function processUploads(files, targetFolder = null) {
                       progress,
                       file,
                       processedCount,
-                      "Uploading ZIP",
+                      t('transfer.uploading_zip'),
                       (onProgress) => uploadFolderMultipartSftp(connDetails, targetPath, file, mode, true, onProgress, uploadController.signal)
                     );
                 } else {
@@ -548,7 +548,7 @@ export async function processUploads(files, targetFolder = null) {
               await refreshSftp();
               continue;
             } else {
-              showToast(`Failed to unzip on remote: ${result?.message || 'Unknown error'}`, "error");
+              showToast(t('toast.remote_unzip_failed', { error: result?.message || t('common.unknown') }), "error");
             }
           } else {
             // Local folder upload
@@ -556,7 +556,7 @@ export async function processUploads(files, targetFolder = null) {
               progress,
               file,
               processedCount,
-              "Uploading ZIP",
+              t('transfer.uploading_zip'),
               (onProgress) => uploadFolderMultipart(targetPath, file, "merge", false, onProgress, uploadController.signal)
             );
 
@@ -567,7 +567,7 @@ export async function processUploads(files, targetFolder = null) {
                       progress,
                       file,
                       processedCount,
-                      "Uploading ZIP",
+                      t('transfer.uploading_zip'),
                       (onProgress) => uploadFolderMultipart(targetPath, file, mode, true, onProgress, uploadController.signal)
                     );
                 } else {
@@ -592,7 +592,7 @@ export async function processUploads(files, targetFolder = null) {
           const remotePath = remoteBaseDir === '/' ? `/${file.name}` : `${remoteBaseDir}/${file.name}`;
           const connDetails = getSftpConnectionDetails(connId);
           if (!connDetails) {
-            showToast(`Failed to upload ${file.name}: SFTP connection not found`, "error");
+            showToast(t('toast.upload_file_failed', { file: file.name, error: t('toast.sftp_conn_not_found') }), "error");
             continue;
           }
           let res = await runUploadWithProgress(
@@ -627,7 +627,7 @@ export async function processUploads(files, targetFolder = null) {
           if (res && res.success) {
             successCount++;
           } else {
-            showToast(`Failed to upload ${file.name}: ${res?.message || 'Unknown error'}`, "error");
+            showToast(t('toast.upload_file_failed', { file: file.name, error: res?.message || t('common.unknown') }), "error");
           }
         } else {
           const filePath = basePath ? `${basePath}/${file.name}` : file.name;
@@ -663,7 +663,7 @@ export async function processUploads(files, targetFolder = null) {
           if (res && res.success) {
             successCount++;
           } else {
-            showToast(`Failed to upload ${file.name}: ${res?.message || 'Unknown error'}`, "error");
+            showToast(t('toast.upload_file_failed', { file: file.name, error: res?.message || t('common.unknown') }), "error");
           }
         }
         continue;
@@ -675,7 +675,7 @@ export async function processUploads(files, targetFolder = null) {
         fileIndex: processedCount,
         loaded: 0,
         total: file.size || 0,
-        message: `Reading ${file.name}`,
+        message: t('transfer.reading', { name: file.name }),
       });
       content = await readFileAsText(file);
       progress.update({
@@ -683,7 +683,7 @@ export async function processUploads(files, targetFolder = null) {
         fileIndex: processedCount,
         loaded: file.size || 0,
         total: file.size || 0,
-        message: `Saving ${file.name}`,
+        message: t('transfer.saving', { name: file.name }),
       });
 
       if (isSftp) {
@@ -711,7 +711,7 @@ export async function processUploads(files, targetFolder = null) {
         if (res && res.success) {
             successCount++;
         } else {
-            showToast(`Failed to upload ${file.name}: ${res?.message || 'Unknown error'}`, "error");
+            showToast(t('toast.upload_file_failed', { file: file.name, error: res?.message || t('common.unknown') }), "error");
         }
       } else {
         const filePath = basePath ? `${basePath}/${file.name}` : file.name;
@@ -738,26 +738,28 @@ export async function processUploads(files, targetFolder = null) {
         if (res && res.success) {
             successCount++;
         } else {
-            showToast(`Failed to upload ${file.name}: ${res?.message || 'Unknown error'}`, "error");
+            showToast(t('toast.upload_file_failed', { file: file.name, error: res?.message || t('common.unknown') }), "error");
         }
       }
     } catch (error) {
       if (error?.name === "AbortError" || uploadController.signal.aborted) break;
-      showToast(`Failed to upload ${file.name}: ${error.message}`, "error");
+      showToast(t('toast.upload_file_failed', { file: file.name, error: error.message }), "error");
     }
   }
 
   if (uploadController.signal.aborted) {
     progress.cancel(successCount
       ? `Cancelled after uploading ${successCount} of ${totalFiles} files`
-      : "Upload cancelled");
+      : t('transfer.upload_cancelled'));
   } else if (successCount > 0) {
-    progress.finish(successCount === totalFiles ? "Upload complete" : `Uploaded ${successCount} of ${totalFiles} files`);
+    progress.finish(successCount === totalFiles
+      ? t('transfer.upload_complete')
+      : t('transfer.uploaded_count', { count: successCount, total: totalFiles }));
     showToast(t("toast.upload_success"), "success");
     if (isSftp) await refreshSftp();
     else eventBus.emit("ui:reload-files", { force: true });
   } else {
-    progress.fail("No files uploaded");
+    progress.fail(t('transfer.no_files_uploaded'));
   }
 }
 
@@ -809,9 +811,9 @@ export async function handleFolderUpload(event) {
 
   const uploadController = new AbortController();
   const progress = startUploadProgress({
-    label: `Uploading ${file.name}...`,
+    label: t('transfer.uploading_file_name', { name: file.name }),
     totalFiles: 1,
-    scope: targetIsSftp ? `SFTP ${targetDetails.connId}` : "Local Home Assistant",
+    scope: targetIsSftp ? t('transfer.sftp_connection', { id: targetDetails.connId }) : t('transfer.local_home_assistant'),
     target: targetIsSftp ? uploadTargetPath : localConfigPath(uploadTargetPath),
     onCancel: () => uploadController.abort(),
     onRetry: () => processUploads([file], targetPath),
@@ -829,7 +831,7 @@ export async function handleFolderUpload(event) {
       const { connId } = parseSftpPath(targetPath);
       const connDetails = getSftpConnectionDetails(connId);
       if (!connDetails) {
-        progress.fail("SFTP connection not found");
+        progress.fail(t('transfer.sftp_connection_missing'));
         showToast(t("toast.upload_folder_fail", { error: "SFTP connection not found" }), "error");
         event.target.value = "";
         return;
@@ -839,7 +841,7 @@ export async function handleFolderUpload(event) {
         progress,
         file,
         1,
-        "Uploading ZIP",
+        t('transfer.uploading_zip'),
         (onProgress) => uploadFolderMultipartSftp(connDetails, uploadTargetPath, file, "merge", false, onProgress, uploadController.signal)
       );
 
@@ -850,7 +852,7 @@ export async function handleFolderUpload(event) {
             progress,
             file,
             1,
-            "Uploading ZIP",
+            t('transfer.uploading_zip'),
             (onProgress) => uploadFolderMultipartSftp(connDetails, uploadTargetPath, file, mode, true, onProgress, uploadController.signal)
           );
         } else {
@@ -861,12 +863,12 @@ export async function handleFolderUpload(event) {
       }
 
       if (result && result.success) {
-        progress.finish("Upload complete");
+        progress.finish(t('transfer.upload_complete'));
         showToast(t("toast.upload_success"), "success");
         showUploadWarnings(result);
         await refreshSftp();
       } else {
-        progress.fail("Upload failed");
+        progress.fail(t('transfer.upload_failed'));
         showToast(t("toast.upload_folder_fail", { error: result?.message || "Unknown error" }), "error");
       }
     } else {
@@ -875,7 +877,7 @@ export async function handleFolderUpload(event) {
         progress,
         file,
         1,
-        "Uploading ZIP",
+        t('transfer.uploading_zip'),
         (onProgress) => uploadFolderMultipart(uploadTargetPath, file, "merge", false, onProgress, uploadController.signal)
       );
 
@@ -886,7 +888,7 @@ export async function handleFolderUpload(event) {
             progress,
             file,
             1,
-            "Uploading ZIP",
+            t('transfer.uploading_zip'),
             (onProgress) => uploadFolderMultipart(uploadTargetPath, file, mode, true, onProgress, uploadController.signal)
           );
         } else {
@@ -897,20 +899,20 @@ export async function handleFolderUpload(event) {
       }
 
       if (data.success) {
-        progress.finish("Upload complete");
+        progress.finish(t('transfer.upload_complete'));
         showToast(t("toast.upload_success"), "success");
         showUploadWarnings(data);
         await refreshLocalUploadTarget(uploadTargetPath);
       } else {
-        progress.fail("Upload failed");
+        progress.fail(t('transfer.upload_failed'));
         showToast(t("toast.upload_folder_fail", { error: data.message || "Unknown error" }), "error");
       }
     }
   } catch (error) {
     if (error?.name === "AbortError" || uploadController.signal.aborted) {
-      progress.cancel("Upload cancelled");
+      progress.cancel(t('transfer.upload_cancelled'));
     } else {
-      progress.fail("Upload failed", error.message);
+      progress.fail(t('transfer.upload_failed'), error.message);
       showToast(t("toast.upload_folder_fail", { error: error.message }), "error");
     }
   } finally {

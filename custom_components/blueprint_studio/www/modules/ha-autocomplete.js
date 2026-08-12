@@ -1,7 +1,7 @@
 /** HA-AUTOCOMPLETE.JS | Purpose: Home Assistant entity autocomplete and YAML schema hints. */
-import { API_BASE, HA_SCHEMA } from './constants.js';
+import { API_BASE, HA_SCHEMA } from './constants.js?v=2.5.270';
 import { fetchWithAuth } from './api.js';
-import { BLUEPRINT_DOMAINS, getEditorYamlContext } from './yaml-context.js?v=2.5.188';
+import { BLUEPRINT_DOMAINS, getEditorYamlContext } from './yaml-context.js?v=2.5.270';
 
 export let HA_ENTITIES = [];
 export let HA_SERVICES = [];
@@ -132,11 +132,18 @@ function decorateCompletionMenu() {
   menu.dataset.haAccessible = 'true';
   menu.setAttribute('role', 'listbox');
   menu.setAttribute('aria-label', 'YAML completions');
-  const update = () => menu.querySelectorAll('li').forEach((item, index) => {
-    item.setAttribute('role', 'option');
-    item.setAttribute('aria-selected', String(item.classList.contains('CodeMirror-hint-active')));
-    if (!item.id) item.id = `ha-completion-${index}`;
-  });
+  const update = () => {
+    let activeOption = null;
+    menu.querySelectorAll('li').forEach((item, index) => {
+      const selected = item.classList.contains('CodeMirror-hint-active');
+      item.setAttribute('role', 'option');
+      item.setAttribute('aria-selected', String(selected));
+      if (!item.id) item.id = `ha-completion-${index}`;
+      if (selected) activeOption = item;
+    });
+    if (activeOption) menu.setAttribute('aria-activedescendant', activeOption.id);
+    else menu.removeAttribute('aria-activedescendant');
+  };
   update();
   if (typeof MutationObserver !== 'undefined') {
     new MutationObserver(update).observe(menu, { attributes: true, attributeFilter: ['class'], subtree: true, childList: true });

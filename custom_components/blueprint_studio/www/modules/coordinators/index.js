@@ -6,7 +6,7 @@
 
 import { state, elements, gitState, giteaState } from '../state.js';
 import { eventBus } from '../event-bus.js';
-import { hasOpenDialog } from '../dialog-manager.js';
+import { hasOpenDialog } from '../dialog-manager.js?v=2.5.270';
 
 import {
   initElements as initElementsImpl,
@@ -66,17 +66,17 @@ import {
   handleTabDragEnd as handleTabDragEndImpl,
   updatePaneActiveState as updatePaneActiveStateImpl,
   updateSplitViewButtons as updateSplitViewButtonsImpl
-} from '../split-view.js?v=2.5.188';
+} from '../split-view.js?v=2.5.270';
 
 import {
   loadSettings as loadSettingsImpl,
   saveSettings as saveSettingsImpl,
   updateShowHiddenButton as updateShowHiddenButtonImpl
-} from '../settings.js?v=2.5.188';
+} from '../settings.js?v=2.5.270';
 
 import {
   showAppSettings as showAppSettingsImpl
-} from '../settings-ui.js';
+} from '../settings-ui.js?v=2.5.270';
 
 import {
   toggleSelectionMode as toggleSelectionModeImpl,
@@ -145,7 +145,7 @@ import {
   gitCommit as gitCommitImpl,
   gitPull as gitPullImpl,
   gitPush as gitPushImpl
-} from '../git-operations.js';
+} from '../git-operations.js?v=2.5.270';
 
 import {
   gitAddRemote as gitAddRemoteImpl,
@@ -184,11 +184,11 @@ import {
   showGiteaSettings as showGiteaSettingsImpl,
   giteaCreateRepo as giteaCreateRepoImpl,
   refreshGiteaPanelStrings as refreshGiteaPanelStringsImpl
-} from '../gitea-integration.js?v=2.5.188';
+} from '../gitea-integration.js?v=2.5.270';
 
 import {
   refreshAllUIStrings as refreshAllUIStringsImpl
-} from '../translations.js';
+} from '../translations.js?v=2.5.270';
 
 import {
   updateGitPanel as updateGitPanelImpl,
@@ -201,7 +201,7 @@ import {
   commitStagedFiles as commitStagedFilesImpl,
   applyVersionControlVisibility as applyVersionControlVisibilityImpl,
   refreshGitPanelStrings as refreshGitPanelStringsImpl
-} from '../git-ui.js?v=2.5.188';
+} from '../git-ui.js?v=2.5.270';
 
 import {
   renderTabs as renderTabsImpl,
@@ -237,11 +237,11 @@ import {
   formatAiResponse as formatAiResponseImpl,
   copyCode as copyCodeImpl,
   sendAIChatMessage as sendAIChatMessageImpl
-} from '../ai-ui.js?v=2.5.188';
+} from '../ai-ui.js?v=2.5.270';
 
 import {
   showCommandPalette as showCommandPaletteImpl
-} from '../command-palette.js?v=2.5.188';
+} from '../command-palette.js?v=2.5.270';
 
 import {
   reportIssue as reportIssueImpl,
@@ -280,7 +280,7 @@ import {
   closeTerminalTab as closeTerminalTabImpl,
   onTerminalTabClosed as onTerminalTabClosedImpl,
   isTerminalFocused
-} from '../terminal.js?v=2.5.188';
+} from '../terminal.js?v=2.5.270';
 
 import {
   renderRecentFilesPanel as renderRecentFilesPanelImpl,
@@ -332,7 +332,7 @@ import {
 
 import {
   initResizeHandle as initResizeHandleImpl
-} from '../resize.js?v=2.5.188';
+} from '../resize.js?v=2.5.270';
 
 import {
   gitStatusPollingInterval as pollingInterval,
@@ -371,7 +371,7 @@ import {
   deleteConnection as deleteConnectionImpl,
   refreshSftp as refreshSftpImpl,
   refreshSftpStrings as refreshSftpStringsImpl
-} from '../sftp.js?v=2.5.188';
+} from '../sftp.js?v=2.5.270';
 
 import {
   isTextFile,
@@ -396,7 +396,7 @@ import {
   loadFiles as loadFilesImpl
 } from './FileCoordinator.js';
 import { initGitCoordinator } from './GitCoordinator.js';
-import { initSettingsCoordinator } from './SettingsCoordinator.js';
+import { initSettingsCoordinator } from './SettingsCoordinator.js?v=2.5.270';
 import { initDialogCoordinator } from './DialogCoordinator.js';
 import { initTerminalCoordinator } from './TerminalCoordinator.js';
 import { initUICoordinator } from './UICoordinator.js';
@@ -561,7 +561,15 @@ export {
 /**
  * Initialize all application coordinators and global event bus handlers
  */
+let coordinatorsInitialized = false;
+
 export function initializeEventHandlers() {
+  if (coordinatorsInitialized) {
+    console.warn('[Coordinators] Already initialized, ignoring second call.');
+    return;
+  }
+  coordinatorsInitialized = true;
+
   // Initialize Coordinators
   initFileCoordinator({
     saveAllFiles: saveAllFilesImpl,
@@ -1025,6 +1033,7 @@ export function initializeEventHandlers() {
     const mobileCmdBtn = document.createElement('button');
     mobileCmdBtn.id = 'mobile-cmd-btn';
     mobileCmdBtn.title = 'Command Palette';
+    mobileCmdBtn.setAttribute('aria-label', mobileCmdBtn.title);
     mobileCmdBtn.innerHTML = '<span class="ui-icon material-icons mobile-command-icon">bolt</span>';
 
     const FAB_SIZE = 48;

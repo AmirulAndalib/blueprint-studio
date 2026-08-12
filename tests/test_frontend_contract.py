@@ -147,11 +147,11 @@ class FrontendContractTests(unittest.TestCase):
         self.assertIn("editor.setCursor", problems)
         self.assertIn("editor.scrollIntoView", problems)
         self.assertIn("problem-fix-preview", problems)
-        self.assertIn("Apply fix", problems)
-        self.assertIn("Undo fix", problems)
-        self.assertIn("Validation is stale", problems)
-        self.assertIn("Validation unavailable", problems)
-        self.assertIn("Validation passed, no findings", problems)
+        self.assertIn("problems.apply_fix", problems)
+        self.assertIn("problems.undo_fix", problems)
+        self.assertIn("problems.validation_stale", problems)
+        self.assertIn("problems.validation_unavailable", problems)
+        self.assertIn("problems.validation_passed", problems)
         self.assertIn("announcer.textContent = message", problems)
         self.assertIn("problems-show-more", problems)
         self.assertIn("recoveryGuidance", problems)
@@ -211,12 +211,12 @@ class FrontendContractTests(unittest.TestCase):
         self.assertIn('id="completion-details-title"', self.panel)
         self.assertIn('id="completion-details-body"', self.panel)
         self.assertIn("getYamlContext", details)
-        self.assertIn("Installed action:", details)
-        self.assertIn("Required field", details)
-        self.assertIn("Search ${target.label.toLowerCase()} targets", details)
+        self.assertIn("completion.installed_action", details)
+        self.assertIn("completion.required", details)
+        self.assertIn("completion.search_targets", details)
         self.assertIn("SELECTOR_TARGETS", details)
         self.assertIn("RESULT_LIMIT = 50", details)
-        self.assertIn("Example: ", details)
+        self.assertIn("completion.example", details)
         self.assertIn("editor.replaceRange", details)
         self.assertIn("updateCompletionDetails(editor)", editor)
 
@@ -742,6 +742,105 @@ class FrontendContractTests(unittest.TestCase):
             self.panel,
             r'class="[^"]*\bloading-overlay\b[^"]*\bvisible\b[^"]*"[^>]*role="status"[^>]*aria-live="polite"',
         )
+        self.assertRegex(
+            self.panel,
+            r'id="status-connection"[^>]*role="status"[^>]*aria-live="polite"[^>]*aria-atomic="true"',
+        )
+
+    def test_final_accessibility_layer_preserves_focus_and_user_preferences(self):
+        accessibility = (STYLE_MODULES / "accessibility.css").read_text(encoding="utf-8")
+        stylesheet = 'styles/modules/accessibility.css?v={{VERSION}}'
+
+        self.assertIn(stylesheet, self.panel)
+        self.assertGreater(
+            self.panel.index(stylesheet),
+            self.panel.index('styles/modules/user-guide.css?v={{VERSION}}'),
+        )
+        for selector in (
+            "button,",
+            "a[href],",
+            'input:not([type="hidden"]),',
+            "select,",
+            "textarea,",
+            "summary,",
+            '[role="button"],',
+            '[role="tab"],',
+            '[role="menuitem"],',
+            '[role="option"],',
+        ):
+            self.assertIn(selector, accessibility)
+        for contract in (
+            ":focus-visible",
+            "outline: 2px solid var(--focus-color, var(--accent-color)) !important",
+            ".CodeMirror textarea:focus-visible",
+            "@media (prefers-reduced-motion: reduce)",
+            "animation-duration: 0.01ms !important",
+            "transition-duration: 0.01ms !important",
+            "@media (prefers-contrast: more)",
+            "@media (forced-colors: active)",
+            "outline-color: Highlight !important",
+            "border-inline-start: 3px solid CanvasText",
+        ):
+            self.assertIn(contract, accessibility)
+
+    def test_dynamic_status_announcements_are_scoped_and_deduplicated(self):
+        context = (
+            ROOT / "custom_components" / "blueprint_studio" / "www" / "modules" / "context-indicators.js"
+        ).read_text(encoding="utf-8")
+        primitives = (STYLE_MODULES / "primitives.css").read_text(encoding="utf-8")
+
+        for contract in (
+            'announcer.id = "operation-announcer"',
+            'announcer.className = "ui-visually-hidden"',
+            'announcer.setAttribute("aria-live", "polite")',
+            'announcer.setAttribute("aria-atomic", "true")',
+            'card.setAttribute("role", "group")',
+            "if (terminal && previous?.status !== nextStatus)",
+            "announceOperationTransition(",
+            "if (count && count.textContent !== countText)",
+        ):
+            self.assertIn(contract, self.feedback_service)
+        self.assertNotIn('card.setAttribute("aria-live", "polite")', self.feedback_service)
+        for contract in (
+            "if (container.dataset.announcement === signature) return",
+            "context.dataset.announcement = description",
+            "context.setAttribute('aria-live', 'polite')",
+            "context.setAttribute('aria-atomic', 'true')",
+        ):
+            self.assertIn(contract, context)
+        self.assertIn(".ui-visually-hidden", primitives)
+
+    def test_state_cues_do_not_rely_on_color_alone(self):
+        modules = ROOT / "custom_components" / "blueprint_studio" / "www" / "modules"
+        file_tree = (modules / "file-tree.js").read_text(encoding="utf-8")
+        favorites = (modules / "favorites.js").read_text(encoding="utf-8")
+        problems = (modules / "problems.js").read_text(encoding="utf-8")
+        tree_styles = (STYLE_MODULES / "file-tree.css").read_text(encoding="utf-8")
+        editor_styles = (STYLE_MODULES / "editor.css").read_text(encoding="utf-8")
+
+        for contract in (
+            "stateLabels = [gitBadge?.title]",
+            "stateLabels.push(t('sidebar.unsaved'))",
+            "[itemPath, ...stateLabels.filter(Boolean)].join(', ')",
+        ):
+            self.assertIn(contract, file_tree)
+        self.assertIn("`${filePath}, ${t('sidebar.unsaved')}`", favorites)
+        for contract in (
+            "const severityLabel = t(`problems.severity_${finding.severity}`)",
+            "severity.className = 'problem-severity'",
+            "severity.textContent = severityLabel",
+            "`${severityLabel}: ${finding.message}`",
+        ):
+            self.assertIn(contract, problems)
+        self.assertRegex(tree_styles, r"\.tree-item\.active\s*\{[^}]*box-shadow:")
+        self.assertRegex(tree_styles, r"\.tree-item\.modified::after\s*\{[^}]*content:\s*\"\*\"")
+        self.assertIn(".problem-severity", editor_styles)
+        english = json.loads(
+            (ROOT / "custom_components" / "blueprint_studio" / "www" / "locales" / "en.json")
+            .read_text(encoding="utf-8")
+        )
+        self.assertEqual(english.get("problems.severity_error"), "Error")
+        self.assertEqual(english.get("problems.severity_warning"), "Warning")
 
     def test_workspace_has_named_landmarks(self):
         self.assertIn(
@@ -785,9 +884,87 @@ class FrontendContractTests(unittest.TestCase):
             for control_id in control_ids:
                 self.assertIn(f'id="{control_id}"', group.group("body"))
 
+    def test_static_icon_controls_have_accessible_names(self):
+        for control_id in (
+            "btn-menu", "btn-save-all", "btn-undo", "btn-redo", "btn-format",
+            "btn-search", "btn-split-vertical", "btn-split-close", "btn-new-file",
+            "btn-new-folder", "btn-show-hidden", "btn-collapse-all-folders",
+            "btn-one-tab-mode", "btn-upload", "btn-download", "btn-upload-folder",
+            "btn-download-folder", "btn-validate", "btn-use-blueprint", "btn-git-pull",
+            "btn-git-push", "btn-git-status", "btn-gitea-pull", "btn-gitea-push",
+            "btn-gitea-status", "btn-markdown-preview", "btn-terminal", "btn-ai-studio",
+            "btn-restart-ha", "btn-dev-tools", "btn-global-replace-all", "search-replace",
+            "search-replace-all", "secondary-search-replace", "secondary-search-replace-all",
+            "btn-toolbar-overflow", "btn-welcome-open-files", "btn-welcome-new-file",
+            "btn-welcome-upload-file", "btn-welcome-recover-connection", "btn-support-guide",
+            "btn-support-shortcuts", "btn-support-feature", "btn-support-issue",
+        ):
+            control = re.search(rf'<button[^>]*id="{re.escape(control_id)}"[^>]*>', self.panel)
+            self.assertIsNotNone(control, control_id)
+            self.assertRegex(control.group(0), r'aria-label="[^"]+"', control_id)
+
+    def test_dynamic_icon_controls_reuse_tooltips_as_accessible_names(self):
+        modules = ROOT / "custom_components" / "blueprint_studio" / "www" / "modules"
+        contracts = {
+            "git.js": ("pushBtn", "pullBtn"),
+            "git-ui.js": ("pushBtn", "pullBtn"),
+            "gitea-ui.js": ("pushBtn", "pullBtn"),
+            "sftp.js": ("editBtn", "deleteBtn"),
+            "asset-preview.js": ("copyBtn",),
+            "file-tree.js": ("pinBtn", "diffBtn", "confirmBtn", "cancelBtn"),
+            "coordinators/index.js": ("mobileCmdBtn",),
+        }
+        for module_name, controls in contracts.items():
+            source = (modules / module_name).read_text(encoding="utf-8")
+            for control in controls:
+                self.assertIn(
+                    f'{control}.setAttribute("aria-label", {control}.title)',
+                    source.replace("'aria-label'", '"aria-label"'),
+                    f"{module_name}: {control}",
+                )
+
+    def test_activity_rail_uses_native_buttons_and_roving_focus(self):
+        activity = (
+            ROOT / "custom_components" / "blueprint_studio" / "www" / "modules" / "activity-rail.js"
+        ).read_text(encoding="utf-8")
+        self.assertIn('class="activity-bar" role="toolbar"', self.panel)
+        self.assertIn('aria-orientation="vertical"', self.panel)
+        for control_id in (
+            "activity-explorer", "activity-search", "activity-source-control",
+            "activity-sftp", "btn-close-sidebar",
+        ):
+            self.assertRegex(self.panel, rf'<button[^>]*id="{control_id}"[^>]*type="button"')
+        for key in ("ArrowUp", "ArrowDown", "Home", "End"):
+            self.assertIn(key, activity)
+        self.assertIn("setRovingControl", activity)
+        self.assertIn("rail.addEventListener('focusin'", activity)
+
+    def test_editor_tabs_support_standard_keyboard_navigation(self):
+        tabs = (
+            ROOT / "custom_components" / "blueprint_studio" / "www" / "modules" / "tabs.js"
+        ).read_text(encoding="utf-8")
+        for key in ("ArrowLeft", "ArrowRight", "Home", "End"):
+            self.assertIn(key, tabs)
+        self.assertIn("const tabContainer = tabEl.parentElement;", tabs)
+        self.assertIn("tabs[targetIndex].click();", tabs)
+        self.assertIn("requestAnimationFrame", tabs)
+
+    def test_shared_dialog_manager_traps_and_restores_focus(self):
+        dialog = DIALOG_MANAGER.read_text(encoding="utf-8")
+        for contract in (
+            "const dialogStack = [];",
+            "if (event.key !== 'Tab') return;",
+            "event.shiftKey && (active === first",
+            "!event.shiftKey && (active === last",
+            "entry?.returnFocus?.isConnected",
+            "entry.returnFocus.focus();",
+        ):
+            self.assertIn(contract, dialog)
+
     def test_toolbar_overflow_preserves_commands_by_explicit_priority(self):
         modules = ROOT / "custom_components" / "blueprint_studio" / "www" / "modules"
         overflow = (modules / "toolbar-overflow.js").read_text(encoding="utf-8")
+        toolbar = (modules / "toolbar.js").read_text(encoding="utf-8")
         initialization = (modules / "initialization.js").read_text(encoding="utf-8")
         layout = (STYLE_MODULES / "layout.css").read_text(encoding="utf-8")
         responsive = (STYLE_MODULES / "responsive.css").read_text(encoding="utf-8")
@@ -845,6 +1022,12 @@ class FrontendContractTests(unittest.TestCase):
         ):
             self.assertIn(contract, overflow)
         self.assertIn("initToolbarOverflow();", initialization)
+        self.assertIn("export function ensureIconButtonLabels", toolbar)
+        self.assertIn("export function observeIconButtonAccessibility", toolbar)
+        self.assertIn("observer.observe(root, { childList: true, subtree: true })", toolbar)
+        self.assertIn("observeIconButtonAccessibility();", initialization)
+        settings_ui = (modules / "settings-ui.js").read_text(encoding="utf-8")
+        self.assertIn("initialFocus: () => modalBody.querySelector('.settings-tab.active')", settings_ui)
         self.assertIn(".toolbar-group.toolbar-overflow-hidden", layout)
         self.assertIn(".toolbar-overflow-menu-item", layout)
         self.assertIn("width: min(360px, calc(100vw - 16px));", layout)
@@ -877,24 +1060,24 @@ class FrontendContractTests(unittest.TestCase):
         self.assertIn("danger", restart.group("classes").split())
 
     def test_activity_rail_has_named_keyboard_buttons(self):
-        for activity, label, pressed in (
-            ("activity-explorer", "Explorer", "true"),
-            ("activity-search", "Search", "false"),
-            ("activity-source-control", "Source Control", "false"),
-            ("activity-sftp", "SFTP", "false"),
+        for activity, label, pressed, tabindex in (
+            ("activity-explorer", "Explorer", "true", "0"),
+            ("activity-search", "Search", "false", "-1"),
+            ("activity-source-control", "Source Control", "false", "-1"),
+            ("activity-sftp", "SFTP", "false", "-1"),
         ):
-            control = re.search(rf'<div[^>]*id="{activity}"[^>]*>', self.panel)
+            control = re.search(rf'<button[^>]*id="{activity}"[^>]*>', self.panel)
             self.assertIsNotNone(control)
-            self.assertIn('role="button"', control.group(0))
-            self.assertIn('tabindex="0"', control.group(0))
+            self.assertIn('type="button"', control.group(0))
+            self.assertIn(f'tabindex="{tabindex}"', control.group(0))
             self.assertIn(f'aria-label="{label}"', control.group(0))
             self.assertIn(f'aria-pressed="{pressed}"', control.group(0))
 
     def test_close_sidebar_has_named_keyboard_button(self):
-        control = re.search(r'<div[^>]*id="btn-close-sidebar"[^>]*>', self.panel)
+        control = re.search(r'<button[^>]*id="btn-close-sidebar"[^>]*>', self.panel)
         self.assertIsNotNone(control)
-        self.assertIn('role="button"', control.group(0))
-        self.assertIn('tabindex="0"', control.group(0))
+        self.assertIn('type="button"', control.group(0))
+        self.assertIn('tabindex="-1"', control.group(0))
         self.assertIn('aria-label="Close Sidebar"', control.group(0))
 
     def test_activity_rail_icons_use_shared_wrapper(self):
@@ -906,7 +1089,7 @@ class FrontendContractTests(unittest.TestCase):
             "btn-close-sidebar",
         ):
             icon = re.search(
-                rf'<div[^>]*id="{control_id}"[^>]*>\s*<span class="([^"]*)">',
+                rf'<button[^>]*id="{control_id}"[^>]*>\s*<span class="([^"]*)"[^>]*aria-hidden="true">',
                 self.panel,
             )
             self.assertIsNotNone(icon, control_id)
@@ -1041,11 +1224,10 @@ class FrontendContractTests(unittest.TestCase):
                 f"sftp.js?v={manifest['version']}", consumer.read_text(encoding="utf-8")
             )
 
-    def test_theme_toggle_has_named_keyboard_button(self):
-        control = re.search(r'<div[^>]*id="theme-toggle"[^>]*>', self.panel)
+    def test_theme_toggle_has_named_native_button(self):
+        control = re.search(r'<button[^>]*id="theme-toggle"[^>]*>', self.panel)
         self.assertIsNotNone(control)
-        self.assertIn('role="button"', control.group(0))
-        self.assertIn('tabindex="0"', control.group(0))
+        self.assertIn('type="button"', control.group(0))
         self.assertIn('aria-label="Theme"', control.group(0))
         self.assertIn('aria-haspopup="menu"', control.group(0))
         self.assertIn('aria-controls="theme-menu"', control.group(0))
@@ -1237,10 +1419,8 @@ class FrontendContractTests(unittest.TestCase):
             "`${command.label} ${command.scope} ${command.shortcut} ${command.keywords}`",
             palette,
         )
-        self.assertIn(
-            "status.textContent = availability.enabled ? 'Available'", palette
-        )
-        self.assertIn("`Unavailable: ${availability.reason}`", palette)
+        self.assertIn("status.textContent = availability.enabled ? t('palette.available')", palette)
+        self.assertIn("palette.unavailable_reason", palette)
         self.assertIn("div.setAttribute('aria-disabled'", palette)
         self.assertIn("if (!item.availability().enabled) return", palette)
 
@@ -1350,13 +1530,12 @@ class FrontendContractTests(unittest.TestCase):
         )
         self.assertNotIn("btnUseBlueprint.style.display", toolbar)
 
-    def test_breadcrumb_home_has_keyboard_button_semantics(self):
+    def test_breadcrumb_home_has_native_button_semantics(self):
         home = re.search(
-            r'<span[^>]*class="breadcrumb-item breadcrumb-home"[^>]*>', self.panel
+            r'<button[^>]*class="breadcrumb-item breadcrumb-home"[^>]*>', self.panel
         )
         self.assertIsNotNone(home)
-        self.assertIn('role="button"', home.group(0))
-        self.assertIn('tabindex="0"', home.group(0))
+        self.assertIn('type="button"', home.group(0))
         self.assertIn('aria-label="Home"', home.group(0))
 
         file_tree = (
@@ -1371,7 +1550,31 @@ class FrontendContractTests(unittest.TestCase):
             'bindBreadcrumbButton(homeItem, t("sidebar.home"), navigateHome)', file_tree
         )
 
-    def test_dynamic_breadcrumb_segments_reuse_keyboard_button_binding(self):
+    def test_interactive_controls_do_not_emulate_generic_buttons(self):
+        modules = "\n".join(
+            path.read_text(encoding="utf-8")
+            for path in (
+                ROOT / "custom_components" / "blueprint_studio" / "www" / "modules"
+            ).rglob("*.js")
+        )
+        self.assertNotIn('role="button"', self.panel)
+        self.assertNotRegex(
+            modules,
+            r"setAttribute\([\"']role[\"'],\s*[\"']button[\"']\)",
+        )
+
+        sftp = (
+            ROOT
+            / "custom_components"
+            / "blueprint_studio"
+            / "www"
+            / "modules"
+            / "sftp.js"
+        ).read_text(encoding="utf-8")
+        self.assertIn("const rootCrumb = document.createElement('button')", sftp)
+        self.assertIn("const crumb = document.createElement('button')", sftp)
+
+    def test_dynamic_breadcrumb_segments_use_native_buttons(self):
         file_tree = (
             ROOT
             / "custom_components"
@@ -1387,9 +1590,11 @@ class FrontendContractTests(unittest.TestCase):
             "bindBreadcrumbButton(item, part, () => navigateToFolder(itemPath))",
             file_tree,
         )
-        self.assertIn('event.key === "Enter" || event.key === " "', file_tree)
+        self.assertIn('document.createElement("button")', file_tree)
+        self.assertIn('element.type = "button"', file_tree)
+        self.assertNotIn('element.setAttribute("role", "button")', file_tree)
 
-    def test_editor_breadcrumb_links_have_keyboard_button_semantics(self):
+    def test_editor_breadcrumb_links_use_native_button_semantics(self):
         breadcrumb = (
             ROOT
             / "custom_components"
@@ -1399,13 +1604,13 @@ class FrontendContractTests(unittest.TestCase):
             / "breadcrumb.js"
         ).read_text(encoding="utf-8")
         self.assertIn("function bindBreadcrumbLink(element, label, action)", breadcrumb)
-        self.assertIn('element.setAttribute("role", "button")', breadcrumb)
-        self.assertIn('element.setAttribute("tabindex", "0")', breadcrumb)
+        self.assertIn('element.type = "button"', breadcrumb)
         self.assertIn('element.setAttribute("aria-label", label)', breadcrumb)
+        self.assertIn('document.createElement("button")', breadcrumb)
         self.assertIn('bindBreadcrumbLink(configLink, "config", () => {', breadcrumb)
         self.assertIn("bindBreadcrumbLink(connLink, connId, () => {", breadcrumb)
         self.assertIn("bindBreadcrumbLink(link, part, () => {", breadcrumb)
-        self.assertIn('event.key === "Enter" || event.key === " "', breadcrumb)
+        self.assertNotIn('element.setAttribute("role", "button")', breadcrumb)
 
     def test_global_search_disclosures_have_keyboard_state_semantics(self):
         coordinator = (
@@ -1422,10 +1627,9 @@ class FrontendContractTests(unittest.TestCase):
             ("btn-toggle-replace-all", "global-replace-container"),
             ("btn-toggle-patterns", "global-patterns-container"),
         ):
-            control = re.search(rf'<span[^>]*id="{control_id}"[^>]*>', self.panel)
+            control = re.search(rf'<button[^>]*id="{control_id}"[^>]*>', self.panel)
             self.assertIsNotNone(control)
-            self.assertIn('role="button"', control.group(0))
-            self.assertIn('tabindex="0"', control.group(0))
+            self.assertIn('type="button"', control.group(0))
             self.assertIn(f'aria-controls="{controls_id}"', control.group(0))
             self.assertIn('aria-expanded="false"', control.group(0))
         self.assertIn(
@@ -1438,7 +1642,6 @@ class FrontendContractTests(unittest.TestCase):
             'control.setAttribute("aria-expanded", String(expanded))', coordinator
         )
         self.assertNotIn("container.style.display", coordinator)
-        self.assertIn('event.key === "Enter" || event.key === " "', coordinator)
         for container_id, layout_class in (
             ("global-replace-container", "global-search-replace-row"),
             ("global-patterns-container", "global-search-patterns"),
@@ -1522,7 +1725,7 @@ class FrontendContractTests(unittest.TestCase):
         self.assertIn('aria-label="Search scope"', tablist.group(0))
         self.assertNotIn("style=", tablist.group(0))
         tabs = re.findall(
-            r'<div[^>]*class="[^"]*\bsearch-mode-tab\b[^"]*"[^>]*>', self.panel
+            r'<button[^>]*class="[^"]*\bsearch-mode-tab\b[^"]*"[^>]*>', self.panel
         )
         self.assertEqual(len(tabs), 3)
         for tab in tabs:
@@ -1652,7 +1855,7 @@ class FrontendContractTests(unittest.TestCase):
         self.assertIn('class="global-search-error-state"', search)
         self.assertNotIn('class="search-empty-state" style=', search)
         self.assertNotIn("Search failed: ${e.message}", search)
-        self.assertIn("Search failed: ${escapeHtml(e.message)}", search)
+        self.assertIn("t('search.global_failed', { error: e.message })", search)
         self.assertRegex(
             styles,
             r"\.global-search-error-state\s*\{[^}]*color:\s*var\(--error-color\);[^}]*padding:\s*20px;[^}]*text-align:\s*center;",
@@ -1802,17 +2005,15 @@ class FrontendContractTests(unittest.TestCase):
             ("search-toggle-replace", "search-replace-row"),
             ("secondary-search-toggle-replace", "secondary-search-replace-row"),
         ):
-            control = re.search(rf'<span[^>]*id="{control_id}"[^>]*>', self.panel)
+            control = re.search(rf'<button[^>]*id="{control_id}"[^>]*>', self.panel)
             self.assertIsNotNone(control)
-            self.assertIn('role="button"', control.group(0))
-            self.assertIn('tabindex="0"', control.group(0))
+            self.assertIn('type="button"', control.group(0))
             self.assertIn('aria-label="Replace options"', control.group(0))
             self.assertIn(f'aria-controls="{controls_id}"', control.group(0))
             self.assertIn('aria-expanded="false"', control.group(0))
         self.assertIn(
             "const bindSearchReplaceDisclosure = (toggle, widget) =>", coordinator
         )
-        self.assertIn('event.key === "Enter" || event.key === " "', coordinator)
         self.assertIn(
             'replaceToggle.setAttribute("aria-expanded", String(replaceMode))', search
         )
@@ -2132,7 +2333,7 @@ class FrontendContractTests(unittest.TestCase):
             self.assertIn(f'aria-pressed="{pressed}"', control.group(0))
 
         tabs = re.findall(
-            r'<div[^>]*class="[^"]*\bsearch-mode-tab\b[^"]*"[^>]*>', self.panel
+            r'<button[^>]*class="[^"]*\bsearch-mode-tab\b[^"]*"[^>]*>', self.panel
         )
         self.assertEqual(len(tabs), 3)
         for tab in tabs:
@@ -2237,7 +2438,7 @@ class FrontendContractTests(unittest.TestCase):
             "export function removeOperationFeedback(",
             'toast.setAttribute("role", type === "error" ? "alert" : "status")',
             'track.setAttribute("aria-valuenow"',
-            'stack.setAttribute("aria-label", "Operations")',
+            "stack.setAttribute(\"aria-label\", t('operations.title'))",
         ):
             self.assertIn(contract, self.feedback_service)
 
@@ -2248,7 +2449,7 @@ class FrontendContractTests(unittest.TestCase):
         self.assertIn("hideGlobalPending();", self.ui_module)
         self.assertIn("setControlPending(button, isLoading);", self.ui_module)
         self.assertIn(
-            "import { removeOperationFeedback, updateOperationFeedback } from './feedback-service.js?v=2.5.188';",
+            "import { removeOperationFeedback, updateOperationFeedback } from './feedback-service.js?v=2.5.270';",
             zip_progress,
         )
         self.assertNotIn('document.createElement("div")', zip_progress)
@@ -2277,14 +2478,14 @@ class FrontendContractTests(unittest.TestCase):
         ):
             self.assertIn(contract, self.feedback_service)
         self.assertIn("bottom: calc(46px + env(safe-area-inset-bottom));", styles)
-        for contract in ('scope: "Local Home Assistant"', 'target: "This device"', 'scope: isSftp ? `SFTP ${connId}`'):
+        for contract in ("scope: t('transfer.local_home_assistant')", "target: t('transfer.this_device')", "scope: isSftp ? t('transfer.sftp_connection', { id: connId })"):
             self.assertIn(contract, downloads)
         for default in ('scope = ""', 'target = ""'):
             self.assertIn(default, zip_progress)
         self.assertNotIn("setTimeout(() => removeOperationFeedback", zip_progress)
         for selector in (".operation-center-header", ".operation-center-list", ".operation-status", ".operation-scope"):
             self.assertIn(selector, styles)
-        self.assertIn('document.body.classList.add("operation-center-open")', self.feedback_service)
+        self.assertIn('document.body.classList.toggle("operation-center-open", visible)', self.feedback_service)
         self.assertIn('document.body.classList.remove("operation-center-open")', self.feedback_service)
         self.assertIn('.operation-center-open .toast-container', styles)
         self.assertIn('top: calc(12px + env(safe-area-inset-top))', styles)
@@ -2297,9 +2498,9 @@ class FrontendContractTests(unittest.TestCase):
         for contract in (
             "function uploadDestinationMarkup",
             "async function confirmUploadDestination",
-            "Remote SFTP · ${escapeMarkup(connectionName)}",
-            "Local Home Assistant",
-            "Destination · ${escapeMarkup(localConfigPath(path))}",
+            "t('transfer.remote_sftp', { name: connectionName })",
+            "t('transfer.local_home_assistant')",
+            "t('transfer.destination', { path: localConfigPath(path) })",
             "if (!confirmed) return;",
             'if (!confirmed) {\n    event.target.value = "";',
         ):
@@ -2355,12 +2556,12 @@ class FrontendContractTests(unittest.TestCase):
         ):
             self.assertIn(contract, downloads)
         for contract in (
-            'label: "Cancel"',
-            'message: "Cancelling upload request..."',
+            "label: t('transfer.cancel')",
+            "message: t('transfer.cancelling_upload')",
             'status: "cancelled"',
-            'Files completed before cancellation remain at the destination.',
+            "t('transfer.upload_cancelled_detail')",
             'label: "Retry"',
-            'openLabel = "Show"',
+            "openLabel = t('transfer.show')",
             'openIcon = "folder_open"',
             "actions: terminalActions()",
             "actions: terminalActions(true)",
@@ -2385,7 +2586,7 @@ class FrontendContractTests(unittest.TestCase):
 
         for contract in (
             'body: JSON.stringify({ action: "cancel_zip", progress_id: progressId })',
-            'label: "Cancel"',
+            "label: t('transfer.cancel')",
             'status: "cancelling"',
             'progress.status === "cancelled"',
             'await cancelZip(progressId);',
@@ -2398,14 +2599,15 @@ class FrontendContractTests(unittest.TestCase):
         gitea = (modules / "gitea-integration.js").read_text(encoding="utf-8")
 
         self.assertIn("export function startOperationFeedback(options = {})", self.feedback_service)
-        for source, provider in ((git_operations, "GitHub"), (gitea, "Gitea")):
+        for source in (git_operations, gitea):
             self.assertIn("startOperationFeedback({", source)
-            self.assertIn(f"scope: '{provider} repository'", source)
             self.assertIn("open: () => eventBus.emit('ui:switch-sidebar-view', 'source-control')", source)
             self.assertGreaterEqual(source.count("operation.finish("), 3)
             self.assertGreaterEqual(source.count("operation.fail("), 3)
-        for label in ("Pull from GitHub", "Push to GitHub", "Pull from Gitea", "Push to Gitea"):
-            self.assertIn(label, git_operations + gitea)
+        self.assertIn("scope: t('provider_ops.github_repository')", git_operations)
+        self.assertIn("scope: t('gitea_ops.repository')", gitea)
+        for key in ("gitea_ops.pull_label", "gitea_ops.push_label"):
+            self.assertIn(key, gitea)
         self.assertIn("await Promise.all(eventBus.emit('git:commit-staged').filter(Boolean))", git_operations)
         coordinator = (modules / "coordinators" / "GitCoordinator.js").read_text(encoding="utf-8")
         self.assertIn("return functions.commitStagedFiles();", coordinator)
@@ -2415,16 +2617,20 @@ class FrontendContractTests(unittest.TestCase):
         github = (modules / "github-integration.js").read_text(encoding="utf-8")
         gitea = (modules / "gitea-integration.js").read_text(encoding="utf-8")
 
-        for source, provider in ((github, "GitHub"), (gitea, "Gitea")):
+        for source, provider in ((github, "github"), (gitea, "gitea")):
             creation = source[source.index(f"export async function {provider.lower()}CreateRepo"):]
             self.assertIn("const request = Object.freeze({", creation)
-            self.assertIn(f"label: 'Create {provider} repository'", creation)
+            self.assertIn(f"label: t('{provider}_ops.create_repository')", creation)
             self.assertIn("target: `${request.repoName} (${visibility})`", creation)
-            self.assertIn("openLabel: 'Source Control'", creation)
-            self.assertIn("operation.finish('Repository created')", creation)
-            self.assertIn("operation.fail('Repository creation failed', message)", creation)
+            self.assertIn("openLabel: t('sidebar.source_control')", creation)
+            if provider == "github":
+                self.assertIn("operation.finish(t('github_ops.repository_created'))", creation)
+                self.assertIn("operation.fail(t('github_ops.repository_create_failed'), message)", creation)
+            else:
+                self.assertIn("operation.finish(t('gitea_ops.repository_created'))", creation)
+                self.assertIn("operation.fail(t('gitea_ops.repository_create_failed'), message)", creation)
             self.assertIn("repo_name: request.repoName", creation)
-        self.assertIn("scope: 'GitHub account'", github)
+        self.assertIn("scope: t('github_ops.account')", github)
         self.assertIn("serverLabel = `Gitea ${new URL(request.giteaUrl).host}`", gitea)
         self.assertIn("request.giteaUrl", gitea)
 
@@ -2439,7 +2645,7 @@ class FrontendContractTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
 
         self.assertIn("function startBranchOperation(", git_operations)
-        self.assertIn("scope: 'Local Git repository'", git_operations)
+        self.assertIn("scope: t('provider_ops.local_git_repository')", git_operations)
         self.assertIn("() => gitCheckoutBranch(branch)", git_operations)
         self.assertIn("() => runGitCreateBranch(name)", git_operations)
         self.assertIn("() => gitDeleteLocalBranch(branch, force)", git_operations)
@@ -2468,14 +2674,14 @@ class FrontendContractTests(unittest.TestCase):
         for contract in (
             "async function _runSftpMutation(request)",
             "startOperationFeedback({",
-            "scope: `SFTP ${request.connectionName}`",
+            "scope: t('sftp_ops.scope', { connection: request.connectionName })",
             "target: `${request.source} -> ${request.destination}`",
             "retry: () => _confirmSftpMutationRetry(request)",
             "open: () => _browseSftpMutation(request.connId, request.destination)",
-            "openLabel: 'Browse'",
-            "If the destination now exists, it will be replaced.",
-            "operation.fail(`${label} failed`, message)",
-            "operation.finish(`${label} complete`",
+            "openLabel: t('sftp_ops.browse')",
+            "t('sftp_ops.retry_mutation_message'",
+            "operation.fail(t('sftp_ops.mutation_failed', { action: label }), message)",
+            "operation.finish(t('sftp_ops.mutation_complete', { action: label })",
             "state.activeSftp.connectionId === request.connId",
             "oldTab.path = buildSftpPath(request.connId, request.destination)",
         ):
@@ -2499,27 +2705,27 @@ class FrontendContractTests(unittest.TestCase):
 
         for contract in (
             "async function runDeleteItem(request)",
-            "label: `Delete local ${item}`",
-            "scope: 'Local Home Assistant workspace'",
+            "label: t('file_ops.delete_local', { item })",
+            "scope: t('file_ops.local_workspace')",
             "target: request.path",
             "retry: () => confirmDeleteItem(request)",
             "open: () => browseLocalDelete(request.path)",
             "A previous recursive attempt may already have removed some contents.",
-            "Some contents may already be deleted. No changes were rolled back.",
-            "operation.finish(`Deleted ${request.path}`",
+            "t('file_ops.delete_partial')",
+            "operation.finish(t('file_ops.deleted', { path: request.path })",
             "if (!response?.success) throw new Error",
         ):
             self.assertIn(contract, local_delete)
         for contract in (
             "async function _runSftpDelete(request)",
-            "label: `Delete remote ${item}`",
-            "scope: `SFTP ${request.connectionName}`",
+            "label: t('sftp_ops.delete_label', { item })",
+            "scope: t('sftp_ops.scope', { connection: request.connectionName })",
             "target: request.remotePath",
             "retry: () => _confirmSftpDeleteRetry(request)",
             "open: () => _browseSftpMutation(request.connId, request.remotePath)",
-            "A previous recursive attempt may already have removed some contents.",
-            "Some contents may already be deleted. No changes were rolled back.",
-            "operation.finish(`Deleted ${request.remotePath}`",
+            "t('sftp_ops.retry_delete_message'",
+            "t('sftp_ops.delete_partial_detail')",
+            "operation.finish(t('sftp_ops.deleted_path', { path: request.remotePath })",
             "state.activeSftp.connectionId === request.connId",
         ):
             self.assertIn(contract, remote_delete)
@@ -2549,16 +2755,16 @@ class FrontendContractTests(unittest.TestCase):
 
         for contract in (
             "async function runCopyItem(request)",
-            "label: `Copy local ${item}`",
-            "scope: 'Local Home Assistant workspace'",
+            "label: t('file_ops.copy_local', { item })",
+            "scope: t('file_ops.local_workspace')",
             "target: `${request.source} -> ${request.destination}`",
             "retry: () => confirmCopyItem(request)",
             "open: () => browseLocalCopy(request.destination)",
-            "openLabel: 'Browse Destination'",
+            "openLabel: t('file_ops.browse_destination')",
             "it will be replaced after the new copy is fully staged",
             "Object.freeze({ ...request, overwrite: true })",
-            "operation.fail(`Could not copy ${request.source}`, message)",
-            "operation.finish(`Copied ${request.source}`",
+            "operation.fail(t('file_ops.copy_failed', { source: request.source }), message)",
+            "operation.finish(t('file_ops.copied', { source: request.source })",
         ):
             self.assertIn(contract, copy_slice)
         self.assertEqual(ui.count("'file:copy', { oldPath: path, newPath"), 2)
@@ -2587,15 +2793,15 @@ class FrontendContractTests(unittest.TestCase):
         for contract in (
             "function downloadRequest(path)",
             "async function runFileDownload(request)",
-            "scope: 'Local Home Assistant workspace'",
-            "scope: `SFTP ${connection?.name || connId}`",
-            "target: `${request.source} -> Browser downloads`",
+            "scope: t('transfer.local_workspace')",
+            "scope: t('transfer.sftp_connection', { id: connection?.name || connId })",
+            "target: `${request.source} -> ${t('download.browser_downloads')}`",
             "retry: () => runFileDownload(request)",
             "open: () => showDownloadSource(request)",
-            "openLabel: 'Open Source'",
-            "operation.finish(`Download started for ${request.filename}`",
-            "The browser owns the download destination and completion state.",
-            "operation.fail(`Could not prepare ${request.filename}`, message)",
+            "openLabel: t('download.open_source')",
+            "operation.finish(t('download.started', { file: request.filename })",
+            "detail: t('download.browser_owns_completion')",
+            "operation.fail(t('download.prepare_failed', { file: request.filename }), message)",
             "eventBus.emit('tab:open', { tab: openTab, noActivate: false })",
             "await navigateSftp(request.connId, parentPath(request.remotePath) || '/')",
             "await revealAndOpenFile(request.path, 'navigate')",
@@ -2689,7 +2895,7 @@ class FrontendContractTests(unittest.TestCase):
             self.assertIn(contract, self.component_showcase)
 
         self.assertIn(
-            'import { closeDialog, openDialog } from "./dialog-manager.js";',
+            'import { closeDialog, openDialog } from "./dialog-manager.js?v=2.5.270";',
             self.component_showcase_module,
         )
         self.assertIn(
@@ -3001,7 +3207,7 @@ class FrontendContractTests(unittest.TestCase):
             self.assertIn("material-icons", control.group("icon_classes"))
 
         static_home = re.search(
-            r'<span[^>]*class="breadcrumb-item breadcrumb-home"[^>]*>\s*'
+            r'<button[^>]*class="breadcrumb-item breadcrumb-home"[^>]*>\s*'
             r'<span class="(?P<icon_classes>[^"]*)">',
             self.panel,
         )
@@ -3025,7 +3231,7 @@ class FrontendContractTests(unittest.TestCase):
             "secondary-search-toggle-replace",
         ):
             control = re.search(
-                rf'<span[^>]*class="(?P<classes>[^"]*)"[^>]*id="{control_id}"[^>]*>',
+                rf'<button[^>]*class="(?P<classes>[^"]*)"[^>]*id="{control_id}"[^>]*>',
                 self.panel,
             )
             self.assertIsNotNone(control, control_id)
@@ -3035,7 +3241,7 @@ class FrontendContractTests(unittest.TestCase):
 
     def test_global_search_disclosure_icon_uses_shared_wrapper(self):
         control = re.search(
-            r'<span[^>]*class="(?P<classes>[^"]*)"[^>]*id="btn-toggle-replace-all"'
+            r'<button[^>]*class="(?P<classes>[^"]*)"[^>]*id="btn-toggle-replace-all"'
             r"(?P<attributes>[^>]*)>",
             self.panel,
         )
@@ -3122,7 +3328,6 @@ class FrontendContractTests(unittest.TestCase):
         module_dir = UI_MODULE.parent
         managed_modules = (
             "ui.js",
-            "dialogs.js",
             "command-palette.js",
             "user-guide.js",
             "sftp.js",
@@ -3136,6 +3341,9 @@ class FrontendContractTests(unittest.TestCase):
         for filename in managed_modules:
             source = (module_dir / filename).read_text(encoding="utf-8")
             self.assertRegex(source, r"(?:openDialog|activateSharedModal)\(", filename)
+        dialogs = (module_dir / "dialogs.js").read_text(encoding="utf-8")
+        self.assertIn("showUserGuide({ section: 'shortcuts'", dialogs)
+        self.assertIn("closeDialog(helpOverlay)", dialogs)
 
         all_modules = "\n".join(
             path.read_text(encoding="utf-8")
@@ -3417,36 +3625,66 @@ class FrontendContractTests(unittest.TestCase):
         ai_ui = (
             ROOT / "custom_components" / "blueprint_studio" / "www" / "modules" / "ai-ui.js"
         ).read_text(encoding="utf-8")
+        english = json.loads(
+            (ROOT / "custom_components" / "blueprint_studio" / "www" / "locales" / "en.json").read_text(
+                encoding="utf-8"
+            )
+        )
 
         for contract in (
-            "import { startOperationFeedback } from './feedback-service.js?v=2.5.188'",
-            "label: 'Generate AI response'",
-            "scope: 'AI generation request'",
+            "import { startOperationFeedback } from './feedback-service.js?v=2.5.270'",
+            "label: t('ai_ops.generate_label')",
+            "scope: t('ai_ops.generation_scope')",
             "target: aiRequestTarget(requestPayload)",
             "retry: () => sendAIChatMessage(requestPayload)",
-            "runningActions: [{ label: 'Cancel'",
-            "request.operation.update({ message: 'Provider response received; validating output...', percent: 80 })",
-            "request.operation.finish(result.proposal ? 'AI proposal ready for review' : 'AI response complete'",
-            "request.operation.fail('AI generation request failed'",
-            "request.operation.cancel('AI generation request cancelled'",
-            "Provider cancellation was confirmed.",
-            "provider cancellation was not confirmed",
+            "runningActions: [{ label: t('modal.cancel')",
+            "request.operation.update({ message: t('ai_ops.response_validating'), percent: 80 })",
+            "request.operation.finish(result.proposal ? t('ai_ops.proposal_ready') : t('ai_ops.response_complete')",
+            "request.operation.fail(t('ai_ops.generation_failed')",
+            "request.operation.cancel(t('ai_ops.generation_cancelled')",
+            "t('ai_ops.cancel_confirmed')",
+            "t('ai_ops.cancel_unconfirmed'",
             "export async function runAiConfigurationCheck",
-            "label: 'Check configuration from AI review'",
-            "scope: 'Home Assistant instance'",
+            "label: t('ai_ops.check_label')",
+            "scope: t('ai_ops.ha_instance')",
             "retry: runAiConfigurationCheck",
-            "operation.fail('Home Assistant configuration check failed'",
-            "label: 'Apply reviewed AI proposal'",
-            "scope: 'Reviewed AI proposal'",
+            "operation.fail(t('ai_ops.check_failed')",
+            "label: t('ai_ops.apply_label')",
+            "scope: t('ai_ops.proposal_scope')",
             "retry: () => apply(selectedOnly, immutablePaths)",
-            "operation.fail('AI proposal conflicts with current files'",
-            "operation.fail('Reviewed AI proposal could not be applied'",
+            "operation.fail(t('ai_ops.conflict_title')",
+            "operation.fail(t('ai_ops.apply_failed')",
             "export async function undoAiProposal",
             "retry: () => undoAiProposal(immutableRequest)",
-            "operation.fail('AI proposal apply could not be undone'",
-            "Retry preserves the original undo identifier and file scope.",
+            "operation.fail(t('ai_ops.undo_failed')",
+            "tp('ai_ops.restored_files', restoredPaths.length)",
+            "tp('ai_ops.applying_files', immutablePaths.length)",
+            "tp('ai_ops.applied_files', appliedPaths.length)",
         ):
             self.assertIn(contract, ai_ui)
+        for literal in (
+            "'Generate AI response'",
+            "'AI generation request failed'",
+            "'Check configuration from AI review'",
+            "'Apply reviewed AI proposal'",
+            "'AI proposal apply could not be undone'",
+            "'Requesting provider cancellation...'",
+        ):
+            self.assertNotIn(literal, ai_ui)
+        for key in (
+            "ai_ops.generate_label",
+            "ai_ops.generation_failed",
+            "ai_ops.check_label",
+            "ai_ops.apply_label",
+            "ai_ops.restored_files.one",
+            "ai_ops.restored_files.other",
+            "ai_ops.applying_files.one",
+            "ai_ops.applying_files.other",
+            "ai_ops.applied_files.one",
+            "ai_ops.applied_files.other",
+            "ai_ops.undo_failed",
+        ):
+            self.assertTrue(english.get(key), f"English locale is missing {key}")
         target_helper = ai_ui[
             ai_ui.index("function aiRequestTarget"):
             ai_ui.index("function startAiOperation")
@@ -3556,14 +3794,14 @@ class FrontendContractTests(unittest.TestCase):
             ).read_text(encoding="utf-8")
         )
         layout_import = re.compile(
-            r"(?:settings|resize|split-view|terminal)\.js\?v=([0-9.]+)"
+            r"(?:settings|resize|split-view|terminal|git-operations)\.js\?v=([0-9.]+)"
         )
         imports = []
         for source_path in modules.rglob("*.js"):
             source = source_path.read_text(encoding="utf-8")
             self.assertNotRegex(
                 source,
-                r"(?:settings|resize|split-view|terminal)\.js['\"]",
+                r"(?:settings|resize|split-view|terminal|git-operations)\.js['\"]",
                 str(source_path),
             )
             imports.extend(
@@ -3672,7 +3910,7 @@ class FrontendContractTests(unittest.TestCase):
         self.assertIn("function trackTerminalOutput(data)", terminal)
         self.assertIn("async function confirmTerminalHide()", terminal)
         self.assertIn("if (!nextVisible && state.terminalVisible && !await confirmTerminalHide()) return", terminal)
-        self.assertIn("Hiding the terminal will keep the session connected", terminal)
+        self.assertIn("t('terminal.hide_active_message')", terminal)
         self.assertIn("const restoreTerminalFocus = isTerminalFocused()", terminal)
         self.assertIn("if (restoreTerminalFocus) term.focus()", terminal)
 
@@ -3812,7 +4050,8 @@ class FrontendContractTests(unittest.TestCase):
         self.assertIn("setOverflowTooltip(el, folder.path, label)", sftp)
         self.assertIn("setOverflowTooltip(el, file.path, nameEl)", sftp)
         self.assertIn("setOverflowTooltip(crumb, `sftp://${connId}${p}`)", sftp)
-        self.assertIn("event.key === 'Enter' || event.key === ' '", sftp)
+        self.assertIn("const rootCrumb = document.createElement('button')", sftp)
+        self.assertIn("const crumb = document.createElement('button')", sftp)
         self.assertRegex(editor_styles, r"\.tab\s*\{[^}]*max-width:\s*220px;")
         self.assertRegex(
             file_tree_styles, r"\.breadcrumb-link\s*\{[^}]*text-overflow:\s*ellipsis;"
@@ -3853,7 +4092,7 @@ class FrontendContractTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
         styles = UI_COMPONENTS.read_text(encoding="utf-8")
 
-        self.assertIn('role="tablist" aria-label="Developer Tool views"', dev_tools)
+        self.assertIn('role="tablist" aria-label="${t(\'dev_tools.views_label\')}"', dev_tools)
         for tab in ("states", "actions", "template", "config", "reload"):
             self.assertIn(
                 f'id="bdt-tab-{tab}" data-tab="{tab}" type="button" role="tab"',
@@ -3868,14 +4107,14 @@ class FrontendContractTests(unittest.TestCase):
             "button.setAttribute('aria-selected', String(selected))", dev_tools
         )
         self.assertIn("button.tabIndex = selected ? 0 : -1", dev_tools)
-        self.assertIn('aria-label="Close Developer Tools"', dev_tools)
+        self.assertIn('aria-label="${t(\'dev_tools.close\')}"', dev_tools)
         for label in (
-            "Search actions",
-            "Action YAML",
-            "Action targets",
-            "Template input",
-            "Filter states",
-            "Filter states by domain",
+            "${t('dev_tools.search_actions')}",
+            "${t('dev_tools.action_yaml')}",
+            "${t('dev_tools.action_targets')}",
+            "${t('dev_tools.template_input')}",
+            "${t('dev_tools.filter_states')}",
+            "${t('dev_tools.filter_states_domain')}",
         ):
             self.assertIn(f'aria-label="{label}"', dev_tools)
         self.assertRegex(
@@ -3894,8 +4133,8 @@ class FrontendContractTests(unittest.TestCase):
 
         self.assertIn("const MAX_RAW_RESULT_LENGTH = 200000", dev_tools)
         self.assertIn('class="bdt-result-inspector"', dev_tools)
-        self.assertIn('aria-label="Search raw developer tool result"', dev_tools)
-        self.assertIn('aria-label="Copy raw result"', dev_tools)
+        self.assertIn('aria-label="${t(\'dev_tools.search_raw_result\')}"', dev_tools)
+        self.assertIn('aria-label="${t(\'dev_tools.copy_raw_result\')}"', dev_tools)
         for source in ("Actions", "Templates", "States", "Configuration", "Reload"):
             self.assertIn(f"_recordRawResult(panel, '{source}'", dev_tools)
 
@@ -3910,15 +4149,15 @@ class FrontendContractTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
 
         self.assertIn("startOperationFeedback", dev_tools)
-        self.assertIn("label: 'Check Home Assistant configuration'", dev_tools)
-        self.assertIn("label: `Reload ${label}`", dev_tools)
-        self.assertGreaterEqual(dev_tools.count("scope: 'Home Assistant instance'"), 2)
+        self.assertIn("label: t('dev_tools.config_check')", dev_tools)
+        self.assertIn("label: t('dev_tools.reload_label', { target: label })", dev_tools)
+        self.assertGreaterEqual(dev_tools.count("scope: t('dev_tools.ha_instance')"), 2)
         self.assertIn("retry: () => _runConfigurationCheck()", dev_tools)
         self.assertIn("retry: () => _runYamlReload(domain)", dev_tools)
         self.assertIn("open: () => _revealDevTools('config')", dev_tools)
         self.assertIn("open: () => _revealDevTools('reload')", dev_tools)
         self.assertIn("errorDetail || result.output", dev_tools)
-        self.assertIn("operation.fail(`${label} reload failed`", dev_tools)
+        self.assertIn("operation.fail(t('dev_tools.reload_failed', { target: label })", dev_tools)
 
     def test_remaining_developer_tool_producers_use_quiet_scoped_operations(self):
         dev_tools = (
@@ -3929,21 +4168,21 @@ class FrontendContractTests(unittest.TestCase):
             "export async function runDeveloperAction",
             "serviceData: cloneOperationInput(request.serviceData || {})",
             "target: cloneOperationInput(request.target || {})",
-            "scope: 'Home Assistant action'",
+            "scope: t('dev_tools.action_scope')",
             "target: `${serviceName} -> ${actionTargetLabel(immutableRequest.target)}`",
             "retry: () => runDeveloperAction(immutableRequest)",
-            "operation.fail(`${serviceName} failed`, message)",
+            "operation.fail(t('dev_tools.action_failed', { service: serviceName }), message)",
             "export async function renderDeveloperTemplate",
-            "scope: 'Home Assistant template engine'",
+            "scope: t('dev_tools.template_scope')",
             "target: `${immutableTemplate.length} character template`",
             "retry: () => renderDeveloperTemplate(immutableTemplate)",
-            "operation?.fail('Template rendering failed'",
+            "operation?.fail(t('dev_tools.template_failed')",
             "timer = setTimeout(() => render(false), 600)",
             "renderBtn.addEventListener('click', () => render(true))",
-            "label: 'Refresh Home Assistant states'",
-            "target: 'Entity state registry'",
-            "operation?.finish(`${allEntities.length} entity state",
-            "operation?.fail('Home Assistant states could not be loaded'",
+            "label: t('dev_tools.states_refresh')",
+            "target: t('dev_tools.state_registry')",
+            "operation?.finish(tp('dev_tools.states_loaded', allEntities.length)",
+            "operation?.fail(t('dev_tools.states_failed')",
             "refreshBtn.addEventListener('click', () => { allEntities = []; load(true); })",
             "load(false)",
         ):
@@ -3970,16 +4209,16 @@ class FrontendContractTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
 
         self.assertIn("startOperationFeedback", sftp)
-        self.assertIn("label: `Open ${fileName}`", sftp)
-        self.assertIn("scope: `SFTP ${conn.name || connId}`", sftp)
+        self.assertIn("label: t('sftp_ops.open_file_label', { file: fileName })", sftp)
+        self.assertIn("scope: t('sftp_ops.scope', { connection: conn.name || connId })", sftp)
         self.assertIn("target: remotePath", sftp)
         self.assertIn("retry: () => openSftpFile(connId, remotePath, noActivate)", sftp)
         self.assertIn("open: showSource", sftp)
         self.assertIn("await connectToServer(connId)", sftp)
         self.assertIn("await navigateSftp(connId, parentRemotePath(remotePath))", sftp)
-        self.assertIn("operation.finish(`${fileName} opened`)", sftp)
-        self.assertIn("operation.finish(`${fileName} is ready to stream`)", sftp)
-        self.assertGreaterEqual(sftp.count("operation.fail(`Could not open ${fileName}`"), 3)
+        self.assertIn("operation.finish(t('sftp_ops.file_opened', { file: fileName }))", sftp)
+        self.assertIn("operation.finish(t('sftp_ops.stream_ready', { file: fileName }))", sftp)
+        self.assertGreaterEqual(sftp.count("operation.fail(t('sftp_ops.open_file_failed', { file: fileName })"), 3)
 
     def test_global_replace_uses_persistent_operation_feedback(self):
         global_search = (
@@ -3992,7 +4231,7 @@ class FrontendContractTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
 
         self.assertIn("startOperationFeedback", global_search)
-        self.assertIn('scope: "Workspace search"', global_search)
+        self.assertIn("scope: t('search_ops.workspace_scope')", global_search)
         self.assertIn("retry: () => runGlobalReplace(request)", global_search)
         self.assertIn("retry: () => runReplaceInFile(request)", global_search)
         self.assertGreaterEqual(global_search.count("open: () => openGlobalSearchRequest("), 2)
@@ -4001,9 +4240,9 @@ class FrontendContractTests(unittest.TestCase):
         self.assertIn('elements.globalReplaceContainer?.classList.add("expanded")', global_search)
         self.assertIn('elements.globalPatternsContainer?.classList.add("expanded")', global_search)
         self.assertIn('button?.setAttribute("aria-pressed"', global_search)
-        self.assertIn('operation.finish(`${response.files_updated || 0} files updated`', global_search)
-        self.assertIn('operation.fail("Workspace replace failed"', global_search)
-        self.assertIn('operation.fail("File replace failed"', global_search)
+        self.assertIn("operation.finish(tp('search_ops.files_updated', response.files_updated || 0)", global_search)
+        self.assertIn("operation.fail(t('search_ops.workspace_replace_failed')", global_search)
+        self.assertIn("operation.fail(t('search_ops.file_replace_failed')", global_search)
         self.assertNotIn("showGlobalLoading", global_search)
 
     def test_home_assistant_restart_confirmation_names_workspace_impact(self):
@@ -4093,16 +4332,16 @@ class FrontendContractTests(unittest.TestCase):
         )[1].split("// Git Exclusions Management", 1)[0]
 
         for contract in (
-            "label: 'Sign in to GitHub'",
-            "scope: 'GitHub account'",
-            "target: 'Device authorization'",
+            "label: t('github_ops.signin_label')",
+            "scope: t('github_ops.account')",
+            "target: t('github_ops.device_authorization')",
             "retry: () => showGithubDeviceFlowLogin()",
-            "label: 'Cancel'",
+            "label: t('modal.cancel')",
             "runningActions: [{",
             "operation.cancel(cancelMessage)",
-            "operation.finish('GitHub account connected'",
-            "operation.fail('Could not start GitHub sign-in', message)",
-            "operation.fail('GitHub sign-in failed', message)",
+            "operation.finish(t('github_ops.account_connected')",
+            "operation.fail(t('github_ops.signin_start_failed'), message)",
+            "operation.fail(t('github_ops.signin_failed'), message)",
             "if (!handlePollResult(result)) schedulePoll();",
             "if (closed) return true;",
             "if (candidate.protocol === 'https:') verificationUri = candidate.href;",
@@ -4208,13 +4447,13 @@ class FrontendContractTests(unittest.TestCase):
         for symbol in ("createDiffToggle", "markWhitespaceOnlyChanges", "createTextDiffReview"):
             self.assertIn(f"export function {symbol}", shared)
         for contract in (
-            "Previous change",
-            "Next change",
-            "Hide whitespace-only changes",
-            "Wrap long lines",
+            "t('diff_review.previous_change')",
+            "t('diff_review.next_change')",
+            "t('diff_review.hide_whitespace')",
+            "t('diff_review.wrap_lines')",
             "diff-file-list",
             "diff-large-fallback",
-            "Show more",
+            "t('diff_review.show_more')",
         ):
             self.assertIn(contract, shared)
         self.assertIn("setupMergeViewDisplayControls", git_diff)
@@ -4229,6 +4468,40 @@ class FrontendContractTests(unittest.TestCase):
             ".diff-large-fallback",
         ):
             self.assertIn(selector, styles)
+
+    def test_completion_picker_and_diff_reviews_use_composite_keyboard_patterns(self):
+        modules = ROOT / "custom_components" / "blueprint_studio" / "www" / "modules"
+        completion = (modules / "completion-details.js").read_text(encoding="utf-8")
+        autocomplete = (modules / "ha-autocomplete.js").read_text(encoding="utf-8")
+        diff_review = (modules / "diff-review.js").read_text(encoding="utf-8")
+        styles = (STYLE_MODULES / "git.css").read_text(encoding="utf-8")
+
+        for contract in (
+            "search.setAttribute('role', 'combobox')",
+            "search.setAttribute('aria-autocomplete', 'list')",
+            "results.setAttribute('role', 'listbox')",
+            "search.setAttribute('aria-activedescendant'",
+            "option.setAttribute('role', 'option')",
+            "event.key === 'ArrowDown'",
+            "event.key === 'ArrowUp'",
+            "event.key === 'Home'",
+            "event.key === 'End'",
+            "event.key === 'Enter'",
+            "event.key === 'Escape'",
+        ):
+            self.assertIn(contract, completion)
+        self.assertIn("menu.setAttribute('aria-activedescendant', activeOption.id)", autocomplete)
+        for contract in (
+            "actions.setAttribute('role', 'toolbar')",
+            "actions.setAttribute('aria-orientation', 'horizontal')",
+            "control.tabIndex = index === 0 ? 0 : -1",
+            "event.key === 'ArrowRight'",
+            "event.key === 'ArrowLeft'",
+            "button.tabIndex = file === selectedFile ? 0 : -1",
+            "items[targetIndex].click()",
+        ):
+            self.assertIn(contract, diff_review)
+        self.assertRegex(styles, r"\.diff-file-list-item:focus-visible\s*\{[^}]*outline:")
 
     def test_git_actions_share_scoped_consequence_confirmations(self):
         modules = ROOT / "custom_components" / "blueprint_studio" / "www" / "modules"
@@ -4268,10 +4541,10 @@ class FrontendContractTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
 
         for label in (
-            "Initialize Git repository",
-            "Abort Git operation",
-            "Force push to GitHub",
-            "Reset from GitHub",
+            "t('git_ops.initialize_label')",
+            "t('git_ops.abort_label')",
+            "t('git_ops.force_push_label')",
+            "t('git_ops.reset_label')",
         ):
             self.assertIn(label, source)
         for target in (
@@ -4286,12 +4559,12 @@ class FrontendContractTests(unittest.TestCase):
         self.assertIn("() => confirmAbortGitOperation(branch)", source)
         self.assertIn("() => confirmForcePush(branch)", source)
         self.assertIn("() => confirmHardReset(branch)", source)
-        self.assertIn("operation.fail('Could not initialize repository', message)", source)
+        self.assertIn("operation.fail(t('git_ops.init_failed'), message)", source)
         self.assertIn("showToast(t(\"toast.git_init_started\"), \"info\")", source)
         self.assertIn("detail: 'Initial branch: main'", source)
-        self.assertIn("operation.fail('Could not abort Git operation', message)", source)
-        self.assertIn("operation.fail('Force push failed', message)", source)
-        self.assertIn("operation.fail('Hard reset failed', message)", source)
+        self.assertIn("operation.fail(t('git_ops.abort_failed'), message)", source)
+        self.assertIn("operation.fail(t('git_ops.force_push_failed'), message)", source)
+        self.assertIn("operation.fail(t('git_ops.hard_reset_failed'), message)", source)
         recovery_slice = source[
             source.index("export async function gitInit"):
             source.index("export async function deleteRemoteBranch")
@@ -4331,19 +4604,19 @@ class FrontendContractTests(unittest.TestCase):
 
         for contract in (
             "Object.freeze(Array.from(new Set(files)))",
-            "`Stage ${request.length}",
+            "tp('git_ops.stage_label', request.length)",
             "retry = () => handleGitLockAndRetry(request)",
-            "'Clean Git state and retry staging'",
-            "detail: 'Step 1 of 2'",
-            "detail: 'Step 2 of 2'",
+            "t('git_ops.cleanup_retry_label')",
+            "t('git_ops.step_detail', { current: 1, count: 2 })",
+            "t('git_ops.step_detail', { current: 2, count: 2 })",
             "'Git recovery state was removed. The selected files were not staged.'",
             "getGitActionConfirmation('repair-index'",
-            "'Repair Git index'",
-            "operation.fail('Could not repair Git index', message)",
-            "`Unstage ${request.length}",
-            "operation.fail('Could not unstage files', message)",
-            "`Discard changes in ${request.length}",
-            "operation.fail('Could not discard working changes', message)",
+            "t('git_ops.repair_index_label')",
+            "operation.fail(t('git_ops.index_repair_failed'), message)",
+            "tp('git_ops.unstage_label', request.length)",
+            "operation.fail(t('git_ops.unstage_failed'), message)",
+            "tp('git_ops.discard_label', request.length)",
+            "operation.fail(t('git_ops.discard_failed'), message)",
         ):
             self.assertIn(contract, mutation_slice)
         for action in ("git_stage", "git_clean_locks", "git_repair_index", "git_unstage", "git_reset"):
@@ -4356,10 +4629,10 @@ class FrontendContractTests(unittest.TestCase):
             source.index("export async function gitGetConflictFiles")
         ]
         for contract in (
-            "`Resolve conflict in ${targetPath.split('/').pop()}`",
+            "t('git_ops.resolve_conflict_label', { file: targetPath.split('/').pop() })",
             "`${targetPath} -> ${resolutionLabel}`",
             "() => gitResolveConflict(targetPath, resolution)",
-            "operation.fail('Could not resolve conflict', message)",
+            "operation.fail(t('git_ops.conflict_failed'), message)",
             "await gitStatus(false, true)",
         ):
             self.assertIn(contract, conflict_slice)
@@ -4375,18 +4648,18 @@ class FrontendContractTests(unittest.TestCase):
 
         for contract in (
             "Object.freeze(Array.from(new Set(ignoredPaths.filter(Boolean))).sort())",
-            "label: 'Save Git exclusions'",
-            "target: `.gitignore; ${request.ignoredPaths.length}",
+            "label: t('github_ops.exclusions_save_label')",
+            "target: tp('github_ops.exclusions_target', request.ignoredPaths.length)",
             "retry: () => saveGitExclusions(request.content, request.ignoredPaths)",
-            "detail: 'Step 1 of 2'",
-            "detail: 'Step 2 of 2'",
+            "detail: t('provider_ops.step_progress', { current: 1, count: 2 })",
+            "detail: t('provider_ops.step_progress', { current: 2, count: 2 })",
             "if (!writeResponse.success)",
             "if (!indexResponse.success)",
-            "operation.fail(gitignoreSaved ? '.gitignore saved; index update failed'",
-            "Some paths may still be tracked until Retry succeeds.",
-            "label: 'Load Git exclusions'",
+            "operation.fail(gitignoreSaved ? t('github_ops.gitignore_index_failed')",
+            "t('github_ops.exclusions_partial_detail')",
+            "label: t('github_ops.exclusions_load_label')",
             "retry: showGitExclusions",
-            "loadOperation.fail('Could not load Git exclusions', error.message)",
+            "loadOperation.fail(t('github_ops.exclusions_load_failed'), error.message)",
             "const saved = await saveGitExclusions(newContent, optimizedIgnoreList)",
             "setButtonLoading(btnConfirm, true)",
         ):
@@ -4410,12 +4683,12 @@ class FrontendContractTests(unittest.TestCase):
         for contract in (
             "return `${parsed.host}${parsed.pathname}`",
             "Object.freeze({ name: String(name || 'origin'), url: String(url || '') })",
-            "label: `Configure ${request.name} remote`",
+            "label: t('provider_ops.configure_remote', { remote: request.name })",
             "retry: () => gitAddRemote(request.name, request.url)",
-            "operation.fail(`Could not configure ${request.name} remote`, message)",
+            "operation.fail(t('github_ops.remote_configure_failed', { remote: request.name }), message)",
             "export async function gitRemoveRemote(name)",
             "retry: () => gitRemoveRemote(remoteName)",
-            "operation.fail(`Could not remove ${remoteName} remote`, error.message)",
+            "operation.fail(t('github_ops.remote_remove_failed', { remote: remoteName }), error.message)",
         ):
             self.assertIn(contract, github_remote)
         self.assertNotIn("parsed.username", github_remote)
@@ -4425,13 +4698,435 @@ class FrontendContractTests(unittest.TestCase):
             "export async function giteaAddRemote(url)",
             "target: `gitea -> ${giteaEndpointLabel(remoteUrl)}`",
             "retry: () => giteaAddRemote(remoteUrl)",
-            "operation.fail('Could not configure Gitea remote', error.message)",
+            "operation.fail(t('gitea_ops.remote_configure_failed'), error.message)",
             "export async function giteaRemoveRemote(name)",
             "retry: () => giteaRemoveRemote(remoteName)",
             "body: JSON.stringify({ action: 'git_remove_remote', name: remoteName })",
         ):
             self.assertIn(contract, gitea_remote)
         self.assertNotIn("gitea_remove_remote", gitea_remote)
+
+    def test_gitea_settings_match_shared_git_settings_presentation(self):
+        modules = ROOT / "custom_components" / "blueprint_studio" / "www" / "modules"
+        gitea = (modules / "gitea-integration.js").read_text(encoding="utf-8")
+        styles = (STYLE_MODULES / "git.css").read_text(encoding="utf-8")
+        settings = gitea[
+            gitea.index("export async function showGiteaSettings"):
+            gitea.index("// ============================================\n// Gitea Repository Creation")
+        ]
+
+        for contract in (
+            'class="git-settings-info git-auth-status" data-status="connected"',
+            'class="btn-secondary git-signout-button"',
+            'class="git-settings-section git-settings-quick-start"',
+            'class="git-settings-divider" role="separator"',
+            'class="btn-primary git-settings-primary-action"',
+            'class="git-settings-checkbox"',
+            'id="gitea-server-url"',
+            "initialFocus: () => modalBody.querySelector('.git-settings-input')",
+            't("gitea_ops.test_connection")',
+            't("gitea_ops.create_repository")',
+        ):
+            self.assertIn(contract, settings)
+        for selector in (
+            ".git-settings-primary-action",
+            ".git-settings-quick-start",
+            ".git-settings-divider",
+            ".git-settings-checkbox",
+        ):
+            self.assertIn(selector, styles)
+        self.assertNotIn("background: #f44336", settings)
+
+    def test_bundled_theme_contrast_is_a_release_gate(self):
+        audit = (ROOT / "scripts" / "audit_frontend_contrast.mjs").read_text(encoding="utf-8")
+        checklist = (ROOT / "ACCESSIBILITY_RELEASE_CHECKLIST.md").read_text(encoding="utf-8")
+        git_styles = (STYLE_MODULES / "git.css").read_text(encoding="utf-8")
+        for contract in (
+            "THEME_PRESETS",
+            "['textPrimary', 4.5]",
+            "['textSecondary', 4.5]",
+            "['textMuted', 4.5]",
+            "['accentColor', 3]",
+            "'bgGutter'",
+            "Theme contrast audit failed",
+        ):
+            self.assertIn(contract, audit)
+        self.assertIn("node scripts/audit_frontend_contrast.mjs", checklist)
+        self.assertIn(".diff-text-line--hunk { color: var(--text-secondary); font-weight: 600; }", git_styles)
+
+    def test_dialogs_restore_focus_to_pointer_activated_controls(self):
+        manager = (ROOT / "custom_components" / "blueprint_studio" / "www" / "modules" / "dialog-manager.js").read_text(encoding="utf-8")
+        for contract in (
+            "let lastPointerControl = null",
+            "document.addEventListener('pointerdown'",
+            "document.addEventListener('mousedown'",
+            "document.addEventListener('focusin'",
+            "activeElement !== document.body",
+            "options.returnFocus || activeControl || lastFocusedControl || lastPointerControl",
+        ):
+            self.assertIn(contract, manager)
+
+    def test_input_parity_is_a_browser_release_gate(self):
+        audit = (ROOT / "scripts" / "audit_frontend_input_parity.mjs").read_text(encoding="utf-8")
+        checklist = (ROOT / "ACCESSIBILITY_RELEASE_CHECKLIST.md").read_text(encoding="utf-8")
+        for contract in (
+            "pointerActivate('#activity-search')",
+            "keyActivate('#activity-explorer'",
+            "touchActivate('[data-phone-surface=\"files\"]')",
+            "phone navigation targets meet 44px minimum",
+            "200%-equivalent narrow layout stays contained",
+            "Browser command timed out",
+        ):
+            self.assertIn(contract, audit)
+        self.assertIn("node scripts/audit_frontend_input_parity.mjs", checklist)
+        for module_path in (ROOT / "custom_components" / "blueprint_studio" / "www" / "modules").rglob("*.js"):
+            if "vendor" in module_path.parts or module_path.name == "dialog-manager.js":
+                continue
+            source = module_path.read_text(encoding="utf-8")
+            if "dialog-manager.js" in source:
+                self.assertIn("dialog-manager.js?v=2.5.270", source, module_path.name)
+
+    def test_keyboard_workflows_are_a_release_gate(self):
+        audit = (ROOT / "scripts" / "audit_frontend_keyboard_workflows.mjs").read_text(encoding="utf-8")
+        checklist = (ROOT / "ACCESSIBILITY_RELEASE_CHECKLIST.md").read_text(encoding="utf-8")
+        for contract in (
+            "Activity rail arrow navigation",
+            "Global Search keyboard shortcut opens search",
+            "Command Palette Escape restores focus",
+            "Settings Escape restores focus",
+            "Help Escape dismisses surface",
+        ):
+            self.assertIn(contract, audit)
+        self.assertIn("node scripts/audit_frontend_keyboard_workflows.mjs", checklist)
+
+    def test_accessibility_tree_workflows_are_a_release_gate(self):
+        audit = (ROOT / "scripts" / "audit_frontend_accessibility_tree.mjs").read_text(encoding="utf-8")
+        checklist = (ROOT / "ACCESSIBILITY_RELEASE_CHECKLIST.md").read_text(encoding="utf-8")
+        for contract in (
+            "Workspace toolbar has an accessible name",
+            "Local Explorer is exposed as a named tree",
+            "Command Palette results are exposed as a named listbox",
+            "Settings entry focus is exposed in the accessibility tree",
+            "Operational live regions remain present",
+        ):
+            self.assertIn(contract, audit)
+        self.assertIn("node scripts/audit_frontend_accessibility_tree.mjs", checklist)
+
+    def test_wcag_conformance_matrix_documents_assistive_technology_boundary(self):
+        matrix = (ROOT / "WCAG_2_2_AA_CONFORMANCE.md").read_text(encoding="utf-8")
+        for contract in (
+            "WCAG 2.2 AA Conformance Matrix",
+            "audit_frontend_accessibility_tree.mjs",
+            "2.4.11 Focus not obscured",
+            "2.5.8 Target size (minimum)",
+            "Automated proxy",
+            "supported release scope by product decision",
+        ):
+            self.assertIn(contract, matrix)
+
+    def test_initialization_and_coordinators_are_idempotent(self):
+        modules = ROOT / "custom_components" / "blueprint_studio" / "www" / "modules"
+        initialization = (modules / "initialization.js").read_text(encoding="utf-8")
+        coordinators = (modules / "coordinators" / "index.js").read_text(encoding="utf-8")
+        for contract in (
+            "let hasInitialized = false",
+            "if (isInitializing || hasInitialized)",
+            "hasInitialized = true",
+            "isInitializing = false",
+        ):
+            self.assertIn(contract, initialization)
+        for contract in (
+            "let coordinatorsInitialized = false",
+            "if (coordinatorsInitialized)",
+            "coordinatorsInitialized = true",
+        ):
+            self.assertIn(contract, coordinators)
+
+    def test_async_search_and_tree_requests_suppress_stale_results(self):
+        modules = ROOT / "custom_components" / "blueprint_studio" / "www" / "modules"
+        search = (modules / "global-search.js").read_text(encoding="utf-8")
+        tree = (modules / "file-tree.js").read_text(encoding="utf-8")
+        for contract in (
+            "let activeSearchController = null",
+            "let activeSearchSequence = 0",
+            "activeSearchController?.abort()",
+            "signal: controller.signal",
+            "isCurrentSearch(sequence, controller)",
+        ):
+            self.assertIn(contract, search)
+        for contract in (
+            "const directoryRequestControllers = new Map()",
+            "const directoryRequestSequences = new Map()",
+            "directoryRequestControllers.get(path)?.abort()",
+            "directoryRequestSequences.get(path) !== sequence",
+            "error?.name === \"AbortError\"",
+        ):
+            self.assertIn(contract, tree)
+
+    def test_phone_navigation_handles_touch_pointer_activation(self):
+        source = (
+            ROOT / "custom_components" / "blueprint_studio" / "www" / "modules" / "phone-navigation.js"
+        ).read_text(encoding="utf-8")
+        for contract in (
+            "navigatorElement.addEventListener('pointerup', activateFromEvent)",
+            "event.pointerType === 'touch'",
+            "lastTouchActivation",
+        ):
+            self.assertIn(contract, source)
+
+    def test_frontend_architecture_boundaries_are_documented(self):
+        architecture = (ROOT / "FRONTEND_ARCHITECTURE_BOUNDARIES.md").read_text(encoding="utf-8")
+        for contract in (
+            "Frontend Architecture Boundaries",
+            "state.js",
+            "api.js",
+            "Coordinators",
+            "Rendering modules",
+            "FRONTEND_FUNCTIONAL_PARITY.md",
+        ):
+            self.assertIn(contract, architecture)
+
+    def test_persisted_histories_have_runtime_and_storage_bounds(self):
+        modules = ROOT / "custom_components" / "blueprint_studio" / "www" / "modules"
+        limits = (modules / "history-limits.js").read_text(encoding="utf-8")
+        settings = (modules / "settings.js").read_text(encoding="utf-8")
+        ai_ui = (modules / "ai-ui.js").read_text(encoding="utf-8")
+        file_tree = (modules / "file-tree.js").read_text(encoding="utf-8")
+        sftp = (modules / "sftp.js").read_text(encoding="utf-8")
+        for contract in ("MAX_AI_CHAT_HISTORY", "MAX_NAVIGATION_HISTORY", "keepLatestHistory", "appendBoundedHistory"):
+            self.assertIn(contract, limits)
+        for source in (settings, ai_ui, file_tree, sftp):
+            self.assertIn("history-limits.js?v=2.5.270", source)
+        self.assertIn("keepLatestHistory(settings.aiChatHistory", settings)
+        self.assertIn("keepLatestHistory(settings.navigationHistory", settings)
+        self.assertIn("appendBoundedHistory(state.aiChatHistory", ai_ui)
+        self.assertIn("appendBoundedHistory(state.navigationHistory", file_tree)
+        self.assertIn("appendBoundedHistory(state.activeSftp.navigationHistory", sftp)
+
+    def test_frontend_performance_budgets_are_documented_and_gated(self):
+        budgets = (ROOT / "FRONTEND_PERFORMANCE_BUDGETS.md").read_text(encoding="utf-8")
+        audit = (ROOT / "scripts" / "audit_frontend_performance_budgets.mjs").read_text(encoding="utf-8")
+        for contract in (
+            "DOMContentLoaded",
+            "First Contentful Paint",
+            "First-party script transfer",
+            "Cumulative Layout Shift",
+            "Maximum long task",
+        ):
+            self.assertIn(contract, budgets)
+        for contract in ("performance.getEntriesByType('navigation')", "layout-shift", "longtask", "scriptTransferBytes"):
+            self.assertIn(contract, audit)
+
+    def test_large_surface_rendering_limits_are_documented(self):
+        limits = (ROOT / "FRONTEND_RENDERING_LIMITS.md").read_text(encoding="utf-8")
+        file_tree = (ROOT / "custom_components" / "blueprint_studio" / "www" / "modules" / "file-tree.js").read_text(encoding="utf-8")
+        problems = (ROOT / "custom_components" / "blueprint_studio" / "www" / "modules" / "problems.js").read_text(encoding="utf-8")
+        for contract in ("Frontend Rendering Limits", "100 items/chunk", "100 findings/page", "24 records", "20 messages", "repository-bounded"):
+            self.assertIn(contract, limits)
+        self.assertIn("RENDER_CHUNK_SIZE = 100", file_tree)
+        self.assertIn("let visibleLimit = 100", problems)
+
+    def test_frontend_workflow_performance_is_documented_and_gated(self):
+        documentation = (ROOT / "FRONTEND_WORKFLOW_PERFORMANCE.md").read_text(encoding="utf-8")
+        audit = (ROOT / "scripts" / "audit_frontend_workflow_performance.mjs").read_text(encoding="utf-8")
+        plan = (ROOT / "FRONTEND_UX_MODERNIZATION_PLAN.md").read_text(encoding="utf-8")
+        for workflow in ("tree-refresh", "global-search", "problems", "diff-render", "terminal", "ai-response-render"):
+            self.assertIn(workflow, audit)
+        for metric in ("longTaskCount", "maxLongTaskMs", "cumulativeLayoutShift"):
+            self.assertIn(metric, audit)
+        self.assertIn("workflow-performance.json", documentation)
+        self.assertIn("Measure layout shift and long tasks", plan)
+
+    def test_frontend_state_migration_preserves_workspace_and_operations(self):
+        contract = (ROOT / "FRONTEND_STATE_MIGRATION.md").read_text(encoding="utf-8")
+        settings = (ROOT / "custom_components" / "blueprint_studio" / "www" / "modules" / "settings.js").read_text(encoding="utf-8")
+        initialization = (ROOT / "custom_components" / "blueprint_studio" / "www" / "modules" / "initialization.js").read_text(encoding="utf-8")
+        feedback = (ROOT / "custom_components" / "blueprint_studio" / "www" / "modules" / "feedback-service.js").read_text(encoding="utf-8")
+        for field in ("openTabs", "activeTabPath", "activeSidebarView", "expandedFolders", "navigationHistory", "workspaceLayout"):
+            self.assertIn(field, settings)
+        for viewport_contract in ("captureEditorViewports()", "scheduleEditorViewportRestore"):
+            self.assertIn(viewport_contract, initialization)
+        for operation_contract in ("operationRecords", "updateOperationFeedback", "removeOperationFeedback"):
+            self.assertIn(operation_contract, feedback)
+        self.assertIn("isInitializing || hasInitialized", initialization)
+        self.assertIn("Moving code between modules does not authorize resetting shared", contract)
+        audit = (ROOT / "scripts" / "audit_frontend_reinitialization.mjs").read_text(encoding="utf-8")
+        for preserved in ("activeSidebarView", "activeTabPath", "operationCards", "auditOperationPresent", "activityControls", "editorCount"):
+            self.assertIn(preserved, audit)
+        self.assertIn("await initialization.init()", audit)
+        self.assertIn("Repeated initialization changed workspace or operation state", audit)
+
+    def test_optional_frontend_dependencies_are_loaded_on_demand(self):
+        panel = PANEL.read_text(encoding="utf-8")
+        preview = (ROOT / "custom_components" / "blueprint_studio" / "www" / "modules" / "asset-preview.js").read_text(encoding="utf-8")
+        terminal = (ROOT / "custom_components" / "blueprint_studio" / "www" / "modules" / "terminal.js").read_text(encoding="utf-8")
+        operations = (ROOT / "custom_components" / "blueprint_studio" / "www" / "modules" / "file-operations.js").read_text(encoding="utf-8")
+        self.assertNotIn('vendor/marked/marked.min.js', panel)
+        self.assertNotIn('vendor/highlight/highlight.min.js', panel)
+        self.assertIn("export function ensureMarkdownDependencies()", preview)
+        self.assertIn("loadScript(vendor('marked/marked.min.js'))", preview)
+        self.assertIn("vendor/xterm/xterm.js", terminal)
+        self.assertIn("async function loadPrettier()", operations)
+        audit = (ROOT / "scripts" / "audit_frontend_lazy_dependencies.mjs").read_text(encoding="utf-8")
+        self.assertIn("before.length", audit)
+        self.assertIn("ensureMarkdownDependencies", audit)
+
+    def test_compatibility_adapters_and_scoped_history_wiring_are_explicit(self):
+        documentation = (ROOT / "FRONTEND_COMPATIBILITY_ADAPTERS.md").read_text(encoding="utf-8")
+        app = (ROOT / "custom_components" / "blueprint_studio" / "www" / "modules" / "app.js").read_text(encoding="utf-8")
+        git_diff = (ROOT / "custom_components" / "blueprint_studio" / "www" / "modules" / "git-diff.js").read_text(encoding="utf-8")
+        self.assertIn("backward compatibility/external use", app)
+        self.assertIn('modal?.querySelectorAll(".git-history-item")', git_diff)
+        self.assertNotIn('document.querySelectorAll(".git-history-item")', git_diff)
+        self.assertIn("compatibility adapters", documentation)
+        self.assertIn("scoped to the surface", documentation)
+
+    def test_component_query_scopes_cover_migrated_surfaces(self):
+        modules = ROOT / "custom_components" / "blueprint_studio" / "www" / "modules"
+        ai = (modules / "ai-ui.js").read_text(encoding="utf-8")
+        split = (modules / "split-view.js").read_text(encoding="utf-8")
+        translations = (modules / "translations.js").read_text(encoding="utf-8")
+        ui = (modules / "ui.js").read_text(encoding="utf-8")
+        coordinator = (modules / "coordinators" / "UICoordinator.js").read_text(encoding="utf-8")
+        self.assertIn("getElementById('ai-sidebar')?.querySelectorAll", ai)
+        self.assertIn("dropTarget.closest('.tabs-container')?.querySelectorAll", split)
+        self.assertIn("getElementById('primary-tabs-container')", split)
+        self.assertIn("getElementById('view-search')?.querySelectorAll", translations)
+        self.assertIn("elements.themeMenu?.querySelectorAll", ui)
+        self.assertIn("getElementById('view-search')?.querySelectorAll", coordinator)
+        self.assertNotIn('document.querySelectorAll(".tree-item.active")', coordinator)
+
+    def test_large_workspace_budget_gate_is_documented(self):
+        documentation = (ROOT / "FRONTEND_LARGE_WORKSPACE_BUDGETS.md").read_text(encoding="utf-8")
+        audit = (ROOT / "scripts" / "audit_frontend_large_workspace.mjs").read_text(encoding="utf-8")
+        for contract in ("1,000", "100 items", "3 seconds", "performance.memory"):
+            self.assertIn(contract, documentation)
+        for contract in ("Array.from({ length: 1000", "treeNodes", "renderChunkSize", "heapUsedBytes"):
+            self.assertIn(contract, audit)
+
+    def test_scoped_wiring_audit_covers_migrated_collection_queries(self):
+        documentation = (ROOT / "FRONTEND_SCOPED_WIRING.md").read_text(encoding="utf-8")
+        audit = (ROOT / "scripts" / "audit_frontend_scoped_wiring.mjs").read_text(encoding="utf-8")
+        for surface in ("AI", "split-view", "search mode", "theme", "file-tree", "Git history"):
+            self.assertIn(surface, documentation)
+        for source in ("ai-ui.js", "split-view.js", "translations.js", "ui.js", "UICoordinator.js", "git-diff.js"):
+            self.assertIn(source, audit)
+        self.assertIn("process.exitCode = 1", audit)
+
+    def test_app_ownership_audit_keeps_compatibility_surface_thin(self):
+        app = (ROOT / "custom_components" / "blueprint_studio" / "www" / "modules" / "app.js").read_text(encoding="utf-8")
+        audit = (ROOT / "scripts" / "audit_frontend_ownership.mjs").read_text(encoding="utf-8")
+        self.assertNotRegex(app, r"^(?:export\s+)?(?:async\s+)?function\s+\w+", re.MULTILINE)
+        self.assertIn("compatibility export surface", audit)
+        self.assertIn("local feature definitions", audit)
+        plan = (ROOT / "FRONTEND_UX_MODERNIZATION_PLAN.md").read_text(encoding="utf-8")
+        self.assertIn("Replace broad document queries and inline event wiring with scoped", plan)
+        self.assertIn("Remove duplicate feature implementations after compatibility adapters", plan)
+
+    def test_frontend_release_gate_covers_ci_and_live_artifacts(self):
+        gate = (ROOT / "scripts" / "audit_frontend_release.mjs").read_text(encoding="utf-8")
+        quality = (ROOT / "FRONTEND_QUALITY_GATES.md").read_text(encoding="utf-8")
+        workflow = (ROOT / ".github" / "workflows" / "frontend-quality.yaml").read_text(encoding="utf-8")
+        self.assertIn("--live", gate)
+        self.assertIn("FRONTEND_QUALITY_GATES.md", gate)
+        self.assertIn("pytest -q", quality)
+        self.assertIn("audit_frontend_release.mjs", workflow)
+
+    def test_frontend_test_matrix_names_primary_workflows_and_limits(self):
+        matrix = (ROOT / "FRONTEND_TEST_MATRIX.md").read_text(encoding="utf-8")
+        for surface in ("Files, tabs, validation", "Settings and onboarding", "Source control", "SFTP and transfers", "Terminal and Developer Tools", "AI context"):
+            self.assertIn(surface, matrix)
+        self.assertIn("Screenshot, pseudo-localization, and slow-network visual", matrix)
+
+    def test_frontend_visual_baseline_covers_viewports_and_themes(self):
+        audit = (ROOT / "scripts" / "audit_frontend_screenshots.mjs").read_text(encoding="utf-8")
+        documentation = (ROOT / "FRONTEND_VISUAL_BASELINES.md").read_text(encoding="utf-8")
+        for contract in ("1440", "900", "390", "light", "dark", "Page.captureScreenshot"):
+            self.assertIn(contract, audit)
+        self.assertIn("Long-content is", documentation)
+
+    def test_pseudo_locale_gate_preserves_expanded_placeholders(self):
+        audit = (ROOT / "scripts" / "audit_frontend_pseudo_locale.mjs").read_text(encoding="utf-8")
+        translations = TRANSLATIONS_MODULE.read_text(encoding="utf-8")
+        self.assertIn("en-XA", audit)
+        self.assertIn("placeholder", audit)
+        self.assertIn("createPseudoBundle", translations)
+
+    def test_degraded_state_matrix_covers_expected_failure_paths(self):
+        audit = (ROOT / "scripts" / "audit_frontend_degraded_states.mjs").read_text(encoding="utf-8")
+        matrix = (ROOT / "FRONTEND_DEGRADED_STATE_MATRIX.md").read_text(encoding="utf-8")
+        for marker in ("AbortController", "Session expired", "validation:stale", "type: 'stale'"):
+            self.assertIn(marker, audit)
+        for condition in ("Slow response", "Disconnect/network failure", "Cancellation", "Concurrent updates", "Expired Home Assistant auth"):
+            self.assertIn(condition, matrix)
+
+    def test_frontend_rollout_policy_rejects_unowned_compatibility_ui(self):
+        policy = (ROOT / "FRONTEND_ROLLOUT_POLICY.md").read_text(encoding="utf-8")
+        self.assertIn("No temporary compatibility UI currently exists", policy)
+        self.assertIn("owning frontend maintainer", policy)
+        self.assertIn("no later than two minor releases", policy)
+
+    def test_shortcut_documentation_matches_runtime_guide(self):
+        guide = (ROOT / "custom_components" / "blueprint_studio" / "www" / "modules" / "user-guide.js").read_text(encoding="utf-8")
+        documentation = (ROOT / "FRONTEND_SHORTCUTS.md").read_text(encoding="utf-8")
+        for shortcut in ("Ctrl+E", "Ctrl+T", "Ctrl+Shift+G", "Ctrl+1", "Ctrl+2", "Ctrl+/", "F1"):
+            self.assertIn(shortcut, guide)
+            self.assertIn(shortcut, documentation)
+        self.assertNotIn("Ctrl+P", guide)
+        audit = (ROOT / "scripts" / "audit_frontend_shortcuts.mjs").read_text(encoding="utf-8")
+        self.assertIn("data-help-section", audit)
+        self.assertIn("hasStaleShortcut", audit)
+
+    def test_phase_twelve_release_artifacts_are_linked_from_the_plan(self):
+        plan = (ROOT / "FRONTEND_UX_MODERNIZATION_PLAN.md").read_text(encoding="utf-8")
+        for artifact in ("FRONTEND_SHORTCUTS.md", "FRONTEND_VISUAL_BASELINES.md", "FRONTEND_QUALITY_GATES.md", "FRONTEND_ROLLOUT_POLICY.md"):
+            self.assertIn(artifact, plan)
+
+    def test_screenshot_audit_captures_rendered_empty_and_modal_states(self):
+        audit = (ROOT / "scripts" / "audit_frontend_screenshots.mjs").read_text(encoding="utf-8")
+        documentation = (ROOT / "FRONTEND_VISUAL_BASELINES.md").read_text(encoding="utf-8")
+        self.assertIn("empty-search", audit)
+        self.assertIn("settings-modal", audit)
+        self.assertIn("loading-operation", audit)
+        self.assertIn("error-notification", audit)
+        self.assertIn("Empty/Search and Settings modal", documentation)
+
+    def test_phase12_open_items_are_explicit_and_not_hidden(self):
+        open_items = (ROOT / "FRONTEND_PHASE12_OPEN_ITEMS.md").read_text(encoding="utf-8")
+        self.assertIn("Conflict screenshot fixture", open_items)
+        self.assertIn("do not inject a fake DOM panel", open_items)
+
+    def test_playwright_audit_covers_required_interaction_classes(self):
+        audit = (ROOT / "scripts" / "audit_frontend_playwright.mjs").read_text(encoding="utf-8")
+        package = (ROOT / "package.json").read_text(encoding="utf-8")
+        for contract in ("desktop layout containment", "inline filename cursor survives tree refresh", "Settings focus enters modal", "keyboard opens command palette", "mobile touch targets", "mobile navigation non-overlap"):
+            self.assertIn(contract, audit)
+        self.assertIn('"playwright-core": "1.62.1"', package)
+
+    def test_inline_file_edit_preserves_cursor_across_tree_refreshes(self):
+        file_tree = (ROOT / "custom_components" / "blueprint_studio" / "www" / "modules" / "file-tree.js").read_text(encoding="utf-8")
+        for contract in ("edit.selectionStart = input.selectionStart", "edit.selectionEnd = input.selectionEnd", "edit.selectionDirection = input.selectionDirection", "input.setSelectionRange(edit.selectionStart"):
+            self.assertIn(contract, file_tree)
+
+    def test_shared_constants_imports_are_release_versioned(self):
+        manifest = json.loads(
+            (ROOT / "custom_components" / "blueprint_studio" / "manifest.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        modules = ROOT / "custom_components" / "blueprint_studio" / "www" / "modules"
+        expected = f"constants.js?v={manifest['version']}"
+        for module_path in modules.rglob("*.js"):
+            if "vendor" in module_path.parts or module_path.name == "constants.js":
+                continue
+            source = module_path.read_text(encoding="utf-8")
+            self.assertNotRegex(
+                source,
+                r"from ['\"]\.\.?/constants\.js['\"]",
+                module_path.relative_to(modules),
+            )
+            if "constants.js?v=" in source:
+                self.assertIn(expected, source, module_path.relative_to(modules))
 
     def test_provider_credentials_and_connection_checks_use_secret_safe_operations(self):
         modules = ROOT / "custom_components" / "blueprint_studio" / "www" / "modules"
@@ -4452,40 +5147,128 @@ class FrontendContractTests(unittest.TestCase):
         ]
 
         for contract in (
-            "label: 'Save GitHub credentials'",
-            "scope: 'GitHub authentication'",
+            "label: t('git_ops.credentials_label')",
+            "scope: t('git_ops.github_authentication')",
             "open: () => eventBus.emit('git:show-settings')",
-            "operation.fail('Could not save GitHub credentials', message",
-            "The token was not retained for Retry.",
+            "operation.fail(t('git_ops.credentials_save_failed'), message",
+            "detail: t('git_ops.credentials_retry_detail')",
         ):
             self.assertIn(contract, github_save)
         self.assertNotIn("retry:", github_save)
         self.assertNotIn("target: token", github_save)
 
         for contract in (
-            "label: 'Test GitHub connection'",
+            "label: t('github_ops.test_connection')",
             "retry: gitTestConnection",
-            "operation.fail('GitHub connection failed', message)",
-            "label: 'Sign out from GitHub'",
+            "operation.fail(t('github_ops.connection_failed'), message)",
+            "label: t('github_ops.signout_label')",
             "retry: gitClearCredentials",
             "Saved GitHub credentials will be removed.",
         ):
             self.assertIn(contract, github_auth)
 
         for contract in (
-            "label: 'Save Gitea credentials'",
+            "label: t('gitea_ops.credentials_save_label')",
             "open: () => eventBus.emit('git:show-gitea-settings')",
-            "The token was not retained for Retry.",
-            "label: 'Sign out from Gitea'",
+            "t('gitea_ops.credentials_retry_detail')",
+            "label: t('gitea_ops.signout_label')",
             "retry: giteaClearCredentials",
-            "label: 'Test Gitea connection'",
+            "label: t('gitea_ops.test_connection')",
             "retry: giteaTestConnection",
-            "operation.fail('Gitea connection failed', error.message)",
+            "operation.fail(t('gitea_ops.connection_failed'), error.message)",
         ):
             self.assertIn(contract, gitea_auth)
         gitea_save = gitea_auth[:gitea_auth.index("export async function giteaClearCredentials")]
         self.assertNotIn("retry:", gitea_save)
         self.assertNotIn("target: token", gitea_save)
+
+    def test_provider_operations_use_localized_shells_and_details(self):
+        modules = ROOT / "custom_components" / "blueprint_studio" / "www" / "modules"
+        github = (modules / "github-integration.js").read_text(encoding="utf-8")
+        gitea = (modules / "gitea-integration.js").read_text(encoding="utf-8")
+        english = json.loads(
+            (ROOT / "custom_components" / "blueprint_studio" / "www" / "locales" / "en.json").read_text(
+                encoding="utf-8"
+            )
+        )
+
+        for literal in (
+            "'Saving GitHub remote...'",
+            "'Create GitHub repository'",
+            "'Contacting GitHub remote...'",
+            "'Sign in to GitHub'",
+            "'Uploading local commits...'",
+            "'Downloading remote changes...'",
+            "'Create Gitea repository'",
+            "'Fetching remote references and workspace status...'",
+        ):
+            self.assertNotIn(literal, github + gitea)
+        for contract in (
+            "tp('github_ops.exclusions_target', request.ignoredPaths.length)",
+            "tp('github_ops.paths_untracked', request.ignoredPaths.length)",
+            "tp('github_ops.workspace_entries_loaded', items.length)",
+            "t('github_ops.repair_completed_steps'",
+            "t('gitea_ops.branch_status_fetched'",
+            "t('gitea_ops.credentials_retry_detail')",
+        ):
+            self.assertIn(contract, github + gitea)
+        for key in (
+            "provider_ops.local_git_repository",
+            "github_ops.signin_label",
+            "github_ops.repair_label",
+            "github_ops.exclusions_target.one",
+            "github_ops.exclusions_target.other",
+            "github_ops.workspace_entries_loaded.one",
+            "github_ops.workspace_entries_loaded.other",
+            "gitea_ops.push_label",
+            "gitea_ops.credentials_save_label",
+            "gitea_ops.status_fetch_label",
+            "gitea_ops.branch_status_fetched",
+        ):
+            self.assertTrue(english.get(key), f"English locale is missing {key}")
+
+    def test_workspace_blueprint_and_cleanup_operations_use_localized_outcomes(self):
+        modules = ROOT / "custom_components" / "blueprint_studio" / "www" / "modules"
+        autosave = (modules / "autosave.js").read_text(encoding="utf-8")
+        blueprint = (modules / "blueprint-form.js").read_text(encoding="utf-8")
+        coordinator = (modules / "coordinators" / "FileCoordinator.js").read_text(encoding="utf-8")
+        palette = (modules / "command-palette.js").read_text(encoding="utf-8")
+        combined = autosave + blueprint + coordinator + palette
+        english = json.loads(
+            (ROOT / "custom_components" / "blueprint_studio" / "www" / "locales" / "en.json").read_text(
+                encoding="utf-8"
+            )
+        )
+
+        for literal in (
+            "'Preparing files for save...'",
+            "'Validate blueprint automation'",
+            "'Automation could not be saved'",
+            "'Convert to blueprint'",
+            "'Could not clean Git recovery state'",
+        ):
+            self.assertNotIn(literal, combined)
+        for contract in (
+            "tp('workspace_ops.save_modified_files', requests.length)",
+            "tp('workspace_ops.files_saved', succeeded)",
+            "t('blueprint_ops.reload_retry_detail'",
+            "t('blueprint_ops.conversion_retry_message'",
+            "tp('git_ops.cleanup_removed', removed.length)",
+        ):
+            self.assertIn(contract, combined)
+        for key in (
+            "workspace_ops.save_modified_files.one",
+            "workspace_ops.save_modified_files.other",
+            "workspace_ops.files_saved.one",
+            "workspace_ops.files_saved.other",
+            "blueprint_ops.validate_label",
+            "blueprint_ops.reload_retry_detail",
+            "blueprint_ops.conversion_retry_message",
+            "git_ops.cleanup_removed.one",
+            "git_ops.cleanup_removed.other",
+            "git_ops.cleanup_unknown_error",
+        ):
+            self.assertTrue(english.get(key), f"English locale is missing {key}")
 
     def test_application_reset_uses_resumable_truthful_multi_step_operation(self):
         source = (
@@ -4502,18 +5285,18 @@ class FrontendContractTests(unittest.TestCase):
             "action: 'gitea_clear_credentials'",
             "action: 'git_delete_repo'",
             "action: 'save_settings'",
-            "label: 'Reset Blueprint Studio'",
-            "scope: 'Blueprint Studio application data'",
+            "label: t('settings_ops.reset_label')",
+            "scope: t('settings_ops.application_data')",
             "retry: () => resetApplicationData(request, resumeStep)",
-            "detail: `Step ${index + 1} of ${steps.length}`",
+            "detail: t('settings_ops.step_progress'",
             "if (!data.success) throw new Error",
-            "Completed steps remain applied.",
-            "Browser settings were not cleared and the page was not reloaded.",
+            "t('settings_ops.completed_remain_applied')",
+            "t('settings_ops.browser_not_cleared')",
             "localStorage.clear()",
             "setTimeout(() => window.location.reload(), 800)",
         ):
             self.assertIn(contract, reset)
-        self.assertLess(reset.index("operation.finish('Application reset complete; reloading...'"), reset.index("localStorage.clear()"))
+        self.assertLess(reset.index("operation.finish(t('settings_ops.reset_complete')"), reset.index("localStorage.clear()"))
 
         handler = source[
             source.index("const handleConfirm = async () =>", source.index("// Handle Reset Application button")):
@@ -4534,13 +5317,13 @@ class FrontendContractTests(unittest.TestCase):
 
         for contract in (
             "getGitActionConfirmation('clean-locks'",
-            "'Clean Git recovery state'",
+            "t('git_ops.cleanup_label')",
             "`${branch} -> .git recovery metadata`",
             "gitCleanLocks,",
             "Array.isArray(data.removed)",
-            "operation.finish('Git recovery state cleaned'",
-            "operation.fail('Could not clean Git recovery state', message)",
-            "operation.fail('Could not clean Git recovery state', error.message)",
+            "operation.finish(t('git_ops.cleanup_complete')",
+            "operation.fail(t('git_ops.cleanup_failed'), message)",
+            "operation.fail(t('git_ops.cleanup_failed'), error.message)",
             "await gitStatus(false, true)",
         ):
             self.assertIn(contract, cleanup)
@@ -4556,17 +5339,17 @@ class FrontendContractTests(unittest.TestCase):
 
         for contract in (
             "export async function refreshModelList",
-            "scope: 'AI provider model discovery'",
+            "scope: t('settings_ops.model_discovery')",
             "target: aiDiscoveryTarget(sourceKey)",
             "retry: () => refreshModelList(sourceKey)",
-            "operation?.finish(`${unique.length} model",
-            "operation?.fail('Model discovery failed'",
-            "Provider returned no models",
+            "operation?.finish(tp('settings_ops.models_discovered', unique.length)",
+            "operation?.fail(t('settings_ops.model_discovery_failed')",
+            "t('settings_ops.no_models')",
             "export async function refreshHassAgents",
-            "label: 'Discover Home Assistant agents'",
-            "scope: 'Local Home Assistant instance'",
+            "label: t('settings_ops.discover_agents')",
+            "scope: t('settings_ops.local_ha_instance')",
             "retry: refreshHassAgents",
-            "operation?.fail('Conversation-agent discovery failed'",
+            "operation?.fail(t('settings_ops.agent_discovery_failed')",
             "escapeHtml(agent.id)",
             "escapeHtml(agent.name)",
             "escapeHtml(agent.platform)",
@@ -4579,6 +5362,495 @@ class FrontendContractTests(unittest.TestCase):
         self.assertIn("void refreshHassAgents({ silent: true })", source)
         self.assertNotIn("_refreshHassAgents", source)
 
+    def test_settings_have_purpose_navigation_and_localized_search(self):
+        source = (
+            ROOT / "custom_components" / "blueprint_studio" / "www" / "modules" / "settings-ui.js"
+        ).read_text(encoding="utf-8")
+        coordinator = (
+            ROOT / "custom_components" / "blueprint_studio" / "www" / "modules" / "coordinators" / "SettingsCoordinator.js"
+        ).read_text(encoding="utf-8")
+        locale_dir = ROOT / "custom_components" / "blueprint_studio" / "www" / "locales"
+
+        for section in (
+            "workspace",
+            "editor",
+            "appearance",
+            "features",
+            "connections",
+            "source-control",
+            "ai-privacy",
+            "advanced",
+        ):
+            self.assertIn(f"id: '{section}'", source)
+        for contract in (
+            'id="settings-search-input"',
+            "settings.search_placeholder",
+            "const searchableControls =",
+            "terms.every((term) => item.haystack.includes(term))",
+            "settings-group-filtered",
+            "scrollTarget?.scrollIntoView({ block: 'start' })",
+            'modal.classList.add("modal--full-workflow", "modal--settings-workbench")',
+            "showAppSettings({ section: selectedSection })",
+        ):
+            self.assertIn(contract, source)
+        self.assertIn("functions.showAppSettings({ section: tab })", coordinator)
+        initialization = (
+            ROOT / "custom_components" / "blueprint_studio" / "www" / "modules" / "initialization.js"
+        ).read_text(encoding="utf-8")
+        coordinator_index = (
+            ROOT / "custom_components" / "blueprint_studio" / "www" / "modules" / "coordinators" / "index.js"
+        ).read_text(encoding="utf-8")
+        self.assertIn("from './settings-ui.js?v=2.5.270'", initialization)
+        self.assertIn("from '../settings-ui.js?v=2.5.270'", coordinator_index)
+        self.assertIn("from './SettingsCoordinator.js?v=2.5.270'", coordinator_index)
+        localized_keys = (
+            "settings.navigation_label",
+            "settings.search_placeholder",
+            "settings.search_clear",
+            "settings.search_count",
+            "settings.search_empty",
+            "settings.sections.workspace",
+            "settings.sections.source_control",
+            "settings.sections.ai_privacy",
+        )
+        for locale_path in locale_dir.glob("*.json"):
+            locale = json.loads(locale_path.read_text(encoding="utf-8"))
+            for key in localized_keys:
+                self.assertIn(key, locale, f"{locale_path.name} is missing {key}")
+
+    def test_settings_explain_dependencies_defaults_and_application_timing(self):
+        source = (
+            ROOT / "custom_components" / "blueprint_studio" / "www" / "modules" / "settings-ui.js"
+        ).read_text(encoding="utf-8")
+        locale_dir = ROOT / "custom_components" / "blueprint_studio" / "www" / "locales"
+
+        for contract in (
+            "const SETTINGS_CONTROL_METADATA = Object.freeze({",
+            "const SETTINGS_DEPENDENCY_GROUPS = Object.freeze([",
+            "'auto-save-delay-input': { defaultValue: '1000'",
+            "'default-ssh-host-select': { defaultValue: 'local'",
+            "dependencyMode: 'any'",
+            "const dependencySatisfied =",
+            "const controlHasDefault =",
+            "class=\"setting-reset ui-button ui-icon-button\"",
+            "control.dispatchEvent(new Event('change', { bubbles: true }))",
+            "control.setAttribute('aria-describedby'",
+            "setting-dependency-disabled",
+            "updateSettingsMetadata();",
+        ):
+            self.assertIn(contract, source)
+        styles = (
+            ROOT / "custom_components" / "blueprint_studio" / "www" / "styles" / "modules" / "editor.css"
+        ).read_text(encoding="utf-8")
+        self.assertIn(".setting-dependency-notice[hidden] { display: none; }", styles)
+        self.assertIn('id="auto-save-delay-container" style="display: flex;', source)
+        self.assertIn('id="terminal-config-section" style="display: block;', source)
+        self.assertIn('id="ai-config-section" style="display: block;', source)
+
+        localized_keys = (
+            "settings.meta.default",
+            "settings.meta.immediate",
+            "settings.meta.next_reload",
+            "settings.meta.reset",
+            "settings.meta.unavailable",
+            "settings.dependencies.autosave",
+            "settings.dependencies.terminal",
+            "settings.dependencies.source_control",
+            "settings.dependencies.ai",
+        )
+        for locale_path in locale_dir.glob("*.json"):
+            locale = json.loads(locale_path.read_text(encoding="utf-8"))
+            for key in localized_keys:
+                self.assertIn(key, locale, f"{locale_path.name} is missing {key}")
+
+    def test_settings_use_native_controls_and_do_not_reveal_saved_credentials(self):
+        source = (
+            ROOT / "custom_components" / "blueprint_studio" / "www" / "modules" / "settings-ui.js"
+        ).read_text(encoding="utf-8")
+        locale_dir = ROOT / "custom_components" / "blueprint_studio" / "www" / "locales"
+
+        for contract in (
+            'class="settings-segmented" role="radiogroup"',
+            'type="radio" name="ai-type" value="rule-based"',
+            'type="radio" name="ai-type" value="local-ai"',
+            'type="radio" name="ai-type" value="cloud"',
+            'type="radio" name="ai-type" value="hass-agent"',
+            'type="checkbox" id="auto-save-toggle"',
+            'type="number" id="auto-save-delay-input"',
+            'type="range" id="font-size-slider"',
+            '<select id="theme-preset-select"',
+            'class="settings-credentials"',
+            'autocomplete="new-password"',
+            'data-clear-secret=',
+            "state.geminiApiKey = readValue(\"gemini-api-key\", state.geminiApiKey)",
+            "state.openaiApiKey = readValue(\"openai-api-key\", state.openaiApiKey)",
+            "state.claudeApiKey = readValue(\"claude-api-key\", state.claudeApiKey)",
+            "if (!replacement) return;",
+            "input.value = '';",
+        ):
+            self.assertIn(contract, source)
+        for secret_key in ("geminiApiKey", "openaiApiKey", "claudeApiKey"):
+            self.assertNotRegex(source, rf'value="\$\{{state\.{secret_key}')
+        self.assertIn('value="" autocomplete="new-password" data-secret-key=', source)
+
+        localized_keys = (
+            "settings.ai.type",
+            "settings.ai.rule_based_hint",
+            "settings.ai.local_ai_hint",
+            "settings.ai.cloud_hint",
+            "settings.ai.hass_agent_hint",
+            "settings.credentials.title",
+            "settings.credentials.private_hint",
+            "settings.credentials.replace_placeholder",
+            "settings.credentials.clear",
+            "settings.credentials.saved_hidden",
+            "settings.credentials.not_saved",
+        )
+        for locale_path in locale_dir.glob("*.json"):
+            locale = json.loads(locale_path.read_text(encoding="utf-8"))
+            for key in localized_keys:
+                self.assertIn(key, locale, f"{locale_path.name} is missing {key}")
+
+    def test_settings_drill_down_and_onboarding_can_resume_safely(self):
+        modules = ROOT / "custom_components" / "blueprint_studio" / "www" / "modules"
+        source = (modules / "settings-ui.js").read_text(encoding="utf-8")
+        settings = (modules / "settings.js").read_text(encoding="utf-8")
+        initialization = (modules / "initialization.js").read_text(encoding="utf-8")
+        responsive = (
+            ROOT / "custom_components" / "blueprint_studio" / "www" / "styles" / "modules" / "responsive.css"
+        ).read_text(encoding="utf-8")
+        locale_dir = ROOT / "custom_components" / "blueprint_studio" / "www" / "locales"
+
+        for contract in (
+            'id="settings-drilldown-back"',
+            'id="settings-nav-search"',
+            "workbench.classList.remove('is-section-open')",
+            "window.matchMedia('(max-width: 768px)')",
+            'data-guidance-workflow="${workflow}"',
+            "file: () => document.getElementById('btn-new-file')?.click()",
+            "git: () => eventBus.emit('ui:switch-sidebar-view', 'source-control')",
+            "sftp: () => eventBus.emit('ui:switch-sidebar-view', 'sftp')",
+            "validation: () => document.getElementById('btn-validate')?.click()",
+            "eventBus.emit('onboarding:start', { force: true })",
+        ):
+            self.assertIn(contract, source)
+        self.assertIn(".settings-workbench.is-section-open .settings-main { display: flex; }", responsive)
+        self.assertIn("state.onboardingPaused = settings.onboardingPaused", settings)
+        self.assertIn("onboardingPaused: state.onboardingPaused", settings)
+        self.assertIn("data-value=\"pause\"", initialization)
+        self.assertIn("if (state.onboardingCompleted || (state.onboardingPaused && !force)) return;", initialization)
+        self.assertIn("eventBus.on('onboarding:start'", initialization)
+
+        localized_keys = (
+            "settings.navigation_back",
+            "settings.search_title",
+            "settings.guidance.title",
+            "settings.guidance.file",
+            "settings.guidance.git",
+            "settings.guidance.sftp",
+            "settings.guidance.validation",
+            "settings.guidance.terminal",
+            "settings.guidance.ai",
+            "settings.guidance.resume",
+        )
+        for locale_path in locale_dir.glob("*.json"):
+            locale = json.loads(locale_path.read_text(encoding="utf-8"))
+            for key in localized_keys:
+                self.assertIn(key, locale, f"{locale_path.name} is missing {key}")
+
+    def test_help_surface_consolidates_guidance_shortcuts_support_and_versions(self):
+        modules = ROOT / "custom_components" / "blueprint_studio" / "www" / "modules"
+        guide = (modules / "user-guide.js").read_text(encoding="utf-8")
+        dialogs = (modules / "dialogs.js").read_text(encoding="utf-8")
+        ui_coordinator = (modules / "coordinators" / "UICoordinator.js").read_text(encoding="utf-8")
+        git_coordinator = (modules / "coordinators" / "GitCoordinator.js").read_text(encoding="utf-8")
+        styles = (
+            ROOT / "custom_components" / "blueprint_studio" / "www" / "styles" / "modules" / "user-guide.css"
+        ).read_text(encoding="utf-8")
+        locale_dir = ROOT / "custom_components" / "blueprint_studio" / "www" / "locales"
+
+        for contract in (
+            "id: 'shortcuts'",
+            "id: 'troubleshooting'",
+            "id: 'about-support'",
+            "data-help-action=\"report-issue\"",
+            "data-help-action=\"request-feature\"",
+            "help-integration-version",
+            "help-ha-version",
+            "help-browser-version",
+            "fetchWithAuth(`${API_BASE}?action=get_version`)",
+            "options.section || 'getting-started'",
+            "navItem.dataset.helpSection = item.id",
+            "eventBus.emit('ui:report-issue')",
+            "eventBus.emit('ui:request-feature')",
+        ):
+            self.assertIn(contract, guide)
+        self.assertIn("showUserGuide({ section: 'shortcuts'", dialogs)
+        self.assertIn("showUserGuide({ returnFocus: elements.btnSupport })", ui_coordinator)
+        self.assertIn("showUserGuide({ returnFocus, section: 'shortcuts' })", ui_coordinator)
+        self.assertEqual(2, git_coordinator.count("showUserGuide({ section: 'git-integration'"))
+        self.assertNotIn('title: "Git Quick Help"', git_coordinator)
+        self.assertNotIn('title: "Gitea Quick Help"', git_coordinator)
+        self.assertIn(".help-version-details", styles)
+        self.assertIn(".help-support-actions", styles)
+
+        localized_keys = (
+            "help.title",
+            "help.close",
+            "help.search",
+            "help.group",
+            "help.troubleshooting",
+            "help.about_support",
+        )
+        for locale_path in locale_dir.glob("*.json"):
+            locale = json.loads(locale_path.read_text(encoding="utf-8"))
+            for key in localized_keys:
+                self.assertIn(key, locale, f"{locale_path.name} is missing {key}")
+
+    def test_localization_supports_pseudo_locale_plural_interpolation_and_rtl(self):
+        translations = TRANSLATIONS_MODULE.read_text(encoding="utf-8")
+        responsive = (
+            ROOT / "custom_components" / "blueprint_studio" / "www" / "styles" / "modules" / "responsive.css"
+        ).read_text(encoding="utf-8")
+        guide_styles = (
+            ROOT / "custom_components" / "blueprint_studio" / "www" / "styles" / "modules" / "user-guide.css"
+        ).read_text(encoding="utf-8")
+        git_diff = (
+            ROOT / "custom_components" / "blueprint_studio" / "www" / "modules" / "git-diff.js"
+        ).read_text(encoding="utf-8")
+        initialization = (
+            ROOT / "custom_components" / "blueprint_studio" / "www" / "modules" / "initialization.js"
+        ).read_text(encoding="utf-8")
+        locale_dir = ROOT / "custom_components" / "blueprint_studio" / "www" / "locales"
+
+        for contract in (
+            "const missingTranslationKeys = new Set()",
+            "const RTL_LANGUAGES = new Set(['ar', 'fa', 'he', 'ur'])",
+            "function createPseudoBundle(bundle)",
+            "currentLang === 'en-XA'",
+            "new Intl.PluralRules(locale)",
+            "export function tp(key, count, params = {})",
+            "export function getMissingTranslationKeys()",
+            "String(value).replace(/\\{([a-zA-Z0-9_]+)\\}/g",
+            "document.documentElement.dir = direction",
+            "document.documentElement.lang = currentLang",
+        ):
+            self.assertIn(contract, translations)
+        self.assertIn("tp('diff.change_position'", git_diff)
+        self.assertNotIn('chunks.length === 1 ? "difference"', git_diff)
+        self.assertIn("t('onboarding.not_now')", initialization)
+        self.assertIn("t('onboarding.paused')", initialization)
+        self.assertIn('html[dir="rtl"] .CodeMirror', responsive)
+        self.assertIn("border-inline-start", guide_styles)
+        self.assertIn("border-inline-end", guide_styles)
+        module_dir = ROOT / "custom_components" / "blueprint_studio" / "www" / "modules"
+        for module_path in module_dir.rglob("*.js"):
+            if "vendor" in module_path.parts:
+                continue
+            source = module_path.read_text(encoding="utf-8")
+            self.assertNotRegex(source, r"from ['\"]\.\.?/translations\.js['\"]", module_path.name)
+            if "translations.js?v=" in source:
+                self.assertIn("translations.js?v=2.5.270", source, module_path.name)
+
+        required_keys = (
+            "help.version_hint",
+            "help.browser",
+            "help.project_github",
+            "common.unknown",
+            "onboarding.not_now",
+            "onboarding.settings_later",
+            "onboarding.paused",
+            "diff.change_position.one",
+            "diff.change_position.other",
+        )
+        for locale_path in locale_dir.glob("*.json"):
+            locale = json.loads(locale_path.read_text(encoding="utf-8"))
+            for key in required_keys:
+                self.assertTrue(locale.get(key), f"{locale_path.name} is missing {key}")
+
+        english = json.loads((locale_dir / "en.json").read_text(encoding="utf-8"))
+        self.assertEqual("{current} / {count} difference", english["diff.change_position.one"])
+        self.assertEqual("{current} / {count} differences", english["diff.change_position.other"])
+
+    def test_primary_workflow_notifications_use_localization_resources(self):
+        module_dir = ROOT / "custom_components" / "blueprint_studio" / "www" / "modules"
+        primary_modules = (
+            "favorites.js",
+            "polling.js",
+            "editor.js",
+            "global-search.js",
+            "command-palette.js",
+            "git-diff.js",
+            "blueprint-form.js",
+            "terminal.js",
+            "file-operations-ui.js",
+            "file-operations.js",
+            "sftp.js",
+            "github-integration.js",
+            "git-operations.js",
+            "settings-ui.js",
+            "autosave.js",
+            "downloads-uploads.js",
+            "coordinators/FileCoordinator.js",
+            "coordinators/UICoordinator.js",
+        )
+        literal_toast = re.compile(r"(?:functions\.)?showToast\(\s*['\"`]")
+        for relative_path in primary_modules:
+            source = (module_dir / relative_path).read_text(encoding="utf-8")
+            self.assertNotRegex(source, literal_toast, relative_path)
+
+        english = json.loads(
+            (ROOT / "custom_components" / "blueprint_studio" / "www" / "locales" / "en.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        for key in (
+            "toast.external_save_conflict",
+            "toast.ai_diff_revert_failed",
+            "toast.validation_failed",
+            "toast.terminal_connection_failed",
+            "toast.github_credentials_failed",
+            "toast.upload_file_failed",
+            "toast.application_reset_failed",
+            "toast.save_batch_failed",
+        ):
+            self.assertTrue(english.get(key), f"English locale is missing {key}")
+
+    def test_unified_help_support_actions_are_current_and_complete(self):
+        modules = ROOT / "custom_components" / "blueprint_studio" / "www" / "modules"
+        coordinator = (modules / "coordinators" / "UICoordinator.js").read_text(encoding="utf-8")
+        guide = (modules / "user-guide.js").read_text(encoding="utf-8")
+
+        self.assertIn("../user-guide.js?v=2.5.270", coordinator)
+        for contract in (
+            'data-help-action="report-issue"',
+            'data-help-action="request-feature"',
+            "t('help.project_github')",
+            "t('support.github_star')",
+            "t('support.github_follow')",
+            'href="https://github.com/soulripper13"',
+        ):
+            self.assertIn(contract, guide)
+
+    def test_translations_initialize_before_coordinator_rendering(self):
+        modules = ROOT / "custom_components" / "blueprint_studio" / "www" / "modules"
+        initialization = (modules / "initialization.js").read_text(encoding="utf-8")
+        translations = (modules / "translations.js").read_text(encoding="utf-8")
+        ui = (modules / "ui.js").read_text(encoding="utf-8")
+
+        fallback = initialization.index("await initTranslations('en')")
+        coordinators = initialization.index("initializeEventHandlers();")
+        settings = initialization.index("await loadSettings();")
+        self.assertLess(fallback, coordinators)
+        self.assertLess(fallback, settings)
+        self.assertIn("let translationsInitialized = false", translations)
+        self.assertIn("translationsInitialized && recordMissing", translations)
+        self.assertIn("translationsInitialized = true", translations)
+        self.assertIn("function defaultModalBodyHtml()", ui)
+        self.assertIn("modalBody.innerHTML = defaultModalBodyHtml()", ui)
+        self.assertNotIn("export const DEFAULT_MODAL_BODY_HTML", ui)
+
+    def test_operation_center_chrome_uses_localization_resources(self):
+        modules = ROOT / "custom_components" / "blueprint_studio" / "www" / "modules"
+        feedback = (modules / "feedback-service.js").read_text(encoding="utf-8")
+        state = (modules / "state.js").read_text(encoding="utf-8")
+        settings = (modules / "settings.js").read_text(encoding="utf-8")
+        settings_ui = (modules / "settings-ui.js").read_text(encoding="utf-8")
+        english = json.loads(
+            (ROOT / "custom_components" / "blueprint_studio" / "www" / "locales" / "en.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        required_keys = (
+            "notification.show_full",
+            "notification.collapse",
+            "notification.dismiss",
+            "operations.title",
+            "operations.clear_completed",
+            "operations.minimize",
+            "operations.expand",
+            "operations.active_count.one",
+            "operations.active_count.other",
+            "operations.recent_count.one",
+            "operations.recent_count.other",
+            "operations.details",
+            "operations.status_complete",
+            "operations.status_failed",
+            "operations.status_cancelled",
+            "operations.status_cancelling",
+            "operations.status_running",
+            "operations.card_label",
+            "operations.open",
+            "operations.complete",
+            "operations.failed",
+            "operations.cancelled",
+        )
+        for key in required_keys:
+            self.assertTrue(english.get(key), f"English locale is missing {key}")
+            if key.endswith((".one", ".other")):
+                self.assertIn(key.rsplit(".", 1)[0], feedback)
+            elif key.startswith("operations.status_"):
+                self.assertIn("operations.status_${", feedback)
+            else:
+                self.assertIn(key, feedback)
+        self.assertIn('stack.className = "operation-center transfer-progress-stack minimized"', feedback)
+        self.assertIn("export function syncOperationCenterVisibility()", feedback)
+        self.assertIn("showOperationCenter: true", state)
+        self.assertIn("state.showOperationCenter = settings.showOperationCenter !== false", settings)
+        self.assertIn("showOperationCenter: state.showOperationCenter", settings)
+        self.assertIn('id="show-operation-center-toggle"', settings_ui)
+        self.assertIn("syncOperationCenterVisibility();", settings_ui)
+
+    def test_settings_operations_use_localized_outcomes(self):
+        modules = ROOT / "custom_components" / "blueprint_studio" / "www" / "modules"
+        settings_ui = (modules / "settings-ui.js").read_text(encoding="utf-8")
+        feedback = (modules / "feedback-service.js").read_text(encoding="utf-8")
+        english = json.loads(
+            (ROOT / "custom_components" / "blueprint_studio" / "www" / "locales" / "en.json").read_text(
+                encoding="utf-8"
+            )
+        )
+
+        for literal in (
+            "Application reset complete; reloading...",
+            "Model discovery failed",
+            "Conversation-agent discovery failed",
+            "Fetching available models...",
+            "Loading conversation agents...",
+        ):
+            self.assertNotIn(f"'{literal}'", settings_ui)
+        for contract in (
+            "tp('settings_ops.models_discovered', unique.length)",
+            "tp('settings_ops.agents_discovered', data.agents.length)",
+            "t('settings_ops.reset_complete')",
+            "t('settings_ops.model_discovery_failed')",
+            "t('settings_ops.agent_discovery_failed')",
+        ):
+            self.assertIn(contract, settings_ui)
+        for key in (
+            "settings_ops.reset_selection",
+            "settings_ops.reset_complete",
+            "settings_ops.reset_stopped",
+            "settings_ops.models_discovered.one",
+            "settings_ops.models_discovered.other",
+            "settings_ops.model_discovery_failed",
+            "settings_ops.agents_discovered.one",
+            "settings_ops.agents_discovered.other",
+            "settings_ops.agent_discovery_failed",
+        ):
+            self.assertTrue(english.get(key), f"English locale is missing {key}")
+        for literal in (
+            '"Show full notification"',
+            '"Dismiss notification"',
+            '>Operations<',
+            '>Details<',
+            '"Operation in progress..."',
+            '"Operation complete"',
+            '"Operation failed"',
+            '"Operation cancelled"',
+        ):
+            self.assertNotIn(literal, feedback)
+
     def test_blueprint_automation_validate_and_save_use_truthful_operations(self):
         source = (
             ROOT / "custom_components" / "blueprint_studio" / "www" / "modules" / "blueprint-form.js"
@@ -4586,19 +5858,19 @@ class FrontendContractTests(unittest.TestCase):
         workflow = source[source.index("export async function validateBlueprintAutomation"):]
 
         for contract in (
-            "label: 'Validate blueprint automation'",
-            "message: 'Step 1 of 2: generating automation YAML...'",
+            "label: t('blueprint_ops.validate_label')",
+            "message: t('blueprint_ops.validate_generating')",
             "retry: () => validateBlueprintAutomation(immutableRequest)",
-            "operation.fail('Generated YAML is invalid', message)",
+            "operation.fail(t('blueprint_ops.yaml_invalid'), message)",
             "export async function saveBlueprintAutomation",
-            "scope: 'Home Assistant configuration'",
+            "scope: t('blueprint_ops.ha_configuration')",
             "retry: () => saveBlueprintAutomation(immutableRequest)",
             "existingContent.trimEnd().endsWith(desiredYaml)",
-            "exact automation already present; skipping write",
+            "t('blueprint_ops.write_skipping'",
             "immutableRequest.mode === 'new' || alreadyWritten",
-            "Retry will skip the write and retry only the reload.",
-            "operation.fail('File saved, but automations could not be reloaded'",
-            "operation.fail('Automation could not be saved'",
+            "t('blueprint_ops.reload_retry_detail'",
+            "operation.fail(t('blueprint_ops.reload_failed')",
+            "operation.fail(t('blueprint_ops.save_failed')",
             "open: () => revealAutomationPath(immutableRequest.path)",
         ):
             self.assertIn(contract, workflow)
@@ -4613,17 +5885,17 @@ class FrontendContractTests(unittest.TestCase):
         restart = source[source.index("export async function restartHomeAssistant"):]
 
         for contract in (
-            'label: "Restart Home Assistant"',
-            'scope: "Home Assistant instance"',
-            'target: "Instance-wide restart"',
+            "label: t('ha_restart.label')",
+            "scope: t('ha_restart.instance')",
+            "target: t('ha_restart.target')",
             "retry: restartHomeAssistant",
             'open: () => eventBus.emit("ha:dev-tools", { tab: "config" })',
-            'operation.update({ message: "Requesting Home Assistant restart...", percent: 20 })',
-            'operation.fail("Restart request was rejected", message)',
-            'operation.update({ message: "Home Assistant is restarting...", percent: 70 })',
+            "operation.update({ message: t('ha_restart.requesting'), percent: 20 })",
+            "operation.fail(t('ha_restart.rejected'), message)",
+            "operation.update({ message: t('ha_restart.restarting'), percent: 70 })",
             'throw new Error("Home Assistant did not become ready within 2 minutes")',
-            'operation.finish("Home Assistant is online; reloading Blueprint Studio"',
-            'operation.fail("Home Assistant restart could not be confirmed", error.message)',
+            "operation.finish(t('ha_restart.online')",
+            "operation.fail(t('ha_restart.unconfirmed'), error.message)",
         ):
             self.assertIn(contract, restart)
         self.assertIn("getActiveOperationSummary()", restart)
@@ -4639,14 +5911,14 @@ class FrontendContractTests(unittest.TestCase):
         ]
 
         for contract in (
-            "'Abort Gitea Git operation'",
-            "'Force push to Gitea'",
-            "'Reset from Gitea'",
+            "t('gitea_ops.abort_label')",
+            "t('gitea_ops.force_push_label')",
+            "t('gitea_ops.reset_label')",
             "`${branch} -> gitea/${branch}`",
             "`gitea/${branch} -> ${branch}`",
-            "operation.fail('Could not abort Gitea Git operation', message)",
-            "operation.fail('Force push to Gitea failed', message)",
-            "operation.fail('Reset from Gitea failed', message)",
+            "operation.fail(t('gitea_ops.abort_failed'), message)",
+            "operation.fail(t('gitea_ops.force_push_failed'), message)",
+            "operation.fail(t('gitea_ops.reset_failed'), message)",
             "body: JSON.stringify({ action: \"git_hard_reset\", remote: \"gitea\", branch })",
             "await giteaStatus(false, true)",
         ):
@@ -4669,13 +5941,13 @@ class FrontendContractTests(unittest.TestCase):
 
         for contract in (
             "getGitActionConfirmation('repair-branch-mismatch'",
-            "label: 'Repair GitHub branch mismatch'",
-            "scope: 'Local Git repository and GitHub'",
+            "label: t('github_ops.repair_label')",
+            "scope: t('github_ops.repair_scope')",
             "target: 'master -> main; origin/main -> main'",
             "retry: () => confirmBranchMismatchRepair(resumeStep)",
-            "detail: `Step ${index + 1} of ${steps.length}`",
+            "detail: t('provider_ops.step_progress', { current: index + 1, count: steps.length })",
             "if (!data.success)",
-            "Completed steps remain applied.",
+            "t('github_ops.repair_completed_steps'",
             "operation.fail(",
             "await gitStatus(false, true)",
         ):
@@ -4698,15 +5970,15 @@ class FrontendContractTests(unittest.TestCase):
         ]
 
         for contract in (
-            "Delete GitHub branch",
-            "Change default branch and delete",
+            "t('git_ops.delete_remote_label')",
+            "t('git_ops.default_repair_label')",
             "origin/${branchName}",
             "default: ${branchName} -> main; delete origin/${branchName}",
-            "operation.fail('Could not delete remote branch', message)",
-            "operation.fail('Could not change GitHub default branch', patchMessage)",
-            "operation.fail('Default changed, but branch deletion failed', deleteMessage)",
+            "operation.fail(t('git_ops.remote_delete_failed'), message)",
+            "operation.fail(t('git_ops.default_change_failed'), patchMessage)",
+            "operation.fail(t('git_ops.default_changed_delete_failed'), deleteMessage)",
             "defaultBranchChanged",
-            "? 'Default changed, but branch deletion failed'",
+            "? t('git_ops.default_changed_delete_failed')",
             "() => confirmDeleteRemoteBranch(branchName)",
             "() => offerDefaultBranchRepair(branchName",
         ):
@@ -4725,9 +5997,9 @@ class FrontendContractTests(unittest.TestCase):
             "startOperationFeedback({",
             "Object.freeze(Array.from(state.selectedItems))",
             "retry: () => confirmDeleteSelectedItems(paths)",
-            "openLabel: 'Browse'",
-            "operation.fail('Deletion incomplete', detail)",
-            "Items in accepted groups may already be deleted. No changes were rolled back.",
+            "openLabel: t('selection.browse')",
+            "operation.fail(t('selection.deletion_incomplete'), detail)",
+            "t('selection.partial_detail')",
             "completedPaths.forEach(path => state.selectedItems.delete(path))",
             "state.selectedItems.size === 0",
         ):
@@ -4746,13 +6018,13 @@ class FrontendContractTests(unittest.TestCase):
 
         for contract in (
             "getGitActionConfirmation('clean-locks'",
-            "label: 'Clean Git recovery state'",
-            "scope: 'Local Git repository'",
-            "${branch} -> .git locks and operation state",
+            "label: t('git_ops.cleanup_label')",
+            "scope: t('provider_ops.local_git_repository')",
+            "t('git_ops.cleanup_target', { branch })",
             "retry: () => confirmCleanGitLocks(branch)",
-            "openLabel: 'Source Control'",
-            "operation.fail('Could not clean Git recovery state', message)",
-            "operation.fail('Could not clean Git recovery state', error.message)",
+            "openLabel: t('sidebar.source_control')",
+            "operation.fail(t('git_ops.cleanup_failed'), message)",
+            "operation.fail(t('git_ops.cleanup_failed'), error.message)",
             "response.removed",
         ):
             self.assertIn(contract, cleanup)
@@ -4768,16 +6040,16 @@ class FrontendContractTests(unittest.TestCase):
         history_slice = source[source.index("export async function showGitHistory"):]
 
         for contract in (
-            "label: 'Load Git history'",
-            "${branch} -> latest 30 commits",
+            "label: t('git_diff_ops.load_history')",
+            "t('git_diff_ops.history_target', { branch, count: 30 })",
             "retry: () => showGitHistory()",
-            "${data.commits.length === 1 ? 'commit' : 'commits'} loaded",
-            "operation.fail('Could not load Git history', message)",
+            "tp('git_diff_ops.commits_loaded', data.commits.length)",
+            "operation.fail(t('git_diff_ops.history_failed'), message)",
             "Object.freeze({ ...commit })",
-            "label: `Load commit ${shortHash}`",
+            "label: t('git_diff_ops.load_commit', { hash: shortHash })",
             "retry: () => loadGitCommitDiff(commit)",
-            "operation.fail('Could not load commit diff', message)",
-            "openLabel: 'History'",
+            "operation.fail(t('git_diff_ops.commit_failed'), message)",
+            "openLabel: t('git_diff_ops.history')",
         ):
             self.assertIn(contract, source)
         for unsafe in (
@@ -4789,6 +6061,42 @@ class FrontendContractTests(unittest.TestCase):
         self.assertNotIn("showGlobalLoading", history_slice)
         self.assertNotIn("hideGlobalLoading", history_slice)
 
+    def test_git_diff_history_and_shared_git_operation_shells_are_localized(self):
+        modules = ROOT / "custom_components" / "blueprint_studio" / "www" / "modules"
+        diff = (modules / "git-diff.js").read_text(encoding="utf-8")
+        operations = (modules / "git-operations.js").read_text(encoding="utf-8")
+        english = json.loads(
+            (ROOT / "custom_components" / "blueprint_studio" / "www" / "locales" / "en.json")
+            .read_text(encoding="utf-8")
+        )
+
+        required_keys = {
+            "git_diff_ops.load_file_diff",
+            "git_diff_ops.file_diff_ready",
+            "git_diff_ops.load_history",
+            "git_diff_ops.commits_loaded.one",
+            "git_diff_ops.commits_loaded.other",
+            "git_diff_ops.load_commit",
+            "git_diff_ops.diff_lines_loaded.one",
+            "git_diff_ops.diff_lines_loaded.other",
+            "git_diff_ops.commit_failed",
+            "git_ops.credentials_label",
+            "git_ops.credentials_retry_detail",
+            "git_ops.file_target.other",
+            "provider_ops.github_repository",
+        }
+        self.assertTrue(required_keys.issubset(english))
+        for literal in (
+            "label: 'Load Git history'",
+            "openLabel: 'History'",
+            "operation.fail('Could not load commit diff'",
+            "label: 'Save GitHub credentials'",
+            "scope: 'GitHub authentication'",
+            "scope: 'Local Git repository'",
+            "openLabel: 'Source Control'",
+        ):
+            self.assertNotIn(literal, diff + operations)
+
     def test_working_file_diff_uses_persistent_operation_feedback(self):
         source = (
             ROOT / "custom_components" / "blueprint_studio" / "www" / "modules" / "git-diff.js"
@@ -4799,15 +6107,15 @@ class FrontendContractTests(unittest.TestCase):
         ]
 
         for contract in (
-            "label: `Load diff for ${path.split('/').pop()}`",
-            "scope: `Local Git repository (${providerLabel})`",
-            "target: `HEAD -> ${path}`",
+            "label: t('git_diff_ops.load_file_diff', { file: fileName })",
+            "scope: t('git_diff_ops.local_repository_provider', { provider: providerLabel })",
+            "target: t('git_diff_ops.head_to_path', { path })",
             "retry: () => showDiffModal(path, provider)",
-            "openLabel: 'Open File'",
-            "operation.update({ message: `Loading HEAD and working content for ${path}...` })",
+            "openLabel: t('git_diff_ops.open_file')",
+            "operation.update({ message: t('git_diff_ops.loading_file_content', { path }) })",
             "throw new Error(headData.message || headData.error",
-            "operation.finish(`Diff ready for ${path.split('/').pop()}`",
-            "operation.fail(`Could not load diff for ${path.split('/').pop()}`",
+            "operation.finish(t('git_diff_ops.file_diff_ready', { file: fileName })",
+            "operation.fail(t('git_diff_ops.file_diff_failed', { file: fileName })",
             "resetFailedWorkingDiffModal(path)",
         ):
             self.assertIn(contract, diff_slice)
@@ -4868,7 +6176,7 @@ class FrontendContractTests(unittest.TestCase):
         self.assertNotIn('action: "write_file"', save_wrapper)
 
         for contract in (
-            "scope: 'Local Home Assistant'",
+            "scope: t('file_ops.local_ha')",
             "target: request.path",
             "retry: () => saveFile(request.path, request.content)",
             "open: () => revealSavedFile(request.path)",
@@ -4880,25 +6188,25 @@ class FrontendContractTests(unittest.TestCase):
         self.assertIn("state.openTabs.find(t => t.path === request.path) || {", files)
 
         for contract in (
-            "scope: `SFTP ${conn?.name || connId}`",
+            "scope: t('sftp_ops.scope', { connection: conn?.name || connId })",
             "target: remotePath",
             "retry: () => saveSftpFile(",
             "open: () => _browseSftpMutation(connId, remotePath)",
-            "Remote server rejected the file write",
+            "t('sftp_ops.remote_write_rejected')",
             "options.onResult?.({ success: false, message })",
             "if (tab.content === request.content) tab.modified = false",
         ):
             self.assertIn(contract, sftp)
 
         for contract in (
-            "scope: 'Workspace documents'",
+            "scope: t('workspace_ops.documents')",
             "retry: () => saveAllFiles(retryRequests)",
-            "Saving file ${index + 1} of ${requests.length}",
+            "t('workspace_ops.saving_progress', { current: index + 1, count: requests.length })",
             "silentErrorToast: true",
             "silentOperation: true",
             "const unchangedSinceRequest = tab.content === request.content",
             "retryRequests = failed.map(result => ({ path: result.path, content: result.content }))",
-            "operation.fail(`${succeeded} saved, ${failed.length} failed`, details",
+            "operation.fail(t('workspace_ops.save_partial', { saved: succeeded, failed: failed.length }), details",
             "eventBus.emit('file:save-all-complete', { results })",
         ):
             self.assertIn(contract, autosave)
@@ -4916,15 +6224,15 @@ class FrontendContractTests(unittest.TestCase):
         ]
         for contract in (
             "async function runCreateFile(request, options = {})",
-            "label: `Create local file`",
-            "scope: 'Local Home Assistant workspace'",
+            "label: t('file_ops.create_file')",
+            "scope: t('file_ops.local_workspace')",
             "target: request.path",
             "retry: () => confirmCreateFileRetry(request)",
             "open: () => browseLocalPath(request.path, true)",
             "if (!response?.success) throw new Error",
             "if (!request.noOpen) eventBus.emit('file:open'",
             "async function runCreateFolder(request)",
-            "label: 'Create local folder'",
+            "label: t('file_ops.create_folder')",
             "retry: () => runCreateFolder(request)",
             "open: () => browseLocalPath(request.path)",
         ):
@@ -4944,13 +6252,13 @@ class FrontendContractTests(unittest.TestCase):
         ]
         for contract in (
             "async function runRenameItem(request)",
-            "label: 'Rename local item'",
+            "label: t('file_ops.rename_item')",
             "target: `${request.source} -> ${request.destination}`",
             "retry: () => confirmRenameItemRetry(request)",
             "open: () => browseLocalPath(localParentPath(request.destination))",
             "if (!response?.success) throw new Error",
             "tab.path.startsWith(sourcePrefix)",
-            "operation.finish(`Renamed to ${request.destination}`",
+            "operation.finish(t('file_ops.renamed_to', { destination: request.destination })",
         ):
             self.assertIn(contract, rename_slice)
 
@@ -4960,13 +6268,13 @@ class FrontendContractTests(unittest.TestCase):
         ]
         for contract in (
             "async function _runSftpCreate(request)",
-            "label: `Create remote ${item}`",
-            "scope: `SFTP ${request.connectionName}`",
+            "label: t('sftp_ops.create_label', { item })",
+            "scope: t('sftp_ops.scope', { connection: request.connectionName })",
             "target: request.remotePath",
             "retry: () => _confirmSftpCreateRetry(request)",
             "_openSftpFolder(request.connId, request.remotePath)",
             "if (!result?.success) throw new Error",
-            "operation.finish(`Created ${request.remotePath}`)",
+            "operation.finish(t('sftp_ops.created_path', { path: request.remotePath }))",
         ):
             self.assertIn(contract, remote_create)
 
@@ -4983,10 +6291,10 @@ class FrontendContractTests(unittest.TestCase):
         ]
         for contract in (
             "const operation = silent ? null : startGitOperation(",
-            "shouldFetch ? 'Fetch GitHub status' : 'Refresh GitHub status'",
+            "shouldFetch ? t('git_ops.fetch_status') : t('git_ops.refresh_status')",
             "() => gitStatus(shouldFetch)",
             "operation?.finish(data.has_changes",
-            "operation?.fail('Could not refresh GitHub status'",
+            "operation?.fail(t('git_ops.status_failed')",
             "return false",
         ):
             self.assertIn(contract, git_status)
@@ -4997,10 +6305,10 @@ class FrontendContractTests(unittest.TestCase):
         ]
         for contract in (
             "const operation = silent ? null : startOperationFeedback({",
-            "scope: 'Gitea repository'",
+            "scope: t('gitea_ops.repository')",
             "retry: () => giteaStatus(shouldFetch)",
             "operation?.finish(data.has_changes",
-            "operation?.fail('Could not refresh Gitea status'",
+            "operation?.fail(t('gitea_ops.status_failed')",
         ):
             self.assertIn(contract, gitea_status)
         self.assertIn("gitStatusImpl(true)", coordinator)
@@ -5012,10 +6320,10 @@ class FrontendContractTests(unittest.TestCase):
         ]
         for contract in (
             "options.silentOperation ? null : startOperationFeedback({",
-            "scope: `SFTP ${conn.name || connId}`",
+            "scope: t('sftp_ops.scope', { connection: conn.name || connId })",
             "retry: () => connectToServer(connId)",
-            "operation?.finish(`Connected to ${conn.name || connId}`",
-            "operation?.fail(`Could not connect to ${conn.name || connId}`",
+            "operation?.finish(t('sftp_ops.connected', { connection: conn.name || connId })",
+            "operation?.fail(t('sftp_ops.connect_failed', { connection: conn.name || connId })",
         ):
             self.assertIn(contract, connect_slice)
 
@@ -5024,11 +6332,11 @@ class FrontendContractTests(unittest.TestCase):
             sftp.index("async function _downloadFile")
         ]
         for contract in (
-            "label: 'Test SFTP connection'",
+            "label: t('sftp_ops.test_label')",
             "target,",
             "open: () => _openSftpConnectionSettings(editingConnId)",
-            "operation.finish('SFTP connection verified'",
-            "Credentials are not stored in operation history",
+            "operation.finish(t('sftp_ops.test_verified')",
+            "t('sftp_ops.test_retry_detail')",
         ):
             self.assertIn(contract, test_slice)
         self.assertNotIn("retry:", test_slice)
@@ -5040,11 +6348,11 @@ class FrontendContractTests(unittest.TestCase):
             sftp.index("/** Update static UI strings")
         ]
         for contract in (
-            "label: 'Refresh SFTP workspace'",
+            "label: t('sftp_ops.refresh_label')",
             "retry: () => refreshSftp()",
             "const result = await _refreshCurrentDir(connId)",
-            "operation?.finish(`Refreshed ${path}`",
-            "operation?.fail(`Could not refresh ${path}`",
+            "operation?.finish(t('sftp_ops.refreshed_path', { path })",
+            "operation?.fail(t('sftp_ops.refresh_path_failed', { path })",
         ):
             self.assertIn(contract, refresh_slice)
         self.assertIn("connectToServer(connId, { silentOperation: true })", sftp)
@@ -5060,17 +6368,17 @@ class FrontendContractTests(unittest.TestCase):
         ]
         for contract in (
             "const editor = state.editor",
-            "label: `Format ${fileName}`",
-            "scope: 'Document'",
+            "label: t('format_ops.label', { file: fileName })",
+            "scope: t('format_ops.document')",
             "target: filePath",
             "retry: retryFormatting",
             "open: openFormattedFile",
-            "operation.update({ message: 'Loading formatting libraries...', percent: 20 })",
+            "operation.update({ message: t('format_ops.loading_libraries'), percent: 20 })",
             "const documentChanged = state.activeTab !== activeTab",
             "|| editor.getValue() !== content",
-            "No formatted text was applied; Retry uses the current document content.",
-            "operation.finish(`Formatted ${fileName}`",
-            "operation.fail(`Could not format ${fileName}`",
+            "t('format_ops.document_changed_detail')",
+            "operation.finish(t('format_ops.formatted', { file: fileName })",
+            "operation.fail(t('format_ops.failed', { file: fileName })",
         ):
             self.assertIn(contract, formatter)
         self.assertLess(
@@ -5097,7 +6405,7 @@ class FrontendContractTests(unittest.TestCase):
         self.assertIn("action: 'github_follow'", ui)
         self.assertIn("target: 'soulripper13'", ui)
         self.assertIn("import { fetchWithAuth } from '../api.js';", ui)
-        self.assertIn("import { API_BASE } from '../constants.js';", ui)
+        self.assertIn("import { API_BASE } from '../constants.js?v=2.5.270';", ui)
 
     def test_blueprint_conversion_is_one_truthful_recoverable_operation(self):
         modules = ROOT / "custom_components" / "blueprint_studio" / "www" / "modules"
@@ -5110,7 +6418,7 @@ class FrontendContractTests(unittest.TestCase):
         ]
         for contract in (
             "async function runBlueprintConversion(request)",
-            "label: 'Convert to blueprint'",
+            "label: t('blueprint_ops.conversion_label')",
             "scope: request.sourceKind",
             "target: `${request.sourcePath} -> ${request.destinationPath}`",
             "retry: () => confirmBlueprintConversionRetry(request)",
@@ -5121,8 +6429,8 @@ class FrontendContractTests(unittest.TestCase):
             "silentOperation: true",
             "silentToast: true",
             "silentErrorToast: true",
-            "Blueprint converted but could not be saved",
-            "operation.finish(`Created ${request.destinationPath}`",
+            "t('blueprint_ops.converted_save_failed')",
+            "operation.finish(t('blueprint_ops.destination_created', { path: request.destinationPath })",
         ):
             self.assertIn(contract, conversion)
         self.assertNotIn("content: request.content", conversion[conversion.index("startOperationFeedback"):conversion.index("fetchWithAuth")])
@@ -5205,16 +6513,16 @@ class FrontendContractTests(unittest.TestCase):
         styles = (STYLE_MODULES / "previews.css").read_text(encoding="utf-8")
 
         for label in (
-            "Loading preview",
-            "Preview unavailable",
-            "Preview failed",
-            "Image could not be decoded",
-            "PDF could not be decoded",
-            "Video preview unavailable",
-            "Audio preview unavailable",
+            "asset_preview.loading",
+            "asset_preview.unavailable",
+            "asset_preview.failed",
+            "asset_preview.image_decode_failed",
+            "asset_preview.pdf_decode_failed",
+            "asset_preview.video_unavailable",
+            "asset_preview.audio_unavailable",
         ):
             self.assertIn(label, preview)
-        self.assertIn("Open as text", preview)
+        self.assertIn("asset_preview.open_as_text", preview)
         self.assertIn("forceText: true", preview)
         self.assertIn("data.forceText", files)
         self.assertIn("atob(tab.content || '')", files)

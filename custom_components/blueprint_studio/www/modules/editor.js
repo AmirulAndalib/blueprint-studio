@@ -2,10 +2,11 @@
 import { state, elements } from './state.js';
 import { eventBus } from './event-bus.js';
 import { validateYaml, validateByFileType } from './file-operations.js';
-import { homeAssistantHint, HA_ENTITIES } from './ha-autocomplete.js?v=2.5.188';
-import { initCompletionDetails, updateCompletionDetails } from './completion-details.js?v=2.5.188';
-import { enableSplitView, disableSplitView } from './split-view.js?v=2.5.188';
+import { homeAssistantHint, HA_ENTITIES } from './ha-autocomplete.js?v=2.5.270';
+import { initCompletionDetails, updateCompletionDetails } from './completion-details.js?v=2.5.270';
+import { enableSplitView, disableSplitView } from './split-view.js?v=2.5.270';
 import { showToast } from './ui.js';
+import { t } from './translations.js?v=2.5.270';
 import { copyToClipboard } from './utils.js';
 
 // CodeMirror is loaded globally via script tags
@@ -79,7 +80,7 @@ function _showEntityPopup(entity, clientX, clientY) {
   // Copy ID button
   popup.querySelector('#eip-copy-btn').addEventListener('click', async () => {
     const success = await copyToClipboard(entity.entity_id);
-    showToast(success ? `Copied: ${entity.entity_id}` : 'Copy failed', success ? 'success' : 'error');
+    showToast(success ? t('toast.copied_value', { value: entity.entity_id }) : t('toast.copy_failed'), success ? 'success' : 'error');
   });
 
   // Dismiss on outside click or Escape

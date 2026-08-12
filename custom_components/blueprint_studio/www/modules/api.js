@@ -1,14 +1,14 @@
 /** API.JS | Purpose: * Provides the core API communication layer for Blueprint Studio. Handles */
 import { state, elements, gitState, giteaState } from './state.js';
-import { API_BASE, STREAM_BASE } from './constants.js';
+import { API_BASE, STREAM_BASE } from './constants.js?v=2.5.270';
 import { eventBus } from './event-bus.js';
-import { t } from './translations.js';
+import { t } from './translations.js?v=2.5.270';
 import { 
   showToast, 
   showConfirmDialog 
 } from './ui.js';
-import { saveSettings } from './settings.js?v=2.5.188';
-import { getActiveOperationSummary, startOperationFeedback } from './feedback-service.js?v=2.5.188';
+import { saveSettings } from './settings.js?v=2.5.270';
+import { getActiveOperationSummary, startOperationFeedback } from './feedback-service.js?v=2.5.270';
 
 // Import PWA auth - will be available after main.js loads it
 let pwaAuth = null;
@@ -418,20 +418,20 @@ export async function restartHomeAssistant() {
     if (!confirmed) return false;
 
     const operation = startOperationFeedback({
-        label: "Restart Home Assistant",
+        label: t('ha_restart.label'),
         icon: "restart_alt",
-        message: "Saving Blueprint Studio state...",
-        scope: "Home Assistant instance",
-        target: "Instance-wide restart",
+        message: t('ha_restart.saving_state'),
+        scope: t('ha_restart.instance'),
+        target: t('ha_restart.target'),
         retry: restartHomeAssistant,
-        openLabel: "Developer Tools",
+        openLabel: t('dev_tools.title'),
         openIcon: "construction",
         open: () => eventBus.emit("ha:dev-tools", { tab: "config" }),
     });
 
     try {
         await saveSettings();
-        operation.update({ message: "Requesting Home Assistant restart...", percent: 20 });
+        operation.update({ message: t('ha_restart.requesting'), percent: 20 });
         const data = await fetchWithAuth(API_BASE, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -439,12 +439,12 @@ export async function restartHomeAssistant() {
         });
         if (!data?.success) {
             const message = data?.message || data?.error || "Home Assistant rejected the restart request";
-            operation.fail("Restart request was rejected", message);
+            operation.fail(t('ha_restart.rejected'), message);
             showToast(t("toast.restart_ha_fail", { error: message }), "error");
             return false;
         }
 
-        operation.update({ message: "Restart accepted; waiting for Home Assistant...", percent: 45 });
+        operation.update({ message: t('ha_restart.waiting'), percent: 45 });
         const startedAt = Date.now();
         let observedOffline = false;
         const waitUntilReady = async () => {
@@ -453,7 +453,7 @@ export async function restartHomeAssistant() {
                 if (observedOffline && version) return version;
             } catch (_error) {
                 observedOffline = true;
-                operation.update({ message: "Home Assistant is restarting...", percent: 70 });
+                operation.update({ message: t('ha_restart.restarting'), percent: 70 });
             }
             if (Date.now() - startedAt >= 120000) {
                 throw new Error("Home Assistant did not become ready within 2 minutes");
@@ -463,14 +463,14 @@ export async function restartHomeAssistant() {
         };
 
         await waitUntilReady();
-        operation.finish("Home Assistant is online; reloading Blueprint Studio", {
-            detail: "The restart completed and the instance API is responding.",
+        operation.finish(t('ha_restart.online'), {
+            detail: t('ha_restart.complete_detail'),
         });
         setTimeout(() => window.location.reload(), 1000);
         return true;
     } catch (error) {
-        operation.fail("Home Assistant restart could not be confirmed", error.message);
-        showToast(`${t("toast.restart_ha_error")}: ${error.message}`, "error");
+        operation.fail(t('ha_restart.unconfirmed'), error.message);
+        showToast(t('toast.restart_ha_failed', { error: error.message }), "error");
         console.error(error);
         return false;
     }

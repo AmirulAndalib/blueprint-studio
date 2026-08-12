@@ -3,18 +3,18 @@
 import { state, elements } from './state.js';
 import { eventBus } from './event-bus.js';
 import { loadScript } from './utils.js';
-import { API_BASE } from './constants.js';
+import { API_BASE } from './constants.js?v=2.5.270';
 import { showToast, showModal, showConfirmDialog } from './ui.js';
-import { saveSettings } from './settings.js?v=2.5.188';
-import { setOverflowTooltip } from './tooltip.js?v=2.5.188';
-import { t } from './translations.js';
+import { saveSettings } from './settings.js?v=2.5.270';
+import { setOverflowTooltip } from './tooltip.js?v=2.5.270';
+import { t } from './translations.js?v=2.5.270';
 import { issueConnectionTicket } from './api.js';
 import {
     constrainTerminalHeight,
     getTerminalMaxHeight,
     TERMINAL_MIN_HEIGHT,
-} from './workspace-layout.js?v=2.5.188';
-import { captureEditorViewports, scheduleEditorViewportRestore } from './editor-viewport.js?v=2.5.188';
+} from './workspace-layout.js?v=2.5.270';
+import { captureEditorViewports, scheduleEditorViewportRestore } from './editor-viewport.js?v=2.5.270';
 
 let term = null;
 let fitAddon = null;
@@ -63,10 +63,10 @@ function trackTerminalOutput(data) {
 async function confirmTerminalHide() {
     if (!terminalMayBeActive) return true;
     return Boolean(await showConfirmDialog({
-        title: 'Hide active terminal?',
-        message: 'A command may still be running. Hiding the terminal will keep the session connected and will not stop the command.',
-        confirmText: 'Hide Terminal',
-        cancelText: 'Keep Open',
+        title: t('terminal.hide_active_title'),
+        message: t('terminal.hide_active_message'),
+        confirmText: t('terminal.hide'),
+        cancelText: t('terminal.keep_open'),
     }));
 }
 
@@ -166,7 +166,7 @@ export async function initTerminal() {
             }
         } catch (e) {
             console.error("Failed to load xterm.js", e);
-            showToast(`Failed to load terminal libraries: ${e.message}`, "error");
+            showToast(t('toast.terminal_library_failed', { error: e.message }), "error");
             initPromise = null;
             return;
         }
@@ -274,7 +274,7 @@ export async function initTerminal() {
         terminalStatus.className = 'terminal-connection-label';
         terminalStatus.setAttribute('role', 'status');
         terminalStatus.setAttribute('aria-live', 'polite');
-        terminalStatus.textContent = 'Connecting';
+        terminalStatus.textContent = t('terminal.connecting');
         connection.append(connectionDot, terminalStatus);
         
         const actionsDiv = document.createElement('div');
@@ -425,7 +425,7 @@ async function connectSocket(options = {}) {
         ticket = await issueConnectionTicket("terminal");
     } catch (error) {
         setTerminalConnectionState('error', 'Connection failed');
-        showToast(`Terminal connection failed: ${error.message}`, 'error');
+        showToast(t('toast.terminal_connection_failed', { error: error.message }), 'error');
         return;
     }
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -658,7 +658,7 @@ async function showSshManager() {
         listHtml += `<div style="padding: 20px; text-align: center; color: var(--text-secondary);">${t("ssh.none_saved")}</div>`;
     } else {
         hosts.forEach((host, index) => {
-            const authLabel = host.authType === 'key' ? '🔑 Key' : '🔐 Password';
+            const authLabel = host.authType === 'key' ? t('terminal.key_auth') : t('terminal.password_auth');
             listHtml += `
             <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px; border-bottom: 1px solid var(--border-color);">
                 <div style="display: flex; flex-direction: column; flex: 1;">
@@ -687,7 +687,7 @@ async function showSshManager() {
             const delBtn = e.target.closest('.delete-ssh-btn');
             if (delBtn) { 
                 const index = parseInt(delBtn.dataset.index);
-                if (await showConfirmDialog({ title: "Delete Host", message: "Are you sure?", isDanger: true })) {
+                if (await showConfirmDialog({ title: t('terminal.delete_host'), message: t('terminal.delete_host_confirm'), isDanger: true })) {
                     state.sshHosts.splice(index, 1); saveSettings(); updateSshDropdown(); showSshManager();
                 }
             }
@@ -701,28 +701,28 @@ async function addSshHost(editIndex = null) {
     const existingHost = isEdit ? state.sshHosts[editIndex] : null;
     const formHtml = `
         <div style="display: flex; flex-direction: column; gap: 12px; padding: 4px;">
-            <div><label style="font-size: 12px;">Name</label><input type="text" id="ssh-name" class="modal-input" value="${isEdit ? existingHost.name : ''}"></div>
+            <div><label style="font-size: 12px;">${t('ssh.name')}</label><input type="text" id="ssh-name" class="modal-input" value="${isEdit ? existingHost.name : ''}"></div>
             <div style="display: flex; gap: 12px;">
-                <div style="flex: 2;"><label style="font-size: 12px;">Host</label><input type="text" id="ssh-host" class="modal-input" value="${isEdit ? existingHost.host : ''}"></div>
-                <div style="flex: 1;"><label style="font-size: 12px;">Port</label><input type="number" id="ssh-port" class="modal-input" value="${isEdit ? existingHost.port : '22'}"></div>
+                <div style="flex: 2;"><label style="font-size: 12px;">${t('ssh.host')}</label><input type="text" id="ssh-host" class="modal-input" value="${isEdit ? existingHost.host : ''}"></div>
+                <div style="flex: 1;"><label style="font-size: 12px;">${t('ssh.port')}</label><input type="number" id="ssh-port" class="modal-input" value="${isEdit ? existingHost.port : '22'}"></div>
             </div>
-            <div><label style="font-size: 12px;">User</label><input type="text" id="ssh-user" class="modal-input" value="${isEdit ? existingHost.username : 'root'}"></div>
+            <div><label style="font-size: 12px;">${t('ssh.user')}</label><input type="text" id="ssh-user" class="modal-input" value="${isEdit ? existingHost.username : 'root'}"></div>
             <div>
-                <label style="font-size: 12px;">Auth</label>
+                <label style="font-size: 12px;">${t('ssh.auth')}</label>
                 <select id="ssh-auth-type" class="modal-input">
-                    <option value="password" ${(!isEdit || existingHost.authType === 'password') ? 'selected' : ''}>Password</option>
-                    <option value="key" ${isEdit && existingHost.authType === 'key' ? 'selected' : ''}>Key (PEM)</option>
+                    <option value="password" ${(!isEdit || existingHost.authType === 'password') ? 'selected' : ''}>${t('ssh.password')}</option>
+                    <option value="key" ${isEdit && existingHost.authType === 'key' ? 'selected' : ''}>${t('ssh.key_pem')}</option>
                 </select>
             </div>
             <div id="ssh-password-section" style="${(!isEdit || existingHost.authType === 'password') ? '' : 'display:none'}">
-                <label style="font-size: 12px;">Password</label><input type="password" id="ssh-password" class="modal-input" value="${isEdit && existingHost.password ? existingHost.password : ''}">
+                <label style="font-size: 12px;">${t('ssh.password')}</label><input type="password" id="ssh-password" class="modal-input" value="${isEdit && existingHost.password ? existingHost.password : ''}">
             </div>
             <div id="ssh-key-section" style="${isEdit && existingHost.authType === 'key' ? '' : 'display:none'}">
-                <label style="font-size: 12px;">Key</label><textarea id="ssh-private-key" class="modal-input" rows="4">${isEdit && existingHost.privateKey ? existingHost.privateKey : ''}</textarea>
+                <label style="font-size: 12px;">${t('ssh.key')}</label><textarea id="ssh-private-key" class="modal-input" rows="4">${isEdit && existingHost.privateKey ? existingHost.privateKey : ''}</textarea>
             </div>
         </div>`;
 
-    const result = await showModal({ title: isEdit ? "Edit SSH Host" : "Add SSH Host", message: formHtml, confirmText: "Save", cancelText: "Cancel" });
+    const result = await showModal({ title: isEdit ? t('terminal.edit_ssh_host') : t('ssh.add_title'), message: formHtml, confirmText: t('ssh.save'), cancelText: t('modal.cancel_button') });
     if (result !== null) {
         const host = {
             name: document.getElementById('ssh-name').value,

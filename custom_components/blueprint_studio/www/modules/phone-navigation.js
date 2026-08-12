@@ -2,8 +2,8 @@
 
 import { eventBus } from './event-bus.js';
 import { state } from './state.js';
-import { t } from './translations.js';
-import { WORKSPACE_MODE_PHONE } from './workspace-layout.js?v=2.5.188';
+import { t } from './translations.js?v=2.5.270';
+import { WORKSPACE_MODE_PHONE } from './workspace-layout.js?v=2.5.270';
 
 const SURFACES = [
   ['files', 'folder_open', 'phone_nav.files', 'Files'],
@@ -131,10 +131,19 @@ export function initPhoneNavigation() {
 
   const statusBar = document.querySelector('.status-bar');
   document.body.insertBefore(navigatorElement, statusBar || null);
-  navigatorElement.addEventListener('click', (event) => {
+  let lastTouchActivation = 0;
+  const activateFromEvent = (event) => {
     const button = event.target.closest('[data-phone-surface]');
-    if (button && !button.disabled) activateSurface(button.dataset.phoneSurface);
-  });
+    if (!button || button.disabled) return;
+    if (event.type === 'pointerup' && event.pointerType === 'touch') {
+      lastTouchActivation = Date.now();
+    } else if (event.type === 'click' && Date.now() - lastTouchActivation < 500) {
+      return;
+    }
+    activateSurface(button.dataset.phoneSurface);
+  };
+  navigatorElement.addEventListener('pointerup', activateFromEvent);
+  navigatorElement.addEventListener('click', activateFromEvent);
 
   const observedSurfaces = new WeakSet();
   const observeSurfaces = (observer) => {

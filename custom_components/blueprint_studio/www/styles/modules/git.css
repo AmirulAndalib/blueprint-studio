@@ -487,6 +487,11 @@
       color: var(--text-primary);
     }
 
+    .diff-file-list-item:focus-visible {
+      outline: 2px solid var(--focus-ring-color, var(--accent-color));
+      outline-offset: -2px;
+    }
+
     .diff-file-list-count {
       background: var(--bg-tertiary);
       border-radius: 8px;
@@ -571,7 +576,7 @@
 
     .diff-text-line--added { background: color-mix(in srgb, var(--success-color) 16%, transparent); }
     .diff-text-line--removed { background: color-mix(in srgb, var(--error-color) 14%, transparent); }
-    .diff-text-line--hunk { color: var(--accent-color); }
+    .diff-text-line--hunk { color: var(--text-secondary); font-weight: 600; }
     .diff-text-line--meta { color: var(--text-muted); }
 
     /* Gitea Specific Styles */
@@ -1064,6 +1069,66 @@
 
     .git-settings-buttons .btn-secondary:hover {
       background: var(--bg-hover);
+    }
+
+    .git-settings-primary-action {
+      align-items: center;
+      display: flex;
+      justify-content: center;
+      min-height: 40px;
+      width: 100%;
+    }
+
+    .git-settings-quick-start {
+      background: color-mix(in srgb, var(--accent-color) 8%, var(--bg-secondary));
+      border: 1px solid color-mix(in srgb, var(--accent-color) 65%, var(--border-color));
+      border-radius: 6px;
+      padding: 16px;
+    }
+
+    .git-settings-quick-start__label {
+      color: var(--accent-color);
+      margin-bottom: 4px;
+    }
+
+    .git-settings-quick-start__copy {
+      margin-bottom: 4px;
+    }
+
+    .git-settings-divider {
+      align-items: center;
+      color: var(--text-secondary);
+      display: flex;
+      font-size: 11px;
+      font-weight: 600;
+      gap: 10px;
+      text-transform: uppercase;
+    }
+
+    .git-settings-divider::before,
+    .git-settings-divider::after {
+      border-top: 1px solid var(--border-color);
+      content: "";
+      flex: 1;
+    }
+
+    .git-settings-checkbox {
+      align-items: center;
+      background: var(--bg-tertiary);
+      border-radius: 4px;
+      cursor: pointer;
+      display: flex;
+      font-size: 13px;
+      gap: 10px;
+      min-height: 40px;
+      padding: 8px 12px;
+    }
+
+    .git-settings-checkbox input {
+      accent-color: var(--accent-color);
+      height: 18px;
+      margin: 0;
+      width: 18px;
     }
 
     .git-settings-info {

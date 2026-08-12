@@ -3,6 +3,42 @@ import { state, elements, gitState, giteaState } from './state.js';
 
 const VALID_STATES = new Set(['loading', 'empty', 'ready', 'unavailable']);
 let observer = null;
+let keyboardRail = null;
+
+function activityControls(rail) {
+  return Array.from(rail?.querySelectorAll('.activity-item:not([disabled])') || []);
+}
+
+function setRovingControl(rail, control) {
+  for (const item of activityControls(rail)) item.tabIndex = item === control ? 0 : -1;
+}
+
+function handleRailKeydown(event) {
+  if (!['ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return;
+  const controls = activityControls(event.currentTarget);
+  const current = controls.indexOf(document.activeElement);
+  if (!controls.length || current < 0) return;
+  event.preventDefault();
+  const targetIndex = event.key === 'Home'
+    ? 0
+    : event.key === 'End'
+      ? controls.length - 1
+      : (current + (event.key === 'ArrowDown' ? 1 : -1) + controls.length) % controls.length;
+  setRovingControl(event.currentTarget, controls[targetIndex]);
+  controls[targetIndex].focus();
+}
+
+function bindActivityKeyboard() {
+  const rail = document.querySelector('.activity-bar');
+  if (!rail || rail === keyboardRail) return;
+  keyboardRail?.removeEventListener('keydown', handleRailKeydown);
+  keyboardRail = rail;
+  rail.addEventListener('keydown', handleRailKeydown);
+  rail.addEventListener('focusin', (event) => {
+    if (event.target.matches('.activity-item')) setRovingControl(rail, event.target);
+  });
+  setRovingControl(rail, rail.querySelector('.activity-item.active') || activityControls(rail)[0]);
+}
 
 function setActivityState(control, status, count = 0) {
   if (!control || !VALID_STATES.has(status)) return;
@@ -74,6 +110,8 @@ export function refreshActivityRail() {
 
 export function initActivityRail() {
   if (observer) observer.disconnect();
+
+  bindActivityKeyboard();
 
   observer = new MutationObserver(() => refreshActivityRail());
   for (const target of [

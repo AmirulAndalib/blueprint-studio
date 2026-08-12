@@ -32,3 +32,10 @@ For a support report, include the integration and Home Assistant versions,
 redacted diagnostics, the correlation ID, the HTTP status, and the smallest
 reproduction. Never include access tokens, passwords, private keys, or config
 file contents.
+## Frontend release checks
+
+After upgrading, a stale service worker or expired Home Assistant session can
+make the panel appear incomplete. Open Settings and use the cache/reload
+recovery action, then reload the panel. If authentication has expired, sign in
+again before retrying GitHub, Gitea, SFTP, or Home Assistant operations. The
+complete browser checks are documented in `FRONTEND_QUALITY_GATES.md`.

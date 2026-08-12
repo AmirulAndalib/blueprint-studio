@@ -2,9 +2,10 @@
 import { state, elements, gitState, giteaState } from './state.js';
 import { fetchWithAuth } from './api.js';
 import { eventBus } from './event-bus.js';
-import { API_BASE, STORAGE_KEY } from './constants.js';
+import { API_BASE, STORAGE_KEY } from './constants.js?v=2.5.270';
 import { trackSettingsSave } from './settings-sync.js';
 import { setToolbarControlLabel } from './toolbar.js';
+import { syncOperationCenterVisibility } from './feedback-service.js?v=2.5.270';
 import {
   clamp,
   SIDEBAR_MIN_WIDTH,
@@ -15,7 +16,8 @@ import {
   TERMINAL_DEFAULT_HEIGHT,
   SPLIT_MIN_PERCENT,
   SPLIT_MAX_PERCENT,
-} from './workspace-layout.js?v=2.5.188';
+} from './workspace-layout.js?v=2.5.270';
+import { MAX_AI_CHAT_HISTORY, MAX_NAVIGATION_HISTORY, keepLatestHistory } from './history-limits.js?v=2.5.270';
 
 const SETTINGS_CLIENT_ID_KEY = `${STORAGE_KEY}_client_id`;
 const LOCAL_SETTINGS_RECOVERY_WINDOW_MS = 2 * 60 * 1000;
@@ -197,6 +199,8 @@ export async function loadSettings() {
     state.recentFilesLimit = parseInt(settings.recentFilesLimit) || 10;
     state.breadcrumbStyle = settings.breadcrumbStyle || "path";
     state.showToasts = settings.showToasts !== false; // default true
+    state.showOperationCenter = settings.showOperationCenter !== false; // default true
+    syncOperationCenterVisibility();
 
     // Experimental features
     state.enableSplitView = settings.enableSplitView || false; // default false (experimental)
@@ -207,6 +211,7 @@ export async function loadSettings() {
 
     // New state properties for sync
     state.onboardingCompleted = settings.onboardingCompleted ?? (localStorage.getItem("onboardingCompleted") === "true");
+    state.onboardingPaused = settings.onboardingPaused ?? (localStorage.getItem("onboardingPaused") === "true");
     state.gitIntegrationEnabled = settings.gitIntegrationEnabled ?? (localStorage.getItem("gitIntegrationEnabled") !== "false");
     state.giteaIntegrationEnabled = settings.giteaIntegrationEnabled ?? (localStorage.getItem("giteaIntegrationEnabled") === "true");
     state.sftpIntegrationEnabled = settings.sftpIntegrationEnabled ?? true; // Default enabled
@@ -245,7 +250,7 @@ export async function loadSettings() {
 
     // Restore Navigation state
     state.currentNavigationPath = settings.currentNavigationPath || "";
-    state.navigationHistory = settings.navigationHistory || [];
+    state.navigationHistory = keepLatestHistory(settings.navigationHistory, MAX_NAVIGATION_HISTORY);
 
     // Split view settings
     if (settings.splitView) {
@@ -265,7 +270,7 @@ export async function loadSettings() {
 
     // AI Settings - with migration from old structure
     state.aiIntegrationEnabled = settings.aiIntegrationEnabled ?? false;
-    state.aiChatHistory = settings.aiChatHistory || [];
+    state.aiChatHistory = keepLatestHistory(settings.aiChatHistory, MAX_AI_CHAT_HISTORY);
     state.aiTaskMode = settings.aiTaskMode || "ask";
     state.aiIncludeFileContext = settings.aiIncludeFileContext ?? true;
     state.aiIncludeMetadata = settings.aiIncludeMetadata ?? true;
@@ -375,6 +380,7 @@ export async function saveSettings() {
       activeTabPath: activeTabPath,
       gitConfig: state.gitConfig,
       onboardingCompleted: state.onboardingCompleted,
+      onboardingPaused: state.onboardingPaused,
       gitIntegrationEnabled: state.gitIntegrationEnabled,
       giteaIntegrationEnabled: state.giteaIntegrationEnabled,
       sftpIntegrationEnabled: state.sftpIntegrationEnabled,
@@ -382,7 +388,7 @@ export async function saveSettings() {
       gitCollapsedGroups: Array.from(gitState.collapsedGroups),
       giteaCollapsedGroups: Array.from(giteaState.collapsedGroups),
       aiIntegrationEnabled: state.aiIntegrationEnabled,
-      aiChatHistory: (state.aiChatHistory || []).slice(-20), // Keep last 20 messages
+      aiChatHistory: keepLatestHistory(state.aiChatHistory, MAX_AI_CHAT_HISTORY),
       aiTaskMode: state.aiTaskMode,
       aiIncludeFileContext: state.aiIncludeFileContext,
       aiIncludeMetadata: state.aiIncludeMetadata,
@@ -447,6 +453,8 @@ export async function saveSettings() {
       blueprintFormTabPath: state.blueprintFormTabPath,
       rememberWorkspace: state.rememberWorkspace,
       autoHideSidebar: state.autoHideSidebar,
+      showToasts: state.showToasts,
+      showOperationCenter: state.showOperationCenter,
       // Performance settings
       pollingInterval: state.pollingInterval,
       remoteFetchInterval: state.remoteFetchInterval,
@@ -460,7 +468,7 @@ export async function saveSettings() {
       activeSftpExpandedFolders: Array.from(state.activeSftp.expandedFolders),
       // Navigation settings
       currentNavigationPath: state.currentNavigationPath,
-      navigationHistory: state.navigationHistory || [],
+      navigationHistory: keepLatestHistory(state.navigationHistory, MAX_NAVIGATION_HISTORY),
       // Split view settings
       splitView: state.splitView ? {
         enabled: state.splitView.enabled,
@@ -487,6 +495,9 @@ export async function saveSettings() {
 
     // Sync legacy keys
     if (state.onboardingCompleted) localStorage.setItem("onboardingCompleted", "true");
+    else localStorage.removeItem("onboardingCompleted");
+    if (state.onboardingPaused) localStorage.setItem("onboardingPaused", "true");
+    else localStorage.removeItem("onboardingPaused");
     localStorage.setItem("gitIntegrationEnabled", state.gitIntegrationEnabled);
 
     // Track that we saved (prevents ping-pong sync)

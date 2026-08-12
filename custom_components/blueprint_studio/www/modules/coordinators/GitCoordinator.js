@@ -6,8 +6,8 @@
 
 import { state, elements, gitState, giteaState } from '../state.js';
 import { eventBus } from '../event-bus.js';
-import { showModal } from '../ui.js';
-import { saveSettings } from '../settings.js?v=2.5.188';
+import { showUserGuide } from '../user-guide.js?v=2.5.270';
+import { saveSettings } from '../settings.js?v=2.5.270';
 import { renderFileTree } from '../file-tree.js';
 import {
     gitPull as gitPullImpl,
@@ -23,7 +23,7 @@ import {
     gitResolveConflict as gitResolveConflictImpl,
     gitStage as gitStageImpl,
     gitUnstage as gitUnstageImpl
-} from '../git-operations.js';
+} from '../git-operations.js?v=2.5.270';
 import {
     giteaStatus as giteaStatusImpl,
     giteaPull as giteaPullImpl,
@@ -38,8 +38,8 @@ import {
     toggleGiteaFileSelection as toggleGiteaFileSelectionImpl,
     giteaStage as giteaStageImpl,
     giteaUnstage as giteaUnstageImpl
-} from '../gitea-integration.js?v=2.5.188';
-import { updateCommitComposer } from '../source-control-view.js?v=2.5.188';
+} from '../gitea-integration.js?v=2.5.270';
+import { updateCommitComposer } from '../source-control-view.js?v=2.5.270';
 
 async function changeSourceControlStage(provider, action, files) {
     if (!files.length) return;
@@ -305,22 +305,7 @@ export function initGitCoordinator(callbacks) {
     }
     if (elements.btnGitHelp) {
         elements.btnGitHelp.addEventListener("click", () => {
-            showModal({
-                title: "Git Quick Help",
-                message: `
-                    <div style="line-height: 1.8; font-size: 13px;">
-                        <p><b>Stage</b> — Select which changed files to include in your next commit.</p>
-                        <p><b>Commit</b> — Save staged changes as a local checkpoint with a message.</p>
-                        <p><b>Push</b> — Upload your commits to the remote repository (GitHub).</p>
-                        <p><b>Pull</b> — Download the latest changes from the remote repository.</p>
-                        <p><b>Diff</b> — Click the diff icon on any file to see what changed.</p>
-                        <p style="margin-top: 12px; color: var(--text-secondary); font-size: 12px;">
-                            Tip: Use Git Settings (gear icon) to configure your repository and authentication.
-                        </p>
-                    </div>`,
-                confirmText: "Got it",
-                cancelText: null
-            });
+            showUserGuide({ section: 'git-integration', returnFocus: elements.btnGitHelp });
         });
     }
     if (elements.btnGitCollapse) {
@@ -382,22 +367,7 @@ export function initGitCoordinator(callbacks) {
     }
     if (elements.btnGiteaHelp) {
         elements.btnGiteaHelp.addEventListener("click", () => {
-            showModal({
-                title: "Gitea Quick Help",
-                message: `
-                    <div style="line-height: 1.8; font-size: 13px;">
-                        <p><b>Stage</b> — Select which changed files to include in your next commit.</p>
-                        <p><b>Commit</b> — Save staged changes as a local checkpoint with a message.</p>
-                        <p><b>Push</b> — Upload your commits to the Gitea server.</p>
-                        <p><b>Pull</b> — Download the latest changes from Gitea.</p>
-                        <p><b>Diff</b> — Click the diff icon on any file to see what changed.</p>
-                        <p style="margin-top: 12px; color: var(--text-secondary); font-size: 12px;">
-                            Tip: Use Gitea Settings (tea icon) to configure your Gitea server and credentials.
-                        </p>
-                    </div>`,
-                confirmText: "Got it",
-                cancelText: null
-            });
+            showUserGuide({ section: 'git-integration', returnFocus: elements.btnGiteaHelp });
         });
     }
     if (elements.btnGiteaCollapse) {

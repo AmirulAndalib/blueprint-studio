@@ -90,14 +90,7 @@ export function initSettingsCoordinator(callbacks) {
     // Modals
     eventBus.on("ui:show-settings", ({ tab } = {}) => {
         if (functions.showAppSettings) {
-            functions.showAppSettings();
-            if (tab) {
-                // Activate the requested tab after settings opens
-                setTimeout(() => {
-                    const tabBtn = document.querySelector(`.settings-tab[data-tab="${tab}"]`);
-                    if (tabBtn) tabBtn.click();
-                }, 50);
-            }
+            functions.showAppSettings({ section: tab });
         } else {
             console.warn("[SettingsCoordinator] showAppSettings implementation not registered");
         }

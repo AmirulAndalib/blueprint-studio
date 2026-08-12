@@ -1,7 +1,7 @@
-import { t } from './translations.js';
+import { t } from './translations.js?v=2.5.270';
 /** GIT.JS | Purpose: Comprehensive Git and Gitea operations. Handles repository */
 import { state, elements, gitState, giteaState } from './state.js';
-import { API_BASE } from './constants.js';
+import { API_BASE } from './constants.js?v=2.5.270';
 import { fetchWithAuth } from './api.js';
 import { showToast, showGlobalLoading, hideGlobalLoading, showModal, showConfirmDialog } from './ui.js';
 import { formatBytes, ensureDiffLibrariesLoaded, isMobile } from './utils.js';
@@ -320,6 +320,7 @@ export function updateGitPanel() {
             pushBtn.className = "git-panel-btn git-sync-indicator";
             pushBtn.id = "btn-git-push-sync";
             pushBtn.title = `${gitState.ahead} commits to push`;
+            pushBtn.setAttribute("aria-label", pushBtn.title);
             pushBtn.innerHTML = `<span class="ui-icon ui-icon--size-action ui-icon--tone-success material-icons">arrow_upward</span><span style="font-size: 10px; margin-left: -2px; font-weight: bold; color: var(--success-color);">${gitState.ahead}</span>`;
             actions.insertBefore(pushBtn, actions.firstChild);
         }
@@ -328,6 +329,7 @@ export function updateGitPanel() {
             pullBtn.className = "git-panel-btn git-sync-indicator";
             pullBtn.id = "btn-git-pull-sync";
             pullBtn.title = `${gitState.behind} commits to pull`;
+            pullBtn.setAttribute("aria-label", pullBtn.title);
             pullBtn.innerHTML = `<span class="ui-icon ui-icon--size-action ui-icon--tone-warning material-icons">arrow_downward</span><span style="font-size: 10px; margin-left: -2px; font-weight: bold; color: var(--warning-color);">${gitState.behind}</span>`;
             actions.insertBefore(pullBtn, actions.firstChild);
         }

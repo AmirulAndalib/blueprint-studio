@@ -17,7 +17,7 @@
 .user-guide-sidebar {
     width: 240px;
     background: var(--bg-secondary);
-    border-right: 1px solid var(--border-color);
+    border-inline-end: 1px solid var(--border-color);
     display: flex;
     flex-direction: column;
     flex-shrink: 0;
@@ -45,6 +45,12 @@
 }
 
 .user-guide-nav-item {
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    font-family: inherit;
+    text-align: left;
+    width: 100%;
     padding: 8px 16px;
     cursor: pointer;
     font-size: 14px;
@@ -63,8 +69,8 @@
 .user-guide-nav-item.active {
     background: var(--accent-color-transparent, rgba(33, 150, 243, 0.1));
     color: var(--accent-color);
-    border-left: 3px solid var(--accent-color);
-    padding-left: 13px;
+    border-inline-start: 3px solid var(--accent-color);
+    padding-inline-start: 13px;
 }
 
 .user-guide-nav-group {
@@ -134,7 +140,7 @@
 
 .user-guide-tip {
     background: rgba(33, 150, 243, 0.1);
-    border-left: 4px solid var(--accent-color);
+    border-inline-start: 4px solid var(--accent-color);
     padding: 12px 16px;
     border-radius: 4px;
     margin-bottom: 20px;
@@ -226,3 +232,41 @@
     font-size: 13px;
     color: var(--text-secondary);
 }
+
+.help-diagnostic-list {
+    display: grid;
+    gap: 0;
+}
+
+.help-diagnostic-list section {
+    border-bottom: 1px solid var(--border-color);
+    padding: 4px 0 10px;
+}
+
+.help-diagnostic-list section:last-child { border-bottom: 0; }
+.help-diagnostic-list h2 { font-size: 15px; margin: 14px 0 4px; }
+.help-diagnostic-list p { color: var(--text-secondary); margin: 0; }
+
+.help-version-details {
+    border: 1px solid var(--border-color);
+    margin: 0 0 20px;
+}
+
+.help-version-details > div {
+    display: grid;
+    gap: 16px;
+    grid-template-columns: minmax(120px, 0.35fr) minmax(0, 1fr);
+    padding: 10px 12px;
+}
+
+.help-version-details > div + div { border-top: 1px solid var(--border-color); }
+.help-version-details dt { color: var(--text-secondary); font-weight: 600; }
+.help-version-details dd { margin: 0; overflow-wrap: anywhere; }
+
+.help-support-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.help-support-actions .ui-button { text-decoration: none; }

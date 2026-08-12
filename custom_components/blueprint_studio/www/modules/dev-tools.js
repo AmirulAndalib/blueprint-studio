@@ -1,8 +1,9 @@
 /** DEV-TOOLS.JS | Purpose: HA Developer Tools floating panel — Actions / Template / States / Config */
-import { API_BASE } from './constants.js';
+import { API_BASE } from './constants.js?v=2.5.270';
 import { fetchWithAuth } from './api.js';
-import { HA_ENTITIES, HA_SERVICES } from './ha-autocomplete.js?v=2.5.188';
-import { startOperationFeedback } from './feedback-service.js?v=2.5.188';
+import { HA_ENTITIES, HA_SERVICES } from './ha-autocomplete.js?v=2.5.270';
+import { startOperationFeedback } from './feedback-service.js?v=2.5.270';
+import { t, tp } from './translations.js?v=2.5.270';
 
 const PANEL_ID = 'bps-dev-tools-panel';
 
@@ -35,15 +36,15 @@ function _buildPanel(activeTab) {
   panel.innerHTML = `
     <div class="bdt-header">
       <span class="ui-icon material-icons bdt-header-icon">construction</span>
-      <span class="bdt-title" id="bps-dev-tools-title">Developer Tools</span>
-      <div class="bdt-tabs" role="tablist" aria-label="Developer Tool views">
-        <button class="bdt-tab-btn" id="bdt-tab-states" data-tab="states" type="button" role="tab" aria-controls="bdt-pane-states" aria-selected="false" tabindex="-1">States</button>
-        <button class="bdt-tab-btn" id="bdt-tab-actions" data-tab="actions" type="button" role="tab" aria-controls="bdt-pane-actions" aria-selected="false" tabindex="-1">Actions</button>
-        <button class="bdt-tab-btn" id="bdt-tab-template" data-tab="template" type="button" role="tab" aria-controls="bdt-pane-template" aria-selected="false" tabindex="-1">Templates</button>
-        <button class="bdt-tab-btn" id="bdt-tab-config" data-tab="config" type="button" role="tab" aria-controls="bdt-pane-config" aria-selected="false" tabindex="-1">Configuration</button>
-        <button class="bdt-tab-btn" id="bdt-tab-reload" data-tab="reload" type="button" role="tab" aria-controls="bdt-pane-reload" aria-selected="false" tabindex="-1">Reload</button>
+      <span class="bdt-title" id="bps-dev-tools-title">${t('dev_tools.title')}</span>
+      <div class="bdt-tabs" role="tablist" aria-label="${t('dev_tools.views_label')}">
+        <button class="bdt-tab-btn" id="bdt-tab-states" data-tab="states" type="button" role="tab" aria-controls="bdt-pane-states" aria-selected="false" tabindex="-1">${t('dev_tools.states_tab')}</button>
+        <button class="bdt-tab-btn" id="bdt-tab-actions" data-tab="actions" type="button" role="tab" aria-controls="bdt-pane-actions" aria-selected="false" tabindex="-1">${t('dev_tools.actions_tab')}</button>
+        <button class="bdt-tab-btn" id="bdt-tab-template" data-tab="template" type="button" role="tab" aria-controls="bdt-pane-template" aria-selected="false" tabindex="-1">${t('dev_tools.templates_tab')}</button>
+        <button class="bdt-tab-btn" id="bdt-tab-config" data-tab="config" type="button" role="tab" aria-controls="bdt-pane-config" aria-selected="false" tabindex="-1">${t('dev_tools.configuration_tab')}</button>
+        <button class="bdt-tab-btn" id="bdt-tab-reload" data-tab="reload" type="button" role="tab" aria-controls="bdt-pane-reload" aria-selected="false" tabindex="-1">${t('dev_tools.reload_tab')}</button>
       </div>
-      <button class="bdt-close" type="button" title="Close Developer Tools" aria-label="Close Developer Tools"><span class="ui-icon material-icons">close</span></button>
+      <button class="bdt-close" type="button" title="${t('dev_tools.close')}" aria-label="${t('dev_tools.close')}"><span class="ui-icon material-icons">close</span></button>
     </div>
     <div class="bdt-body">
       <div class="bdt-pane" id="bdt-pane-actions" data-pane="actions" role="tabpanel" aria-labelledby="bdt-tab-actions">${_actionsPane()}</div>
@@ -124,7 +125,7 @@ function actionTargetLabel(target) {
     .flatMap(value => Array.isArray(value) ? value : [value])
     .filter(value => typeof value === 'string' || typeof value === 'number')
     .map(String);
-  if (!values.length) return 'No explicit target';
+  if (!values.length) return t('dev_tools.no_explicit_target');
   if (values.length === 1) return values[0];
   return `${values.length} targets -> ${values[0]}`;
 }
@@ -141,21 +142,21 @@ export async function runDeveloperAction(request, context = {}) {
     target: cloneOperationInput(request.target || {}),
   };
   const serviceName = `${immutableRequest.domain}.${immutableRequest.service}`;
-  const { button = null, resultElement = null, panel = null, buttonLabel = 'Perform action' } = context;
+  const { button = null, resultElement = null, panel = null, buttonLabel = t('dev_tools.perform_action') } = context;
   const operation = startOperationFeedback({
-    label: `Perform ${serviceName}`,
+    label: t('dev_tools.perform_label', { service: serviceName }),
     icon: 'play_arrow',
-    message: 'Waiting for Home Assistant action completion...',
-    scope: 'Home Assistant action',
+    message: t('dev_tools.action_loading'),
+    scope: t('dev_tools.action_scope'),
     target: `${serviceName} -> ${actionTargetLabel(immutableRequest.target)}`,
     retry: () => runDeveloperAction(immutableRequest),
     open: () => _revealDevTools('actions'),
-    openLabel: 'Developer Tools',
+    openLabel: t('dev_tools.title'),
     openIcon: 'construction',
   });
   if (button) {
     button.disabled = true;
-    button.innerHTML = '<span class="ui-icon material-icons bdt-button-icon">hourglass_empty</span> Calling…';
+      button.innerHTML = `<span class="ui-icon material-icons bdt-button-icon">hourglass_empty</span> ${t('dev_tools.calling')}`;
   }
   if (resultElement) resultElement.style.display = 'none';
   try {
@@ -171,20 +172,20 @@ export async function runDeveloperAction(request, context = {}) {
       }),
     });
     if (!response?.success) {
-      const message = responseFailure(response, 'Home Assistant rejected the action');
-      operation.fail(`${serviceName} failed`, message);
+      const message = responseFailure(response, t('dev_tools.action_rejected'));
+      operation.fail(t('dev_tools.action_failed', { service: serviceName }), message);
       if (resultElement?.isConnected) _showActionResult(resultElement, false, message);
-      if (panel?.isConnected) _recordRawResult(panel, 'Actions', `${serviceName} failed`, response);
+      if (panel?.isConnected) _recordRawResult(panel, 'Actions', t('dev_tools.raw_action_failed', { service: serviceName }), response);
       return false;
     }
-    operation.finish(`${serviceName} completed`, { detail: actionTargetLabel(immutableRequest.target) });
-    if (resultElement?.isConnected) _showActionResult(resultElement, true, 'Action performed successfully');
+    operation.finish(t('dev_tools.action_completed', { service: serviceName }), { detail: actionTargetLabel(immutableRequest.target) });
+    if (resultElement?.isConnected) _showActionResult(resultElement, true, t('dev_tools.action_success'));
     if (panel?.isConnected) _recordRawResult(panel, 'Actions', serviceName, response);
     return true;
   } catch (error) {
-    operation.fail(`${serviceName} failed`, error.message);
+    operation.fail(t('dev_tools.action_failed', { service: serviceName }), error.message);
     if (resultElement?.isConnected) _showActionResult(resultElement, false, error.message);
-    if (panel?.isConnected) _recordRawResult(panel, 'Actions', `${serviceName} failed`, { error: error.message });
+    if (panel?.isConnected) _recordRawResult(panel, 'Actions', t('dev_tools.raw_action_failed', { service: serviceName }), { error: error.message });
     return false;
   } finally {
     if (button?.isConnected) {
@@ -204,19 +205,19 @@ export async function renderDeveloperTemplate(template, context = {}) {
   const immutableTemplate = String(template || '');
   const { resultElement = null, panel = null, observable = true } = context;
   const operation = observable ? startOperationFeedback({
-    label: 'Render Home Assistant template',
+    label: t('dev_tools.template_label'),
     icon: 'data_object',
-    message: 'Rendering with the Home Assistant template engine...',
-    scope: 'Home Assistant template engine',
+    message: t('dev_tools.template_loading'),
+    scope: t('dev_tools.template_scope'),
     target: `${immutableTemplate.length} character template`,
     retry: () => renderDeveloperTemplate(immutableTemplate),
     open: () => _revealDevTools('template'),
-    openLabel: 'Developer Tools',
+    openLabel: t('dev_tools.title'),
     openIcon: 'construction',
   }) : null;
   if (resultElement?.isConnected) {
     resultElement.className = 'bdt-template-result bdt-loading';
-    resultElement.textContent = 'Rendering…';
+    resultElement.textContent = t('dev_tools.template_rendering');
   }
   try {
     const response = await fetchWithAuth(API_BASE, {
@@ -226,7 +227,7 @@ export async function renderDeveloperTemplate(template, context = {}) {
     });
     if (!response?.success) {
       const message = responseFailure(response, 'Home Assistant rejected the template');
-      operation?.fail('Template rendering failed', message);
+      operation?.fail(t('dev_tools.template_failed'), message);
       if (resultElement?.isConnected) {
         resultElement.textContent = message;
         resultElement.className = 'bdt-template-result bdt-err';
@@ -234,7 +235,7 @@ export async function renderDeveloperTemplate(template, context = {}) {
       if (panel?.isConnected) _recordRawResult(panel, 'Templates', 'Render failed', response);
       return false;
     }
-    operation?.finish('Template rendered', { detail: `${String(response.result ?? '').length} output characters` });
+    operation?.finish(t('dev_tools.template_rendered'), { detail: t('dev_tools.output_characters', { count: String(response.result ?? '').length }) });
     if (resultElement?.isConnected) {
       resultElement.textContent = response.result;
       resultElement.className = 'bdt-template-result bdt-ok';
@@ -242,7 +243,7 @@ export async function renderDeveloperTemplate(template, context = {}) {
     if (panel?.isConnected) _recordRawResult(panel, 'Templates', 'Rendered', response);
     return true;
   } catch (error) {
-    operation?.fail('Template rendering failed', error.message);
+    operation?.fail(t('dev_tools.template_failed'), error.message);
     if (resultElement?.isConnected) {
       resultElement.textContent = error.message;
       resultElement.className = 'bdt-template-result bdt-err';
@@ -264,17 +265,17 @@ function _resultInspector() {
   return `
     <details class="bdt-result-inspector">
       <summary class="bdt-result-summary">
-        <span>Result inspector</span>
-        <span class="bdt-result-context">No results yet</span>
+        <span>${t('dev_tools.result_inspector')}</span>
+        <span class="bdt-result-context">${t('dev_tools.no_results_yet')}</span>
       </summary>
       <div class="bdt-result-tools">
-        <input class="bdt-result-search" type="search" aria-label="Search raw developer tool result" placeholder="Search this result" autocomplete="off" spellcheck="false">
-        <button class="bdt-btn-ghost bdt-result-copy" type="button" title="Copy raw result" aria-label="Copy raw result" disabled>
+        <input class="bdt-result-search" type="search" aria-label="${t('dev_tools.search_raw_result')}" placeholder="${t('dev_tools.search_this_result')}" autocomplete="off" spellcheck="false">
+        <button class="bdt-btn-ghost bdt-result-copy" type="button" title="${t('dev_tools.copy_raw_result')}" aria-label="${t('dev_tools.copy_raw_result')}" disabled>
           <span class="ui-icon material-icons bdt-toolbar-icon" aria-hidden="true">content_copy</span>
         </button>
       </div>
-      <pre class="bdt-result-raw" tabindex="0">Run a developer tool to inspect its raw response.</pre>
-      <div class="bdt-result-empty" hidden>No lines match this search.</div>
+      <pre class="bdt-result-raw" tabindex="0">${t('dev_tools.run_tool_to_inspect')}</pre>
+      <div class="bdt-result-empty" hidden>${t('dev_tools.no_matching_lines')}</div>
     </details>
   `;
 }
@@ -291,9 +292,9 @@ function _initResultInspector(panel) {
     const fullText = panel._bdtResultState.text;
     const query = search.value.trim().toLowerCase();
     const visibleText = query
-      ? fullText.split('\n').filter(line => line.toLowerCase().includes(query)).join('\n')
+    ? fullText.split('\n').filter(line => line.toLowerCase().includes(query)).join('\n')
       : fullText;
-    raw.textContent = visibleText || (fullText ? '' : 'Run a developer tool to inspect its raw response.');
+    raw.textContent = visibleText || (fullText ? '' : t('dev_tools.run_tool_to_inspect'));
     empty.hidden = !fullText || Boolean(visibleText);
   };
 
@@ -301,8 +302,8 @@ function _initResultInspector(panel) {
   copy.addEventListener('click', async () => {
     if (!panel._bdtResultState.text) return;
     await navigator.clipboard.writeText(panel._bdtResultState.text);
-    copy.title = 'Copied';
-    setTimeout(() => { copy.title = 'Copy raw result'; }, 1200);
+    copy.title = t('dev_tools.copied');
+    setTimeout(() => { copy.title = t('dev_tools.copy_raw_result'); }, 1200);
   });
   panel._bdtRenderResult = render;
 }
@@ -316,9 +317,9 @@ function _recordRawResult(panel, source, summary, value, { open = true } = {}) {
   } catch {
     text = String(value);
   }
-  text = text || '(empty response)';
+  text = text || t('dev_tools.empty_response');
   if (text.length > MAX_RAW_RESULT_LENGTH) {
-    text = `${text.slice(0, MAX_RAW_RESULT_LENGTH)}\n\n[Result truncated at ${MAX_RAW_RESULT_LENGTH.toLocaleString()} characters]`;
+      text = `${text.slice(0, MAX_RAW_RESULT_LENGTH)}\n\n[${t('dev_tools.raw_result_truncated', { count: MAX_RAW_RESULT_LENGTH.toLocaleString() })}]`;
   }
   panel._bdtResultState = { text, source, summary };
   panel.querySelector('.bdt-result-context').textContent = `${source}: ${summary}`;
@@ -338,15 +339,15 @@ function _actionsPane() {
       <div class="bdt-actions-topbar">
         <div class="bdt-action-search-wrap">
           <span class="ui-icon material-icons bdt-search-icon">search</span>
-          <input class="bdt-action-search" aria-label="Search actions" placeholder="Search for an action… (e.g. light.turn_on)" autocomplete="off" spellcheck="false">
-          <button class="bdt-action-clear-search" style="display:none;" title="Clear">✕</button>
+          <input class="bdt-action-search" aria-label="${t('dev_tools.search_actions')}" placeholder="${t('dev_tools.search_actions_placeholder')}" autocomplete="off" spellcheck="false">
+          <button class="bdt-action-clear-search" style="display:none;" title="${t('common.clear')}">✕</button>
           <!-- Search dropdown is inside the search-wrap so position:absolute works correctly -->
           <div class="bdt-action-dropdown" style="display:none;"></div>
         </div>
-        <label class="bdt-mode-toggle" title="Switch to YAML mode">
+        <label class="bdt-mode-toggle" title="${t('dev_tools.switch_yaml_mode')}">
           <input type="checkbox" class="bdt-yaml-toggle">
           <span class="bdt-toggle-track"><span class="bdt-toggle-knob"></span></span>
-          <span class="bdt-toggle-label">YAML mode</span>
+          <span class="bdt-toggle-label">${t('dev_tools.yaml_mode')}</span>
         </label>
       </div>
 
@@ -354,7 +355,7 @@ function _actionsPane() {
       <div class="bdt-action-form-view">
         <div class="bdt-action-none-selected">
           <span class="ui-icon material-icons bdt-action-empty-icon">play_circle</span>
-          Select an action above to get started
+          ${t('dev_tools.select_action')}
         </div>
         <div class="bdt-action-selected-view" style="display:none;">
           <div class="bdt-action-header-row">
@@ -366,7 +367,7 @@ function _actionsPane() {
           <div class="bdt-action-fields"></div>
           <div class="bdt-action-footer">
             <button class="bdt-btn-primary bdt-perform-btn">
-              <span class="ui-icon material-icons bdt-button-icon">play_arrow</span> Perform action
+              <span class="ui-icon material-icons bdt-button-icon">play_arrow</span> ${t('dev_tools.perform_action')}
             </button>
             <div class="bdt-action-result" style="display:none;"></div>
           </div>
@@ -376,9 +377,9 @@ function _actionsPane() {
       <!-- YAML view -->
       <div class="bdt-action-yaml-view" style="display:none;">
         <div class="bdt-pane-label" style="margin-bottom:6px;">
-          Action <span class="bdt-hint">— enter the full action call as YAML</span>
+          ${t('dev_tools.action')} <span class="bdt-hint">${t('dev_tools.action_yaml_hint')}</span>
         </div>
-        <textarea class="bdt-yaml-input" aria-label="Action YAML" spellcheck="false" placeholder="action: light.turn_on
+        <textarea class="bdt-yaml-input" aria-label="${t('dev_tools.action_yaml')}" spellcheck="false" placeholder="action: light.turn_on
 target:
   entity_id: light.living_room
 data:
@@ -386,7 +387,7 @@ data:
 # 'service:' is also accepted for backward compatibility"></textarea>
         <div class="bdt-action-footer" style="margin-top:8px;">
           <button class="bdt-btn-primary bdt-yaml-perform-btn">
-            <span class="ui-icon material-icons bdt-button-icon">play_arrow</span> Perform action
+              <span class="ui-icon material-icons bdt-button-icon">play_arrow</span> ${t('dev_tools.perform_action')}
           </button>
           <div class="bdt-yaml-result" style="display:none;"></div>
         </div>
@@ -518,13 +519,13 @@ function _initActions(panel) {
     let html = `
       <div class="bdt-field-row bdt-field-target" data-field="entity_id">
         <label class="bdt-field-label">Targets <span class="bdt-field-hint">— entity_id, area_id, device_id</span></label>
-        <input class="bdt-field-input bdt-target-input" type="text" aria-label="Action targets" placeholder="e.g. light.living_room" data-field="entity_id"
+        <input class="bdt-field-input bdt-target-input" type="text" aria-label="${t('dev_tools.action_targets')}" placeholder="e.g. light.living_room" data-field="entity_id"
                list="bdt-entity-list">
       </div>
     `;
 
     if (!keys.length) {
-      html += `<p class="bdt-no-fields">This action has no configurable fields.</p>`;
+      html += `<p class="bdt-no-fields">${t('dev_tools.no_configurable_fields')}</p>`;
     } else {
       html += keys.map(key => {
         const f = fields[key];
@@ -540,7 +541,7 @@ function _initActions(panel) {
             const label = typeof o === 'object' ? (o.label || o.value) : o;
             return `<option value="${_esc(val)}">${_esc(label)}</option>`;
           }).join('');
-          input = `<select class="bdt-field-input bdt-field-select" aria-label="${_esc(key)}" data-field="${_esc(key)}"><option value="">— select —</option>${opts}</select>`;
+          input = `<select class="bdt-field-input bdt-field-select" aria-label="${_esc(key)}" data-field="${_esc(key)}"><option value="">${t('dev_tools.select_option')}</option>${opts}</select>`;
         } else if (selType === 'boolean') {
           input = `<select class="bdt-field-input bdt-field-select" aria-label="${_esc(key)}" data-field="${_esc(key)}">
             <option value="">— select —</option>
@@ -571,7 +572,7 @@ function _initActions(panel) {
             </div>`;
           }
         } else if (selType === 'entity') {
-          input = `<input class="bdt-field-input" type="text" aria-label="${_esc(key)}" placeholder="${f.example != null ? _esc(String(f.example)) : 'entity_id'}" data-field="${_esc(key)}" list="bdt-entity-list">`;
+          input = `<input class="bdt-field-input" type="text" aria-label="${_esc(key)}" placeholder="${f.example != null ? _esc(String(f.example)) : t('dev_tools.entity_id')}" data-field="${_esc(key)}" list="bdt-entity-list">`;
         } else {
           const example = f.example != null ? String(f.example) : '';
           input = `<input class="bdt-field-input" type="text" aria-label="${_esc(key)}" placeholder="${_esc(example)}" data-field="${_esc(key)}">`;
@@ -657,7 +658,7 @@ function _initActions(panel) {
     let parsed;
     try { parsed = _parseActionYaml(raw); }
     catch (e) {
-      _showResult(yamlResult, false, `YAML parse error: ${e.message}`);
+      _showResult(yamlResult, false, t('dev_tools.yaml_parse_error', { error: e.message }));
       return;
     }
     const { action, data = {}, target = {} } = parsed;
@@ -677,18 +678,18 @@ function _templatePane() {
   return `
     <div class="bdt-template-wrap">
       <div class="bdt-split-left">
-        <div class="bdt-pane-label">Template <span class="bdt-hint">(Jinja2 — renders live)</span></div>
-        <textarea class="bdt-template-input" aria-label="Template input" placeholder="{{ states('sensor.temperature') }}&#10;{% if is_state('light.living_room', 'on') %}on{% endif %}"></textarea>
+        <div class="bdt-pane-label">${t('dev_tools.template')} <span class="bdt-hint">${t('dev_tools.template_hint')}</span></div>
+        <textarea class="bdt-template-input" aria-label="${t('dev_tools.template_input')}" placeholder="{{ states('sensor.temperature') }}&#10;{% if is_state('light.living_room', 'on') %}on{% endif %}"></textarea>
         <div class="bdt-template-actions">
           <button class="bdt-btn-primary bdt-render-btn">
-            <span class="ui-icon material-icons bdt-button-icon">play_arrow</span> Render
+            <span class="ui-icon material-icons bdt-button-icon">play_arrow</span> ${t('dev_tools.render')}
           </button>
-          <button class="bdt-btn-ghost bdt-clear-btn">Clear</button>
+          <button class="bdt-btn-ghost bdt-clear-btn">${t('dev_tools.clear')}</button>
         </div>
       </div>
       <div class="bdt-split-right">
-        <div class="bdt-pane-label">Result</div>
-        <pre class="bdt-template-result bdt-placeholder">— output appears here —</pre>
+        <div class="bdt-pane-label">${t('dev_tools.result')}</div>
+        <pre class="bdt-template-result bdt-placeholder">${t('dev_tools.template_output_placeholder')}</pre>
       </div>
     </div>
   `;
@@ -704,7 +705,7 @@ function _initTemplate(panel) {
 
   async function render(observable = false) {
     const tmpl = input.value.trim();
-    if (!tmpl) { result.textContent = '— output appears here —'; result.className = 'bdt-template-result bdt-placeholder'; return; }
+    if (!tmpl) { result.textContent = t('dev_tools.template_output_placeholder'); result.className = 'bdt-template-result bdt-placeholder'; return; }
     await renderDeveloperTemplate(tmpl, { resultElement: result, panel, observable });
   }
 
@@ -712,7 +713,7 @@ function _initTemplate(panel) {
   renderBtn.addEventListener('click', () => render(true));
   clearBtn.addEventListener('click', () => {
     input.value = '';
-    result.textContent = '— output appears here —';
+    result.textContent = t('dev_tools.template_output_placeholder');
     result.className = 'bdt-template-result bdt-placeholder';
   });
   input.addEventListener('keydown', e => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); render(true); } });
@@ -724,16 +725,16 @@ function _statesPane() {
   return `
     <div class="bdt-states-wrap">
       <div class="bdt-states-toolbar">
-        <input class="bdt-states-search" aria-label="Filter states" placeholder="Filter by entity_id or friendly name…" autocomplete="off" spellcheck="false">
-        <select class="bdt-domain-filter" aria-label="Filter states by domain"><option value="">All domains</option></select>
-        <button class="bdt-btn-ghost bdt-states-refresh" title="Refresh">
+        <input class="bdt-states-search" aria-label="${t('dev_tools.filter_states')}" placeholder="${t('dev_tools.filter_states_placeholder')}" autocomplete="off" spellcheck="false">
+        <select class="bdt-domain-filter" aria-label="${t('dev_tools.filter_states_domain')}"><option value="">${t('dev_tools.all_domains')}</option></select>
+        <button class="bdt-btn-ghost bdt-states-refresh" title="${t('dev_tools.refresh')}" aria-label="${t('dev_tools.refresh_states')}">
           <span class="ui-icon material-icons bdt-toolbar-icon">refresh</span>
         </button>
       </div>
       <div class="bdt-states-table-wrap">
         <table class="bdt-states-table">
-          <thead><tr><th>Entity</th><th>State</th><th>Attributes</th></tr></thead>
-          <tbody class="bdt-states-body"><tr><td colspan="3" class="bdt-states-loading">Loading…</td></tr></tbody>
+          <thead><tr><th>${t('dev_tools.entity')}</th><th>${t('dev_tools.state')}</th><th>${t('dev_tools.attributes')}</th></tr></thead>
+          <tbody class="bdt-states-body"><tr><td colspan="3" class="bdt-states-loading">${t('common.loading')}</td></tr></tbody>
         </table>
       </div>
     </div>
@@ -750,20 +751,20 @@ function _initStates(panel) {
 
   async function load(observable = false) {
     const operation = observable ? startOperationFeedback({
-      label: 'Refresh Home Assistant states',
+      label: t('dev_tools.states_refresh'),
       icon: 'refresh',
-      message: 'Loading entity states and attributes...',
-      scope: 'Home Assistant instance',
-      target: 'Entity state registry',
+      message: t('dev_tools.states_loading'),
+      scope: t('dev_tools.ha_instance'),
+      target: t('dev_tools.state_registry'),
       retry: () => {
         _revealDevTools('states');
         queueMicrotask(() => document.querySelector(`#${PANEL_ID} .bdt-states-refresh`)?.click());
       },
       open: () => _revealDevTools('states'),
-      openLabel: 'Developer Tools',
+      openLabel: t('dev_tools.title'),
       openIcon: 'construction',
     }) : null;
-    tbody.innerHTML = '<tr><td colspan="3" class="bdt-states-loading">Loading…</td></tr>';
+    tbody.innerHTML = `<tr><td colspan="3" class="bdt-states-loading">${t('common.loading')}</td></tr>`;
     try {
       const data = await fetchWithAuth(API_BASE, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -771,15 +772,15 @@ function _initStates(panel) {
       });
       if (data?.success === false) throw new Error(responseFailure(data, 'State loading was rejected'));
       allEntities = data.entities || [];
-      operation?.finish(`${allEntities.length} entity state${allEntities.length === 1 ? '' : 's'} loaded`);
+      operation?.finish(tp('dev_tools.states_loaded', allEntities.length));
       _recordRawResult(panel, 'States', `${allEntities.length} entities loaded`, data, { open: false });
       const domains = [...new Set(allEntities.map(e => e.entity_id.split('.')[0]))].sort();
-      domainFilter.innerHTML = '<option value="">All domains</option>' +
+      domainFilter.innerHTML = `<option value="">${t('dev_tools.all_domains')}</option>` +
         domains.map(d => `<option value="${_esc(d)}">${_esc(d)}</option>`).join('');
       render();
     } catch (e) {
-      operation?.fail('Home Assistant states could not be loaded', e.message);
-      tbody.innerHTML = `<tr><td colspan="3" class="bdt-states-loading">Error: ${_esc(e.message)}</td></tr>`;
+      operation?.fail(t('dev_tools.states_failed'), e.message);
+      tbody.innerHTML = `<tr><td colspan="3" class="bdt-states-loading">${_esc(t('dev_tools.error_detail', { error: e.message }))}</td></tr>`;
       _recordRawResult(panel, 'States', 'Load failed', { error: e.message });
     }
   }
@@ -791,7 +792,7 @@ function _initStates(panel) {
     if (domain) filtered = filtered.filter(e => e.entity_id.startsWith(domain + '.'));
     if (q) filtered = filtered.filter(e =>
       e.entity_id.toLowerCase().includes(q) || (e.friendly_name || '').toLowerCase().includes(q));
-    if (!filtered.length) { tbody.innerHTML = '<tr><td colspan="3" class="bdt-states-loading">No entities match.</td></tr>'; return; }
+    if (!filtered.length) { tbody.innerHTML = `<tr><td colspan="3" class="bdt-states-loading">${t('dev_tools.no_entities_match')}</td></tr>`; return; }
 
     const visible = filtered.slice(0, 200);
     tbody.innerHTML = visible.map(e => {
@@ -806,7 +807,7 @@ function _initStates(panel) {
         .join(' · ');
       return `<tr class="bdt-state-row" title="${_esc(e.entity_id)}">
         <td class="bdt-entity-cell">
-          <span class="bdt-entity-id" title="Click to copy entity ID">${_esc(e.entity_id)}</span>
+          <span class="bdt-entity-id" title="${t('dev_tools.copy_entity_id')}">${_esc(e.entity_id)}</span>
           ${e.friendly_name ? `<span class="bdt-friendly-name">${_esc(e.friendly_name)}</span>` : ''}
         </td>
         <td><span class="bdt-state-badge ${cls}">${_esc(e.state)}</span></td>
@@ -819,7 +820,7 @@ function _initStates(panel) {
         e.stopPropagation();
         navigator.clipboard.writeText(span.textContent).then(() => {
           const orig = span.textContent;
-          span.textContent = 'Copied!';
+          span.textContent = t('dev_tools.copied');
           setTimeout(() => { span.textContent = orig; }, 1200);
         });
       });
@@ -840,7 +841,7 @@ function _initStates(panel) {
           }).join('');
         const detail = document.createElement('tr');
         detail.className = 'bdt-attr-detail-row';
-        detail.innerHTML = `<td colspan="3" class="bdt-attr-detail-cell"><table class="bdt-attr-table">${rows || '<tr><td colspan="2" style="opacity:.6">No attributes</td></tr>'}</table></td>`;
+        detail.innerHTML = `<td colspan="3" class="bdt-attr-detail-cell"><table class="bdt-attr-table">${rows || `<tr><td colspan="2" style="opacity:.6">${t('dev_tools.no_attributes')}</td></tr>`}</table></td>`;
         row.after(detail);
       });
     });
@@ -861,22 +862,26 @@ function _initStates(panel) {
 // ── Configuration and reload panes ───────────────────────────────────────────
 
 const RELOAD_ITEMS = [
-  { domain: 'core',           label: 'All YAML configuration',     icon: 'refresh' },
-  { domain: 'automation',     label: 'Automations',                 icon: 'smart_toy' },
-  { domain: 'script',         label: 'Scripts',                     icon: 'code' },
-  { domain: 'scene',          label: 'Scenes',                      icon: 'photo_camera' },
-  { domain: 'group',          label: 'Groups',                      icon: 'group' },
-  { domain: 'template',       label: 'Template entities',           icon: 'integration_instructions' },
-  { domain: 'input_boolean',  label: 'Input booleans',              icon: 'toggle_on' },
-  { domain: 'input_number',   label: 'Input numbers',               icon: 'pin' },
-  { domain: 'input_select',   label: 'Input selects',               icon: 'list' },
-  { domain: 'input_text',     label: 'Input texts',                 icon: 'text_fields' },
-  { domain: 'input_datetime', label: 'Input datetimes',             icon: 'event' },
-  { domain: 'input_button',   label: 'Input buttons',               icon: 'smart_button' },
-  { domain: 'timer',          label: 'Timers',                      icon: 'timer' },
-  { domain: 'counter',        label: 'Counters',                    icon: 'tag' },
-  { domain: 'schedule',       label: 'Schedules',                   icon: 'schedule' },
+  { domain: 'core',           labelKey: 'reload_core', icon: 'refresh' },
+  { domain: 'automation',     labelKey: 'reload_automation', icon: 'smart_toy' },
+  { domain: 'script',         labelKey: 'reload_script', icon: 'code' },
+  { domain: 'scene',          labelKey: 'reload_scene', icon: 'photo_camera' },
+  { domain: 'group',          labelKey: 'reload_group', icon: 'group' },
+  { domain: 'template',       labelKey: 'reload_template', icon: 'integration_instructions' },
+  { domain: 'input_boolean',  labelKey: 'reload_input_boolean', icon: 'toggle_on' },
+  { domain: 'input_number',   labelKey: 'reload_input_number', icon: 'pin' },
+  { domain: 'input_select',   labelKey: 'reload_input_select', icon: 'list' },
+  { domain: 'input_text',     labelKey: 'reload_input_text', icon: 'text_fields' },
+  { domain: 'input_datetime', labelKey: 'reload_input_datetime', icon: 'event' },
+  { domain: 'input_button',   labelKey: 'reload_input_button', icon: 'smart_button' },
+  { domain: 'timer',          labelKey: 'reload_timer', icon: 'timer' },
+  { domain: 'counter',        labelKey: 'reload_counter', icon: 'tag' },
+  { domain: 'schedule',       labelKey: 'reload_schedule', icon: 'schedule' },
 ];
+
+function reloadLabel(item) {
+  return t(`dev_tools.${item?.labelKey || 'reload_unknown'}`);
+}
 
 function _configPane() {
   return `
@@ -886,10 +891,10 @@ function _configPane() {
       <div class="bdt-config-section">
         <div class="bdt-config-section-title">
           <span class="ui-icon material-icons bdt-section-icon">fact_check</span>
-          Configuration check
+          ${t('dev_tools.configuration_check_heading')}
         </div>
         <button class="bdt-btn-primary bdt-run-check-btn" style="width:100%;">
-          <span class="ui-icon material-icons bdt-button-icon">play_arrow</span> Check configuration
+          <span class="ui-icon material-icons bdt-button-icon">play_arrow</span> ${t('dev_tools.config_check')}
         </button>
         <div class="bdt-check-result" style="display:none;"></div>
         <div class="bdt-check-errors" style="display:none;"></div>
@@ -905,14 +910,14 @@ function _reloadPane() {
       <div class="bdt-config-section">
         <div class="bdt-config-section-title">
           <span class="ui-icon material-icons bdt-section-icon">cached</span>
-          Reload YAML configuration
+          ${t('dev_tools.reload_heading')}
         </div>
-        <p class="bdt-section-description">Apply YAML changes without restarting the Home Assistant instance.</p>
+        <p class="bdt-section-description">${t('dev_tools.reload_description')}</p>
         <div class="bdt-reload-grid">
           ${RELOAD_ITEMS.map(item => `
-            <button class="bdt-reload-btn" type="button" data-domain="${_esc(item.domain)}" title="Reload ${_esc(item.label)}">
+            <button class="bdt-reload-btn" type="button" data-domain="${_esc(item.domain)}" title="${_esc(t('dev_tools.reload_label', { target: reloadLabel(item) }))}">
               <span class="ui-icon material-icons bdt-reload-icon" aria-hidden="true">${_esc(item.icon)}</span>
-              <span class="bdt-reload-label">${_esc(item.label)}</span>
+              <span class="bdt-reload-label">${_esc(reloadLabel(item))}</span>
               <span class="bdt-reload-status" aria-live="polite"></span>
             </button>
           `).join('')}
@@ -937,20 +942,20 @@ async function _runConfigurationCheck(panel = null) {
   const checkResult = pane?.querySelector('.bdt-check-result');
   const checkErrors = pane?.querySelector('.bdt-check-errors');
   const operation = startOperationFeedback({
-    label: 'Check Home Assistant configuration',
+    label: t('dev_tools.config_check'),
     icon: 'fact_check',
-    scope: 'Home Assistant instance',
-    target: 'YAML configuration',
-    message: 'Checking configuration...',
+    scope: t('dev_tools.ha_instance'),
+    target: t('dev_tools.yaml_configuration'),
+    message: t('dev_tools.config_checking'),
     retry: () => _runConfigurationCheck(),
     open: () => _revealDevTools('config'),
-    openLabel: 'Open',
+    openLabel: t('operations.open'),
     openIcon: 'construction',
   });
 
   if (checkBtn && checkResult && checkErrors) {
     checkBtn.disabled = true;
-    checkBtn.innerHTML = `<span class="ui-icon material-icons bdt-button-icon">hourglass_empty</span> Checking…`;
+    checkBtn.innerHTML = `<span class="ui-icon material-icons bdt-button-icon">hourglass_empty</span> ${t('dev_tools.config_checking_short')}`;
     checkResult.style.display = 'none';
     checkErrors.style.display = 'none';
   }
@@ -967,8 +972,8 @@ async function _runConfigurationCheck(panel = null) {
 
     if (checkResult && checkErrors) {
       checkResult.textContent = ok
-        ? '✓ Configuration is valid'
-        : `✗ ${errors.length} error${errors.length !== 1 ? 's' : ''} found`;
+        ? `✓ ${t('dev_tools.config_valid')}`
+        : `✗ ${tp('dev_tools.config_errors', errors.length)}`;
       checkResult.className = `bdt-check-result ${ok ? 'bdt-ok' : 'bdt-err'}`;
       checkResult.style.display = 'block';
 
@@ -985,29 +990,29 @@ async function _runConfigurationCheck(panel = null) {
       _recordRawResult(panel, 'Configuration', ok ? 'Configuration valid' : 'Configuration invalid', data);
     }
     if (ok) {
-      operation.finish('Configuration is valid');
+      operation.finish(t('dev_tools.config_valid'));
     } else {
       operation.fail(
         errors.length
-          ? `${errors.length} configuration error${errors.length !== 1 ? 's' : ''} found`
-          : 'Configuration check did not pass',
-        errorDetail || result.output || data.message || 'Home Assistant reported an invalid configuration',
+          ? tp('dev_tools.config_errors', errors.length)
+          : t('dev_tools.config_not_valid'),
+        errorDetail || result.output || data.message || t('dev_tools.config_rejected'),
       );
     }
   } catch (e) {
     if (checkResult) {
-      checkResult.textContent = `✗ Error: ${e.message}`;
+      checkResult.textContent = `✗ ${t('dev_tools.error_detail', { error: e.message })}`;
       checkResult.className = 'bdt-check-result bdt-err';
       checkResult.style.display = 'block';
     }
     if (panel?.isConnected) {
       _recordRawResult(panel, 'Configuration', 'Check failed', { error: e.message });
     }
-    operation.fail('Configuration check failed', e.message);
+    operation.fail(t('dev_tools.config_failed'), e.message);
   } finally {
     if (checkBtn) {
       checkBtn.disabled = false;
-      checkBtn.innerHTML = `<span class="ui-icon material-icons bdt-button-icon">play_arrow</span> Check configuration`;
+      checkBtn.innerHTML = `<span class="ui-icon material-icons bdt-button-icon">play_arrow</span> ${t('dev_tools.config_check')}`;
     }
   }
 }
@@ -1021,19 +1026,19 @@ function _initReload(panel) {
 
 async function _runYamlReload(domain, panel = null) {
   const item = RELOAD_ITEMS.find(candidate => candidate.domain === domain);
-  const label = item?.label || domain;
+  const label = reloadLabel(item) || domain;
   const pane = panel?.isConnected ? panel.querySelector('[data-pane="reload"]') : null;
   const btn = pane?.querySelector(`.bdt-reload-btn[data-domain="${domain}"]`);
   const status = btn?.querySelector('.bdt-reload-status');
   const operation = startOperationFeedback({
-    label: `Reload ${label}`,
+    label: t('dev_tools.reload_label', { target: label }),
     icon: item?.icon || 'cached',
-    scope: 'Home Assistant instance',
+    scope: t('dev_tools.ha_instance'),
     target: label,
-    message: 'Applying YAML configuration...',
+    message: t('dev_tools.reload_applying'),
     retry: () => _runYamlReload(domain),
     open: () => _revealDevTools('reload'),
-    openLabel: 'Open',
+    openLabel: t('operations.open'),
     openIcon: 'construction',
   });
 
@@ -1056,8 +1061,8 @@ async function _runYamlReload(domain, panel = null) {
     if (panel?.isConnected) {
       _recordRawResult(panel, 'Reload', `${domain} ${data.success ? 'reloaded' : 'failed'}`, data);
     }
-    if (data.success) operation.finish(`${label} reloaded`);
-    else operation.fail(`${label} reload failed`, data.message || 'Home Assistant rejected the reload');
+    if (data.success) operation.finish(t('dev_tools.reload_complete', { target: label }));
+    else operation.fail(t('dev_tools.reload_failed', { target: label }), data.message || t('dev_tools.reload_rejected'));
   } catch (e) {
     if (status) {
       status.textContent = '✗';
@@ -1067,7 +1072,7 @@ async function _runYamlReload(domain, panel = null) {
     if (panel?.isConnected) {
       _recordRawResult(panel, 'Reload', `${domain} failed`, { error: e.message });
     }
-    operation.fail(`${label} reload failed`, e.message);
+    operation.fail(t('dev_tools.reload_failed', { target: label }), e.message);
   } finally {
     if (btn) btn.disabled = false;
     setTimeout(() => {

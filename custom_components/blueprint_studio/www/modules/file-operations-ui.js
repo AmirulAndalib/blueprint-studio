@@ -1,6 +1,6 @@
 /** FILE-OPERATIONS-UI.JS | Purpose: * Handles all dialog prompts for file and folder operations (create, rename, */
 import { state, elements } from './state.js';
-import { t } from './translations.js';
+import { t } from './translations.js?v=2.5.270';
 import { eventBus } from './event-bus.js';
 import {
   resetModalToDefault, 
@@ -494,7 +494,7 @@ export async function promptNewBlueprint(initialPath = null) {
 
   if (!result) return;
   if (result === defaultValue || result.endsWith("/")) {
-    showToast("Please enter a file name", "warning");
+    showToast(t("toast.please_enter_a_file_name"), "warning");
     return;
   }
 

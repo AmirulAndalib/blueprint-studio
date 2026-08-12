@@ -1,3 +1,4 @@
+import { t, tp } from './translations.js?v=2.5.270';
 /** DIFF-REVIEW.JS | Shared presentation primitives for read-only change review. */
 
 export const DEFAULT_DIFF_RENDER_LIMIT = 1500;
@@ -18,7 +19,17 @@ export function createDiffToggle(icon, label, pressed = false) {
   return button;
 }
 
-export function createDiffReviewToolbar({ summary, controls = [], label = 'Diff controls', className = '' }) {
+function syncToolbarTabStop(actions, preferred = null) {
+  const enabled = [...actions.querySelectorAll('button')].filter(control => !control.disabled && !control.hidden);
+  const target = enabled.includes(preferred)
+    ? preferred
+    : enabled.find(control => control.tabIndex === 0) || enabled[0];
+  [...actions.querySelectorAll('button')].forEach(control => {
+    control.tabIndex = control === target ? 0 : -1;
+  });
+}
+
+export function createDiffReviewToolbar({ summary, controls = [], label = t('diff_review.controls'), className = '' }) {
   const toolbar = document.createElement('div');
   toolbar.className = `diff-viewer-toolbar ${className}`.trim();
   const summaryElement = document.createElement('div');
@@ -33,8 +44,31 @@ export function createDiffReviewToolbar({ summary, controls = [], label = 'Diff 
 
   const actions = document.createElement('div');
   actions.className = 'diff-viewer-actions';
+  actions.setAttribute('role', 'toolbar');
+  actions.setAttribute('aria-orientation', 'horizontal');
   actions.setAttribute('aria-label', label);
-  controls.forEach(control => actions.appendChild(control));
+  controls.forEach((control, index) => {
+    control.tabIndex = index === 0 ? 0 : -1;
+    actions.appendChild(control);
+  });
+  actions.addEventListener('focusin', (event) => {
+    if (!controls.includes(event.target)) return;
+    syncToolbarTabStop(actions, event.target);
+  });
+  actions.addEventListener('keydown', (event) => {
+    if (!controls.includes(event.target)) return;
+    const enabled = controls.filter(control => !control.disabled && !control.hidden);
+    const current = enabled.indexOf(event.target);
+    if (current < 0) return;
+    let targetIndex;
+    if (event.key === 'ArrowRight') targetIndex = (current + 1) % enabled.length;
+    else if (event.key === 'ArrowLeft') targetIndex = (current - 1 + enabled.length) % enabled.length;
+    else if (event.key === 'Home') targetIndex = 0;
+    else if (event.key === 'End') targetIndex = enabled.length - 1;
+    else return;
+    event.preventDefault();
+    enabled[targetIndex].focus();
+  });
   toolbar.append(summaryElement, actions);
   return toolbar;
 }
@@ -95,7 +129,7 @@ export function markWhitespaceOnlyChanges(rows) {
 }
 
 export function renderTextDiff(target, rows, {
-  emptyMessage = 'No content changes.',
+  emptyMessage = t('diff_review.no_content_changes'),
   extraLineClass = '',
   maxRows = DEFAULT_DIFF_RENDER_LIMIT,
 } = {}) {
@@ -127,11 +161,11 @@ export function renderTextDiff(target, rows, {
     fallback.className = 'diff-large-fallback';
     fallback.setAttribute('role', 'status');
     const message = document.createElement('span');
-    message.textContent = `Showing ${visibleRows.length.toLocaleString()} of ${rows.length.toLocaleString()} lines to keep review responsive.`;
+    message.textContent = t('diff_review.showing_lines', { visible: visibleRows.length.toLocaleString(), total: rows.length.toLocaleString() });
     const showMore = document.createElement('button');
     showMore.type = 'button';
     showMore.className = 'ui-button';
-    showMore.textContent = 'Show more';
+    showMore.textContent = t('diff_review.show_more');
     showMore.addEventListener('click', () => renderTextDiff(target, rows, {
       emptyMessage,
       extraLineClass,
@@ -148,8 +182,8 @@ export function renderTextDiff(target, rows, {
 }
 
 export function createTextDiffReview(target, sourceRows, {
-  emptyMessage = 'No changes to display.',
-  label = 'Diff review controls',
+  emptyMessage = t('diff_review.no_changes'),
+  label = t('diff_review.review_controls'),
 } = {}) {
   const rows = markWhitespaceOnlyChanges(sourceRows);
   const files = [...new Set(rows.map(row => row.file).filter(Boolean))];
@@ -159,18 +193,19 @@ export function createTextDiffReview(target, sourceRows, {
   let activeChange = 0;
   let renderLimit = DEFAULT_DIFF_RENDER_LIMIT;
 
-  const previous = createIconButton('keyboard_arrow_up', 'Previous change');
-  const next = createIconButton('keyboard_arrow_down', 'Next change');
-  const whitespace = createDiffToggle('space_bar', 'Hide whitespace-only changes');
-  const wrap = createDiffToggle('wrap_text', 'Wrap long lines', true);
-  const toolbar = createDiffReviewToolbar({ summary: 'Calculating changes...', controls: [previous, next, whitespace, wrap], label });
+  const previous = createIconButton('keyboard_arrow_up', t('diff_review.previous_change'));
+  const next = createIconButton('keyboard_arrow_down', t('diff_review.next_change'));
+  const whitespace = createDiffToggle('space_bar', t('diff_review.hide_whitespace'));
+  const wrap = createDiffToggle('wrap_text', t('diff_review.wrap_lines'), true);
+  const toolbar = createDiffReviewToolbar({ summary: t('diff_review.calculating'), controls: [previous, next, whitespace, wrap], label });
   const summary = toolbar.querySelector('.diff-viewer-summary span:last-child');
   const layout = document.createElement('div');
   layout.className = 'diff-review-layout';
   const fileList = document.createElement('div');
   fileList.className = 'diff-file-list';
   fileList.setAttribute('role', 'listbox');
-  fileList.setAttribute('aria-label', 'Changed files');
+  fileList.setAttribute('aria-orientation', 'vertical');
+  fileList.setAttribute('aria-label', t('diff_review.changed_files'));
   const viewer = document.createElement('div');
   viewer.className = 'diff-text-viewer diff-text-viewer--commit diff-text-viewer--wrap';
   layout.append(fileList, viewer);
@@ -195,6 +230,7 @@ export function createTextDiffReview(target, sourceRows, {
       button.className = 'diff-file-list-item';
       button.setAttribute('role', 'option');
       button.setAttribute('aria-selected', String(file === selectedFile));
+      button.tabIndex = file === selectedFile ? 0 : -1;
       button.title = file;
       const count = new Set(rows.filter(row => row.file === file && row.change !== undefined).map(row => row.change)).size;
       button.innerHTML = '<span class="ui-icon material-icons" aria-hidden="true">description</span>';
@@ -215,6 +251,25 @@ export function createTextDiffReview(target, sourceRows, {
     });
   }
 
+  fileList.addEventListener('keydown', (event) => {
+    const items = [...fileList.querySelectorAll('.diff-file-list-item')];
+    const current = items.indexOf(event.target.closest?.('.diff-file-list-item'));
+    if (current < 0 || !items.length) return;
+    let targetIndex;
+    if (event.key === 'ArrowDown' || event.key === 'ArrowRight') targetIndex = (current + 1) % items.length;
+    else if (event.key === 'ArrowUp' || event.key === 'ArrowLeft') targetIndex = (current - 1 + items.length) % items.length;
+    else if (event.key === 'Home') targetIndex = 0;
+    else if (event.key === 'End') targetIndex = items.length - 1;
+    else return;
+    event.preventDefault();
+    const file = files[targetIndex];
+    items[targetIndex].click();
+    requestAnimationFrame(() => {
+      [...fileList.querySelectorAll('.diff-file-list-item')]
+        .find(item => item.title === file)?.focus();
+    });
+  });
+
   function highlightActiveChange() {
     viewer.querySelectorAll('.diff-text-line--active').forEach(line => line.classList.remove('diff-text-line--active'));
     const ids = changeIds();
@@ -232,8 +287,10 @@ export function createTextDiffReview(target, sourceRows, {
     renderTextDiff(viewer, filtered, { emptyMessage, maxRows: renderLimit });
     viewer.classList.toggle('diff-text-viewer--wrap', wrapLines);
     const position = ids.length ? `${activeChange + 1} / ${ids.length}` : '0';
-    summary.textContent = `${position} ${ids.length === 1 ? 'change' : 'changes'}${selectedFile ? ` in ${selectedFile}` : ''}`;
+    const changeText = ids.length ? tp('diff_review.change_count', ids.length) : t('diff_review.no_change_count');
+    summary.textContent = `${position} ${changeText}${selectedFile ? ` ${t('diff_review.in_file', { file: selectedFile })}` : ''}`;
     previous.disabled = next.disabled = ids.length === 0;
+    syncToolbarTabStop(toolbar.querySelector('.diff-viewer-actions'));
     highlightActiveChange();
   }
 
@@ -247,7 +304,7 @@ export function createTextDiffReview(target, sourceRows, {
       render();
       return;
     }
-    summary.textContent = `${activeChange + 1} / ${ids.length} ${ids.length === 1 ? 'change' : 'changes'}${selectedFile ? ` in ${selectedFile}` : ''}`;
+    summary.textContent = `${activeChange + 1} / ${ids.length} ${tp('diff_review.change_count', ids.length)}${selectedFile ? ` ${t('diff_review.in_file', { file: selectedFile })}` : ''}`;
     highlightActiveChange();
   }
 
@@ -256,7 +313,7 @@ export function createTextDiffReview(target, sourceRows, {
   whitespace.addEventListener('click', () => {
     hideWhitespace = !hideWhitespace;
     whitespace.setAttribute('aria-pressed', String(hideWhitespace));
-    whitespace.title = hideWhitespace ? 'Show whitespace-only changes' : 'Hide whitespace-only changes';
+    whitespace.title = hideWhitespace ? t('diff_review.show_whitespace') : t('diff_review.hide_whitespace');
     whitespace.setAttribute('aria-label', whitespace.title);
     activeChange = 0;
     renderLimit = DEFAULT_DIFF_RENDER_LIMIT;

@@ -1,4 +1,5 @@
 import { state } from './state.js';
+import { MAX_NAVIGATION_HISTORY, appendBoundedHistory } from './history-limits.js?v=2.5.270';
 import {
   renderFileTree,
   loadDirectory,
@@ -69,7 +70,7 @@ async function _navigateToParent(folderPath) {
   }
 
   if (state.currentNavigationPath !== folderPath) {
-    state.navigationHistory.push(state.currentNavigationPath);
+    appendBoundedHistory(state.navigationHistory, state.currentNavigationPath, MAX_NAVIGATION_HISTORY);
   }
   state.currentNavigationPath = folderPath;
 

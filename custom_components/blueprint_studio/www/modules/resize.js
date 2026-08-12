@@ -6,8 +6,8 @@ import {
   getSidebarMaxWidth,
   isWorkspaceDrawerMode,
   SIDEBAR_MIN_WIDTH,
-} from './workspace-layout.js?v=2.5.188';
-import { captureEditorViewports, scheduleEditorViewportRestore } from './editor-viewport.js?v=2.5.188';
+} from './workspace-layout.js?v=2.5.270';
+import { captureEditorViewports, scheduleEditorViewportRestore } from './editor-viewport.js?v=2.5.270';
 
 /**
  * Initialize the sidebar resize handle

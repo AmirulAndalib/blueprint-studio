@@ -33,6 +33,45 @@ export function initializeToolbarControls(toolbar = document.querySelector('.too
   });
 }
 
+function iconButtonText(button) {
+  if (button.matches('.ui-icon, .material-icons, .octicon')) return '';
+  const clone = button.cloneNode(true);
+  clone.querySelectorAll('.ui-icon, .material-icons, .octicon, [aria-hidden="true"]')
+    .forEach((icon) => icon.remove());
+  return clone.textContent.trim();
+}
+
+/** Give icon-only buttons a usable accessible name and shared visible tooltip. */
+export function ensureIconButtonLabels(root = document) {
+  const buttons = root.matches?.('button')
+    ? [root]
+    : [...root.querySelectorAll('button')];
+  buttons.forEach((button) => {
+    const hasIcon = button.querySelector('.ui-icon, .material-icons, .octicon');
+    const isIconGlyph = button.matches('.ui-icon, .material-icons, .octicon');
+    if ((!hasIcon && !isIconGlyph) || iconButtonText(button)) return;
+    const label = button.getAttribute('aria-label')?.trim() || button.title.trim();
+    if (!label) return;
+    button.setAttribute('aria-label', label);
+    if (!button.dataset.tooltip && !button.dataset.overflowTooltip) {
+      button.dataset.tooltip = button.title.trim() || label;
+    }
+    button.classList.add('ui-tooltip');
+    button.removeAttribute('title');
+  });
+}
+
+export function observeIconButtonAccessibility(root = document.body) {
+  ensureIconButtonLabels(root);
+  const observer = new MutationObserver((records) => {
+    records.forEach((record) => record.addedNodes.forEach((node) => {
+      if (node.nodeType === Node.ELEMENT_NODE) ensureIconButtonLabels(node);
+    }));
+  });
+  observer.observe(root, { childList: true, subtree: true });
+  return observer;
+}
+
 /**
  * Updates toolbar button states based on current editor state
  * Enables/disables save, undo, redo, and download buttons

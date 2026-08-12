@@ -6,8 +6,8 @@
 
 import { state, elements } from '../state.js';
 import { eventBus } from '../event-bus.js';
-import { t } from '../translations.js';
-import { API_BASE, IMAGE_EXTENSIONS, VIDEO_EXTENSIONS, AUDIO_EXTENSIONS } from '../constants.js';
+import { t } from '../translations.js?v=2.5.270';
+import { API_BASE, IMAGE_EXTENSIONS, VIDEO_EXTENSIONS, AUDIO_EXTENSIONS } from '../constants.js?v=2.5.270';
 import { fetchWithAuth } from '../api.js';
 import { 
     renderFileTree as renderFileTreeImpl,
@@ -17,8 +17,8 @@ import {
     startInlineExplorerRename
 } from '../file-tree.js';
 import { showToast, setButtonLoading, showConfirmDialog } from '../ui.js';
-import { classifyTreeError, renderTreeViewState } from '../tree-view-state.js?v=2.5.188';
-import { startOperationFeedback } from '../feedback-service.js?v=2.5.188';
+import { classifyTreeError, renderTreeViewState } from '../tree-view-state.js?v=2.5.270';
+import { startOperationFeedback } from '../feedback-service.js?v=2.5.270';
 
 import { 
     isTextFile, 
@@ -32,7 +32,7 @@ import {
     isSftpPath as isSftpPathImpl,
     parseSftpPath as parseSftpPathImpl,
     openSftpFile as openSftpFileImpl
-} from '../sftp.js?v=2.5.188';
+} from '../sftp.js?v=2.5.270';
 import {
     saveFile as saveFileImpl,
     createFile as createFileImpl,
@@ -76,9 +76,9 @@ function openBlueprintConversionPath(path) {
 
 async function confirmBlueprintConversionRetry(request) {
     const confirmed = await showConfirmDialog({
-        title: 'Retry blueprint conversion?',
-        message: `Convert the original ${request.sourceKind.toLowerCase()} snapshot again and replace ${request.destinationPath} with the result?`,
-        confirmText: 'Retry Conversion',
+        title: t('blueprint_ops.conversion_retry_title'),
+        message: t('blueprint_ops.conversion_retry_message', { kind: request.sourceKind.toLowerCase(), path: request.destinationPath }),
+        confirmText: t('blueprint_ops.conversion_retry_confirm'),
         cancelText: t('modal.cancel_button'),
         isDanger: true,
     });
@@ -90,19 +90,19 @@ async function runBlueprintConversion(request) {
     let destinationSaved = false;
     let conversionComplete = false;
     const operation = startOperationFeedback({
-        label: 'Convert to blueprint',
+        label: t('blueprint_ops.conversion_label'),
         icon: 'architecture',
         scope: request.sourceKind,
         target: `${request.sourcePath} -> ${request.destinationPath}`,
-        message: `Converting ${request.sourceLabel}...`,
+        message: t('blueprint_ops.converting', { source: request.sourceLabel }),
         retry: () => confirmBlueprintConversionRetry(request),
         open: () => openBlueprintConversionPath(destinationSaved ? request.destinationPath : request.sourcePath),
-        openLabel: 'Open file',
+        openLabel: t('workspace_ops.open_file'),
         openIcon: 'description',
     });
 
     try {
-        operation.update({ message: `Converting ${request.sourceLabel}...`, percent: 20 });
+        operation.update({ message: t('blueprint_ops.converting', { source: request.sourceLabel }), percent: 20 });
         const response = await fetchWithAuth(API_BASE, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -113,11 +113,11 @@ async function runBlueprintConversion(request) {
             }),
         });
         if (!response?.success || typeof response.blueprint !== 'string' || !response.blueprint.trim()) {
-            throw new Error(response?.message || response?.error || 'Home Assistant returned no blueprint content');
+            throw new Error(response?.message || response?.error || t('blueprint_ops.no_content'));
         }
 
         conversionComplete = true;
-        operation.update({ message: `Saving ${request.destinationPath}...`, percent: 65 });
+        operation.update({ message: t('blueprint_ops.destination_saving', { path: request.destinationPath }), percent: 65 });
         let saveFailure = '';
         const saved = await createFileImpl(
             request.destinationPath,
@@ -132,18 +132,18 @@ async function runBlueprintConversion(request) {
                 onResult: result => { if (!result.success) saveFailure = result.message; },
             },
         );
-        if (!saved) throw new Error(saveFailure || 'Home Assistant rejected the generated file write');
+        if (!saved) throw new Error(saveFailure || t('blueprint_ops.generated_write_rejected'));
 
         destinationSaved = true;
-        operation.finish(`Created ${request.destinationPath}`, { percent: 100 });
-        showToast(`Blueprint created from ${request.sourceLabel} -> ${request.destinationPath}`, 'success');
+        operation.finish(t('blueprint_ops.destination_created', { path: request.destinationPath }), { percent: 100 });
+        showToast(t('toast.blueprint_created', { source: request.sourceLabel, destination: request.destinationPath }), 'success');
         return true;
     } catch (error) {
         const message = conversionComplete
-            ? 'Blueprint converted but could not be saved'
-            : 'Blueprint conversion failed';
+            ? t('blueprint_ops.converted_save_failed')
+            : t('blueprint_ops.conversion_failed');
         operation.fail(message, error.message);
-        showToast(`${message}: ${error.message}`, 'error');
+        showToast(t('toast.operation_failed', { operation: message, error: error.message }), 'error');
         return false;
     }
 }
@@ -231,7 +231,7 @@ export async function saveCurrentFile(isAutoSave = false) {
       eventBus.emit('settings:save');
 
       if (reallyAutoSave) {
-        showToast("Saved", "success", 1200);
+        showToast(t('toast.saved_plain'), "success", 1200);
       }
     } else {
       tab.saveState = 'failed';
@@ -282,7 +282,7 @@ export async function loadFile(path) {
 
       if (fileInfo && fileInfo.size > MAX_FILE_SIZE) {
           showToast(
-              `Cannot open ${path.split("/").pop()}: File is ${formatBytes(fileInfo.size)} (max ${formatBytes(MAX_FILE_SIZE)}).`,
+              t('toast.file_too_large', { file: path.split("/").pop(), size: formatBytes(fileInfo.size), max: formatBytes(MAX_FILE_SIZE) }),
               "error",
               8000
           );
@@ -376,7 +376,7 @@ export async function openFile(path, forceReload = false, noActivate = false, fo
       try {
         tab.content = atob(tab.content || '');
       } catch (error) {
-        showToast(`Could not decode ${filename} as text: ${error.message}`, 'error');
+        showToast(t('toast.text_decode_failed', { file: filename, error: error.message }), 'error');
         return;
       }
       tab.originalContent = tab.content;
@@ -688,7 +688,7 @@ export function initFileCoordinator(callbacks) {
 
     eventBus.on("blueprint:convert", async () => {
         if (!state.activeTab || !state.activeTab.content) {
-            showToast("No file open to convert", "warning");
+            showToast(t('toast.no_file_to_convert'), "warning");
             return;
         }
         const tab = state.activeTab;
@@ -722,7 +722,7 @@ export function initFileCoordinator(callbacks) {
     eventBus.on("blueprint:use", async () => {
         const tab = state.activeTab;
         if (!tab) {
-            showToast("No file open", "warning");
+            showToast(t('toast.no_file_open'), "warning");
             return;
         }
         const _v = window.__BS_VERSION__ || '0';

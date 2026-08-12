@@ -1,8 +1,11 @@
 /** USER-GUIDE.JS | Purpose: Interactive User Guide for Blueprint Studio */
 
 import { state, elements } from './state.js';
-import { t } from './translations.js';
-import { closeDialog, openDialog } from './dialog-manager.js';
+import { t } from './translations.js?v=2.5.270';
+import { closeDialog, openDialog } from './dialog-manager.js?v=2.5.270';
+import { eventBus } from './event-bus.js';
+import { fetchWithAuth } from './api.js?v=2.5.270';
+import { API_BASE } from './constants.js?v=2.5.270';
 
 const guideContent = [
     {
@@ -144,7 +147,7 @@ const guideContent = [
                 </tr>
                 <tr><td style="padding: 8px 12px;">Save Current File</td><td style="padding: 8px 12px;"><code>Ctrl+S</code></td></tr>
                 <tr><td style="padding: 8px 12px;">Save All Files</td><td style="padding: 8px 12px;"><code>Ctrl+Shift+S</code></td></tr>
-                <tr><td style="padding: 8px 12px;">Quick Open File</td><td style="padding: 8px 12px;"><code>Ctrl+E</code> or <code>Ctrl+P</code></td></tr>
+                <tr><td style="padding: 8px 12px;">Quick Open File</td><td style="padding: 8px 12px;"><code>Ctrl+E</code> or <code>Ctrl+T</code></td></tr>
                 <tr><td style="padding: 8px 12px;">Close Tab</td><td style="padding: 8px 12px;"><code>Alt+W</code></td></tr>
                 <tr><td style="padding: 8px 12px;">Next Tab</td><td style="padding: 8px 12px;"><code>Ctrl+Shift+]</code></td></tr>
                 <tr><td style="padding: 8px 12px;">Previous Tab</td><td style="padding: 8px 12px;"><code>Ctrl+Shift+[</code></td></tr>
@@ -161,6 +164,7 @@ const guideContent = [
                 <tr><td style="padding: 8px 12px;">Format YAML</td><td style="padding: 8px 12px;"><code>Shift+Alt+F</code></td></tr>
                 <tr><td style="padding: 8px 12px;">Insert UUID</td><td style="padding: 8px 12px;"><code>Ctrl+Shift+U</code></td></tr>
                 <tr><td style="padding: 8px 12px;">Trigger Autocomplete</td><td style="padding: 8px 12px;"><code>Ctrl+Space</code></td></tr>
+                <tr><td style="padding: 8px 12px;">Toggle Comment</td><td style="padding: 8px 12px;"><code>Ctrl+/</code></td></tr>
             </table>
 
             <h2>Navigation &amp; Panels</h2>
@@ -173,6 +177,9 @@ const guideContent = [
                 <tr><td style="padding: 8px 12px;">Toggle Sidebar</td><td style="padding: 8px 12px;"><code>Ctrl+B</code></td></tr>
                 <tr><td style="padding: 8px 12px;">Toggle Split View</td><td style="padding: 8px 12px;"><code>Ctrl+\\</code></td></tr>
                 <tr><td style="padding: 8px 12px;">Toggle Terminal</td><td style="padding: 8px 12px;"><code>Ctrl+\`</code></td></tr>
+                <tr><td style="padding: 8px 12px;">Focus Primary / Secondary Pane</td><td style="padding: 8px 12px;"><code>Ctrl+1</code> / <code>Ctrl+2</code></td></tr>
+                <tr><td style="padding: 8px 12px;">Toggle Source Control Panel</td><td style="padding: 8px 12px;"><code>Ctrl+Shift+G</code></td></tr>
+                <tr><td style="padding: 8px 12px;">Open Keyboard Shortcuts</td><td style="padding: 8px 12px;"><code>F1</code></td></tr>
             </table>
 
             <h2>Search</h2>
@@ -202,7 +209,7 @@ const guideContent = [
             <p>Blueprint Studio offers three levels of search to help you navigate and edit with precision.</p>
 
             <h2>1. Quick File Open (Ctrl+E)</h2>
-            <p>The fastest way to jump between files. Press <code>Ctrl+E</code> (or <code>Ctrl+P</code>), start typing a part of any filename, and press <code>Enter</code> to open it instantly. Searches by filename, not content.</p>
+            <p>The fastest way to jump between files. Press <code>Ctrl+E</code> (or <code>Ctrl+T</code>), start typing a part of any filename, and press <code>Enter</code> to open it instantly. Searches by filename, not content.</p>
 
             <h2>2. Local Search (Ctrl+F)</h2>
             <p>Search within the active file. The search bar slides in from the top of the editor. Features include:</p>
@@ -792,8 +799,67 @@ const guideContent = [
                 Use <strong>Export Settings</strong> to back up your configuration (theme, fonts, AI keys, git settings) and <strong>Import Settings</strong> to restore them — or apply them to a new Blueprint Studio installation.
             </div>
         `
+    },
+    {
+        id: 'troubleshooting',
+        group: 'Help',
+        groupKey: 'help.group',
+        title: 'Troubleshooting',
+        titleKey: 'help.troubleshooting',
+        icon: 'build_circle',
+        content: `
+            <h1>Troubleshooting</h1>
+            <p>Start with the recovery action that matches the visible state. Your files are not changed unless an action explicitly says so.</p>
+            <div class="help-diagnostic-list">
+                <section><h2>Stale or incomplete interface</h2><p>Open <strong>Settings → Advanced → Clear Frontend Cache</strong>, then reload Blueprint Studio. This removes old service-worker assets without changing configuration files.</p></section>
+                <section><h2>GitHub or Gitea authentication</h2><p>Open <strong>Settings → Source Control</strong>, verify the displayed account, and sign in again. Saved credentials remain hidden and can be explicitly cleared.</p></section>
+                <section><h2>Source-control conflicts</h2><p>Open the Source Control panel and use its recovery message. Review conflicted files before Abort, Reset, Force Push, or any destructive action.</p></section>
+                <section><h2>SFTP or terminal connection</h2><p>Confirm the selected host, port, username, and authentication method in <strong>Settings → Connections</strong>. Connection failures remain available in Operations for Retry.</p></section>
+                <section><h2>Validation findings</h2><p>Open Problems for the full message and exact file location. The editor marker is intentionally concise; Problems contains the validation authority and next action.</p></section>
+                <section><h2>AI provider errors</h2><p>Open <strong>Settings → AI and Privacy</strong>, confirm the provider and model, then replace the hidden credential only when necessary. Proposed edits are never applied without review.</p></section>
+            </div>
+        `
+    },
+    {
+        id: 'about-support',
+        group: 'Help',
+        groupKey: 'help.group',
+        title: 'About & Support',
+        titleKey: 'help.about_support',
+        icon: 'help_center',
+        searchText: 'about support version Home Assistant browser report issue request feature GitHub',
+        content: () => `
+            <h1>${t('help.about_support')}</h1>
+            <p>${t('help.version_hint')}</p>
+            <dl class="help-version-details">
+                <div><dt>Blueprint Studio</dt><dd id="help-integration-version">${window.__BS_VERSION__ || t('common.unknown')}</dd></div>
+                <div><dt>Home Assistant</dt><dd id="help-ha-version">${t('common.loading')}</dd></div>
+                <div><dt>${t('help.browser')}</dt><dd id="help-browser-version">${navigator.userAgent}</dd></div>
+            </dl>
+            <div class="help-support-actions">
+                <button type="button" class="ui-button ui-button--primary" data-help-action="report-issue"><span class="ui-icon material-icons" aria-hidden="true">bug_report</span><span>${t('support.issue_title')}</span></button>
+                <button type="button" class="ui-button ui-button--secondary" data-help-action="request-feature"><span class="ui-icon material-icons" aria-hidden="true">lightbulb</span><span>${t('support.feature_title')}</span></button>
+                <a class="ui-button ui-button--secondary" href="https://github.com/ha-china/blueprint-studio" target="_blank" rel="noopener noreferrer"><span class="ui-icon material-icons" aria-hidden="true">code</span><span>${t('help.project_github')}</span></a>
+                <a class="ui-button ui-button--secondary" href="https://github.com/ha-china/blueprint-studio" target="_blank" rel="noopener noreferrer"><span class="ui-icon material-icons" aria-hidden="true">star</span><span>${t('support.github_star')}</span></a>
+                <a class="ui-button ui-button--secondary" href="https://github.com/soulripper13" target="_blank" rel="noopener noreferrer"><span class="ui-icon material-icons" aria-hidden="true">person_add</span><span>${t('support.github_follow')}</span></a>
+            </div>
+        `
     }
 ];
+
+let helpVersionPromise = null;
+
+async function hydrateHelpVersionDetails(contentArea) {
+    const integration = contentArea.querySelector('#help-integration-version');
+    const homeAssistant = contentArea.querySelector('#help-ha-version');
+    if (!integration || !homeAssistant) return;
+    integration.textContent = window.__BS_VERSION__ || 'Unknown';
+    helpVersionPromise ||= fetchWithAuth(`${API_BASE}?action=get_version`).catch(() => ({}));
+    const versions = await helpVersionPromise;
+    if (!homeAssistant.isConnected) return;
+    integration.textContent = versions.integration_version || window.__BS_VERSION__ || 'Unknown';
+    homeAssistant.textContent = versions.ha_version || 'Unavailable';
+}
 
 /**
  * Shows the User Guide modal
@@ -811,9 +877,9 @@ export function showUserGuide(options = {}) {
         onRequestClose: () => closeDialog(modalOverlay),
     });
 
-    // Select first item by default
-    const firstItem = modalOverlay.querySelector('.user-guide-nav-item');
-    if (firstItem) firstItem.click();
+    const search = modalOverlay.querySelector('#user-guide-search-input');
+    if (search) search.value = '';
+    renderNav(modalOverlay.querySelector('#user-guide-nav'), '', options.section || 'getting-started');
 }
 
 /**
@@ -827,15 +893,15 @@ function createUserGuideModal() {
     overlay.innerHTML = `
         <div class="modal user-guide-modal modal--full-workflow" role="dialog" aria-modal="true" aria-labelledby="user-guide-title">
             <div class="modal-header">
-                <div class="modal-title" id="user-guide-title">Blueprint Studio User Guide</div>
-                <button class="modal-close" id="btn-close-user-guide" type="button" aria-label="Close user guide">
+                <div class="modal-title" id="user-guide-title">${t('help.title')}</div>
+                <button class="modal-close" id="btn-close-user-guide" type="button" aria-label="${t('help.close')}">
                     <span class="ui-icon material-icons">close</span>
                 </button>
             </div>
             <div class="user-guide-container">
                 <div class="user-guide-sidebar">
                     <div class="user-guide-search">
-                        <input type="text" id="user-guide-search-input" placeholder="Search guide...">
+                        <input type="search" id="user-guide-search-input" placeholder="${t('help.search')}" aria-label="${t('help.search')}">
                     </div>
                     <div class="user-guide-nav" id="user-guide-nav">
                         <!-- Nav items will be injected here -->
@@ -856,7 +922,7 @@ function createUserGuideModal() {
     });
 
     const navContainer = overlay.querySelector('#user-guide-nav');
-    renderNav(navContainer);
+    renderNav(navContainer, '', 'getting-started');
 
     const searchInput = overlay.querySelector('#user-guide-search-input');
     searchInput.addEventListener('input', (e) => {
@@ -869,32 +935,36 @@ function createUserGuideModal() {
 /**
  * Renders the navigation sidebar
  */
-function renderNav(container, filter = '') {
+function renderNav(container, filter = '', selectedId = '') {
     container.innerHTML = '';
 
     const normalizedFilter = filter.toLowerCase();
     const filtered = guideContent.filter(item =>
-        item.title.toLowerCase().includes(normalizedFilter) ||
-        item.group.toLowerCase().includes(normalizedFilter) ||
-        item.content.toLowerCase().includes(normalizedFilter)
+        (item.titleKey ? t(item.titleKey) : item.title).toLowerCase().includes(normalizedFilter) ||
+        (item.groupKey ? t(item.groupKey) : item.group).toLowerCase().includes(normalizedFilter) ||
+        `${item.searchText || ''} ${typeof item.content === 'function' ? item.content() : item.content}`.toLowerCase().includes(normalizedFilter)
     );
 
     let currentGroup = '';
 
     filtered.forEach(item => {
-        if (item.group !== currentGroup) {
+        const itemGroup = item.groupKey ? t(item.groupKey) : item.group;
+        const itemTitle = item.titleKey ? t(item.titleKey) : item.title;
+        if (itemGroup !== currentGroup) {
             const groupDiv = document.createElement('div');
             groupDiv.className = 'user-guide-nav-group';
-            groupDiv.textContent = item.group;
+            groupDiv.textContent = itemGroup;
             container.appendChild(groupDiv);
-            currentGroup = item.group;
+            currentGroup = itemGroup;
         }
 
-        const navItem = document.createElement('div');
+        const navItem = document.createElement('button');
+        navItem.type = 'button';
         navItem.className = 'user-guide-nav-item';
+        navItem.dataset.helpSection = item.id;
         navItem.innerHTML = `
             <span class="ui-icon ui-icon--size-action material-icons">${item.icon}</span>
-            <span>${item.title}</span>
+            <span>${itemTitle}</span>
         `;
 
         navItem.addEventListener('click', () => {
@@ -907,7 +977,12 @@ function renderNav(container, filter = '') {
         });
 
         container.appendChild(navItem);
+        if (item.id === selectedId) navItem.click();
     });
+
+    if (selectedId && !container.querySelector('.user-guide-nav-item.active')) {
+        container.querySelector('.user-guide-nav-item')?.click();
+    }
 }
 
 /**
@@ -915,7 +990,10 @@ function renderNav(container, filter = '') {
  */
 function renderContent(item) {
     const contentArea = document.getElementById('user-guide-content');
-    contentArea.innerHTML = item.content;
+    contentArea.innerHTML = typeof item.content === 'function' ? item.content() : item.content;
+    contentArea.querySelector('[data-help-action="report-issue"]')?.addEventListener('click', () => eventBus.emit('ui:report-issue'));
+    contentArea.querySelector('[data-help-action="request-feature"]')?.addEventListener('click', () => eventBus.emit('ui:request-feature'));
+    void hydrateHelpVersionDetails(contentArea);
 
     // Scroll to top
     contentArea.scrollTop = 0;

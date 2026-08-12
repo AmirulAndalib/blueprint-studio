@@ -1,17 +1,26 @@
 /** GLOBAL-SEARCH.JS | Purpose: * Provides sidebar-based global search and replace functionality across all files. */
 import { state, elements } from './state.js';
-import { HA_ENTITIES } from './ha-autocomplete.js?v=2.5.188';
-import { t } from './translations.js';
+import { HA_ENTITIES } from './ha-autocomplete.js?v=2.5.270';
+import { t, tp } from './translations.js?v=2.5.270';
 import { fetchWithAuth, urlWithTicket } from './api.js';
 import { eventBus } from './event-bus.js';
-import { API_BASE, STREAM_BASE } from './constants.js';
+import { API_BASE, STREAM_BASE } from './constants.js?v=2.5.270';
 import { copyToClipboard } from './utils.js';
 import { refreshActivityRail } from './activity-rail.js';
-import { startOperationFeedback } from './feedback-service.js?v=2.5.188';
+import { startOperationFeedback } from './feedback-service.js?v=2.5.270';
 import {
   showToast,
   showConfirmDialog
 } from './ui.js';
+
+// Search is intentionally single-flight: a new query owns the result surface
+// and cancels any stream/fallback still producing results for the old query.
+let activeSearchController = null;
+let activeSearchSequence = 0;
+
+function isCurrentSearch(sequence, controller) {
+  return sequence === activeSearchSequence && !controller.signal.aborted;
+}
 
 function setGlobalSearchLoading(visible) {
   if (!elements.globalSearchLoading) return;
@@ -27,6 +36,11 @@ function setGlobalSearchLoading(visible) {
  */
 export async function performGlobalSearch(query, options = {}) {
   if (!query || query.length < 2) return;
+
+  activeSearchController?.abort();
+  const controller = new AbortController();
+  activeSearchController = controller;
+  const sequence = ++activeSearchSequence;
 
   setGlobalSearchLoading(true);
   if (elements.globalSearchResults) elements.globalSearchResults.innerHTML = "";
@@ -61,7 +75,9 @@ export async function performGlobalSearch(query, options = {}) {
       if (options.include) params.set("include", options.include);
       if (options.exclude) params.set("exclude", options.exclude);
 
-      const response = await fetch(await urlWithTicket(`${STREAM_BASE}?${params}`));
+      const response = await fetch(await urlWithTicket(`${STREAM_BASE}?${params}`), {
+        signal: controller.signal,
+      });
       if (!response.ok || !response.body) throw new Error("Stream unavailable");
 
       const fileResults = [];
@@ -72,6 +88,7 @@ export async function performGlobalSearch(query, options = {}) {
       while (true) {
           const { done, value } = await reader.read();
           if (done) break;
+          if (!isCurrentSearch(sequence, controller)) return;
           buffer += decoder.decode(value, { stream: true });
           const lines = buffer.split("\n");
           buffer = lines.pop();
@@ -81,18 +98,20 @@ export async function performGlobalSearch(query, options = {}) {
               try { fileResults.push(JSON.parse(line)); hadNew = true; } catch { /* skip */ }
           }
           // Incrementally patch the DOM as each file's results arrive
-          if (hadNew) {
+          if (hadNew && isCurrentSearch(sequence, controller)) {
               state._lastGlobalSearchResults = fileResults;
               renderGlobalSearchResults(fileResults, entityMatches);
           }
       }
 
+      if (!isCurrentSearch(sequence, controller)) return;
       setGlobalSearchLoading(false);
       state._lastGlobalSearchResults = fileResults;
       renderGlobalSearchResults(fileResults, entityMatches);
 
   } catch (streamErr) {
       // Fallback: POST-based search (no incremental render)
+      if (controller.signal.aborted || sequence !== activeSearchSequence) return;
       try {
           const data = await fetchWithAuth(API_BASE, {
               method: "POST",
@@ -106,16 +125,19 @@ export async function performGlobalSearch(query, options = {}) {
                   include: options.include || "",
                   exclude: options.exclude || ""
               }),
+              signal: controller.signal,
           });
+          if (!isCurrentSearch(sequence, controller)) return;
           const fileResults = Array.isArray(data) ? data : [];
           setGlobalSearchLoading(false);
           state._lastGlobalSearchResults = fileResults;
           renderGlobalSearchResults(fileResults, entityMatches);
       } catch (e) {
+          if (controller.signal.aborted || sequence !== activeSearchSequence) return;
           setGlobalSearchLoading(false);
-          console.error("Search failed", e);
+          console.error(t('search.global_failed_log'), e);
           if (elements.globalSearchResults) {
-              elements.globalSearchResults.innerHTML = `<div class="global-search-error-state">Search failed: ${escapeHtml(e.message)}</div>`;
+              elements.globalSearchResults.innerHTML = `<div class="global-search-error-state">${escapeHtml(t('search.global_failed', { error: e.message }))}</div>`;
           }
       }
   }
@@ -153,7 +175,7 @@ export function triggerGlobalSearch() {
  */
 export async function copyEntityId(entityId) {
   const success = await copyToClipboard(entityId);
-  showToast(success ? `Copied: ${entityId}` : "Copy failed", success ? "success" : "error");
+  showToast(success ? t('toast.copied_value', { value: entityId }) : t('toast.copy_failed'), success ? "success" : "error");
 }
 
 /**
@@ -266,14 +288,14 @@ function openGlobalSearchRequest(request) {
 
 async function runGlobalReplace(request) {
   const operation = startOperationFeedback({
-      label: `Replace "${request.query}"`,
+      label: t('search_ops.replace_label', { query: request.query }),
       icon: "find_replace",
-      scope: "Workspace search",
-      target: request.include || `${request.matchCount} matches in ${request.fileCount} files`,
-      message: `Replacing matches across ${request.fileCount} files...`,
+      scope: t('search_ops.workspace_scope'),
+      target: request.include || t('search_ops.matches_in_files', { matches: request.matchCount, files: request.fileCount }),
+      message: tp('search_ops.replacing_files', request.fileCount),
       retry: () => runGlobalReplace(request),
       open: () => openGlobalSearchRequest(request),
-      openLabel: "Open",
+      openLabel: t('search_ops.open'),
       openIcon: "search",
   });
 
@@ -294,18 +316,18 @@ async function runGlobalReplace(request) {
       });
 
       if (response.success) {
-          operation.finish(`${response.files_updated || 0} files updated`, {
-              detail: `${request.matchCount} matching results were reviewed`,
+          operation.finish(tp('search_ops.files_updated', response.files_updated || 0), {
+              detail: tp('search_ops.matches_reviewed', request.matchCount),
           });
           eventBus.emit("ui:reload-files", { force: true });
           if (state.activeSidebarView === "search" && elements.globalSearchInput?.value === request.query) {
               triggerGlobalSearch();
           }
       } else {
-          operation.fail("Workspace replace failed", response.message || "The replacement was not applied");
+          operation.fail(t('search_ops.workspace_replace_failed'), response.message || t('search_ops.replace_not_applied'));
       }
   } catch (e) {
-      operation.fail("Workspace replace failed", e.message);
+      operation.fail(t('search_ops.workspace_replace_failed'), e.message);
   }
 }
 
@@ -319,10 +341,10 @@ export async function replaceInFile(path) {
     if (!query) return;
 
     const confirmed = await showConfirmDialog({
-        title: "Replace in File",
-        message: `Replace all occurrences of <b>"${escapeHtml(query)}"</b> with <b>"${escapeHtml(replacement)}"</b> in <b>${path.split('/').pop()}</b>?`,
-        confirmText: "Replace",
-        cancelText: "Cancel",
+        title: t('search_ops.replace_in_file_title'),
+        message: t('search_ops.replace_in_file_message', { query: escapeHtml(query), replacement: escapeHtml(replacement), file: path.split('/').pop() }),
+        confirmText: t('search_ops.replace_confirm'),
+        cancelText: t('modal.cancel_button'),
         isDanger: true
     });
 
@@ -341,14 +363,14 @@ export async function replaceInFile(path) {
 
 async function runReplaceInFile(request) {
   const operation = startOperationFeedback({
-      label: `Replace in ${request.path.split('/').pop()}`,
+      label: t('search_ops.replace_file_label', { file: request.path.split('/').pop() }),
       icon: "find_replace",
-      scope: "Workspace search",
+      scope: t('search_ops.workspace_scope'),
       target: request.path,
-      message: "Replacing matches in file...",
+      message: t('search_ops.replacing_file'),
       retry: () => runReplaceInFile(request),
       open: () => openGlobalSearchRequest({ ...request, include: request.path, exclude: "" }),
-      openLabel: "Open",
+      openLabel: t('search_ops.open'),
       openIcon: "search",
   });
 
@@ -368,17 +390,17 @@ async function runReplaceInFile(request) {
         });
 
         if (response.success) {
-            operation.finish(`${request.path.split('/').pop()} updated`);
+            operation.finish(t('search_ops.file_updated', { file: request.path.split('/').pop() }));
             const tab = state.openTabs.find(t => t.path === request.path);
             if (tab) eventBus.emit("file:open", { path: request.path, forceReload: true });
             if (state.activeSidebarView === "search" && elements.globalSearchInput?.value === request.query) {
                 triggerGlobalSearch();
             }
         } else {
-            operation.fail("File replace failed", response.message || "The replacement was not applied");
+            operation.fail(t('search_ops.file_replace_failed'), response.message || t('search_ops.replace_not_applied'));
         }
     } catch (e) {
-        operation.fail("File replace failed", e.message);
+        operation.fail(t('search_ops.file_replace_failed'), e.message);
     }
 }
 
@@ -409,7 +431,7 @@ export async function replaceSingleMatch(path, line, matchId) {
 
             if (lineText !== newLineText) {
                 state.editor.replaceRange(newLineText, {line: lineIdx, ch: 0}, {line: lineIdx, ch: lineText.length});
-                showToast("Applied replacement in editor", "success");
+                showToast(t('toast.replacement_applied'), "success");
                 document.getElementById(matchId)?.remove();
             }
         }
@@ -425,8 +447,8 @@ function _buildMatchHtml(m, matchId) {
         <span class="global-search-match-line">${m.line}:</span>
         <span class="global-search-match-excerpt">${escapeHtml(m.content.trim())}</span>
         <div class="match-hover-actions global-search-match-actions">
-            <span class="ui-icon material-icons global-search-match-action-icon" title="Replace this match" onclick="event.stopPropagation(); window.blueprintStudio.replaceSingleMatch('${escapedPath}', ${m.line}, '${matchId}')">find_replace</span>
-            <span class="ui-icon material-icons global-search-match-action-icon" title="Dismiss" onclick="event.stopPropagation(); document.getElementById('${matchId}').remove()">close</span>
+            <span class="ui-icon material-icons global-search-match-action-icon" title="${t('search.replace_match')}" aria-label="${t('search.replace_match')}" onclick="event.stopPropagation(); window.blueprintStudio.replaceSingleMatch('${escapedPath}', ${m.line}, '${matchId}')">find_replace</span>
+            <span class="ui-icon material-icons global-search-match-action-icon" title="${t('common.dismiss')}" aria-label="${t('common.dismiss')}" onclick="event.stopPropagation(); document.getElementById('${matchId}').remove()">close</span>
         </div>
     </div>`;
 }
@@ -445,8 +467,8 @@ function _buildFileGroupHtml(path, matches) {
             <span class="global-search-file-name">${filename}</span>
             <span class="global-search-file-folder">${folder}</span>
             <div class="search-result-actions global-search-file-actions">
-                <span class="ui-icon material-icons search-action-btn global-search-file-action-icon" title="Replace in this file" onclick="event.stopPropagation(); window.blueprintStudio.replaceInFile('${escapedPath}')">find_replace</span>
-                <span class="ui-icon material-icons search-action-btn global-search-file-action-icon" title="Dismiss file" onclick="event.stopPropagation(); document.getElementById('group-${safeId}').remove()">close</span>
+                <span class="ui-icon material-icons search-action-btn global-search-file-action-icon" title="${t('search.replace_file')}" aria-label="${t('search.replace_file')}" onclick="event.stopPropagation(); window.blueprintStudio.replaceInFile('${escapedPath}')">find_replace</span>
+                <span class="ui-icon material-icons search-action-btn global-search-file-action-icon" title="${t('search.dismiss_file')}" aria-label="${t('search.dismiss_file')}" onclick="event.stopPropagation(); document.getElementById('group-${safeId}').remove()">close</span>
                 <span class="badge global-search-file-badge">${matches.length}</span>
             </div>
         </div>

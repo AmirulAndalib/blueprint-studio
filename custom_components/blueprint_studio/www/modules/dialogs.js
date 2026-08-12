@@ -1,8 +1,9 @@
 /** DIALOGS.JS | Purpose: * Specialized dialog utilities for issue reporting, feature requests, and */
-import { API_BASE } from './constants.js';
+import { API_BASE } from './constants.js?v=2.5.270';
 import { fetchWithAuth } from './api.js';
 import { elements } from './state.js';
-import { closeDialog, openDialog } from './dialog-manager.js';
+import { closeDialog, openDialog } from './dialog-manager.js?v=2.5.270';
+import { showUserGuide } from './user-guide.js?v=2.5.270';
 
 /**
  * Opens GitHub issue form with bug report template
@@ -88,19 +89,18 @@ Add any other context, links, or references about the feature request here.
  * Shows keyboard shortcuts overlay
  */
 export function showShortcuts(options = {}) {
-  if (elements.shortcutsOverlay) {
-    openDialog(elements.shortcutsOverlay, {
-      initialFocus: '#shortcuts-close',
-      returnFocus: options.returnFocus,
-      onRequestClose: hideShortcuts,
-    });
-  }
+  showUserGuide({ section: 'shortcuts', returnFocus: options.returnFocus });
 }
 
 /**
  * Hides keyboard shortcuts overlay
  */
 export function hideShortcuts() {
+  const helpOverlay = document.getElementById('modal-user-guide-overlay');
+  if (helpOverlay?.classList.contains('visible')) {
+    closeDialog(helpOverlay);
+    return;
+  }
   if (elements.shortcutsOverlay) {
     closeDialog(elements.shortcutsOverlay);
   }

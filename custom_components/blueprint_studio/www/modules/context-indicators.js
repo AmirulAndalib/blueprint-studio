@@ -1,5 +1,5 @@
 /** CONTEXT-INDICATORS.JS | Compact workspace connection and repository context. */
-import { setOverflowTooltip } from './tooltip.js?v=2.5.188';
+import { setOverflowTooltip } from './tooltip.js?v=2.5.270';
 
 function createStatusDot(state) {
   const dot = document.createElement('span');
@@ -108,9 +108,12 @@ export function getRepositoryStatus(repositoryState, online = typeof navigator =
 export function renderRepositoryStatusBar(container, repositories) {
   if (!container) return;
   const enabled = repositories.filter(repository => repository.enabled);
-  container.replaceChildren();
   container.classList.toggle('hidden', enabled.length === 0);
-  if (!enabled.length) return;
+  if (!enabled.length) {
+    container.replaceChildren();
+    delete container.dataset.announcement;
+    return;
+  }
 
   const icon = document.createElement('span');
   icon.className = 'ui-icon material-icons status-repository-icon';
@@ -121,6 +124,11 @@ export function renderRepositoryStatusBar(container, repositories) {
     return `${repository.provider}: ${status.branch || 'Repository'}${stateLabels ? `, ${stateLabels}` : ''}`;
   });
   const offline = enabled.some(repository => getRepositoryStatus(repository.state).offline);
+  const announcement = summaries.join('. ');
+  const signature = `${offline ? 'offline' : 'available'}:${announcement}`;
+  if (container.dataset.announcement === signature) return;
+  container.dataset.announcement = signature;
+  container.replaceChildren();
   icon.textContent = offline ? 'cloud_off' : 'account_tree';
   const label = document.createElement('span');
   label.className = 'status-repository-label';
@@ -129,22 +137,32 @@ export function renderRepositoryStatusBar(container, repositories) {
   container.dataset.state = offline ? 'offline' : 'available';
   container.setAttribute('role', 'status');
   container.setAttribute('aria-live', 'polite');
-  container.setAttribute('aria-label', summaries.join('. '));
+  container.setAttribute('aria-atomic', 'true');
+  container.setAttribute('aria-label', announcement);
   container.title = summaries.join('\n');
 }
 
 export function renderSftpConnectionContext(container, connection, status) {
-  container?.querySelector('.sftp-connection-context')?.remove();
-  if (!container || !connection) return;
+  if (!container) return;
+  if (!connection) {
+    container.querySelector('.sftp-connection-context')?.remove();
+    return;
+  }
 
   const state = status === 'connecting' ? 'connecting' : status === 'error' ? 'error' : 'connected';
   const port = connection.port || 22;
   const endpoint = `${connection.username ? `${connection.username}@` : ''}${connection.host}:${port}`;
   const description = `${status === 'connecting' ? 'Connecting to' : status === 'error' ? 'Connection unavailable for' : 'Connected to'} ${endpoint}`;
+  const existing = container.querySelector('.sftp-connection-context');
+  if (existing?.dataset.announcement === description) return;
+  existing?.remove();
   const context = document.createElement('div');
   context.className = 'workspace-context sftp-connection-context';
   context.dataset.state = state;
+  context.dataset.announcement = description;
   context.setAttribute('role', 'status');
+  context.setAttribute('aria-live', 'polite');
+  context.setAttribute('aria-atomic', 'true');
   context.setAttribute('aria-label', description);
   const contextLabel = createContextLabel(endpoint);
   context.append(createStatusDot(state), contextLabel);

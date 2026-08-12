@@ -492,7 +492,18 @@
       position: relative;
       display: flex;
       align-items: center;
+    }
+
+    .theme-trigger {
+      align-items: center;
+      background: transparent;
+      border: 0;
+      color: inherit;
+      cursor: pointer;
+      display: flex;
+      font: inherit;
       gap: 4px;
+      padding: 0;
     }
 
     .theme-menu {
@@ -1289,11 +1300,14 @@
     }
 
     .search-toggle-icon {
+        background: transparent;
+        border: 0;
         cursor: pointer;
         color: var(--text-secondary);
         font-size: 18px;
         user-select: none;
         width: 20px;
+        padding: 0;
         text-align: center;
         transition: transform 0.2s;
     }
@@ -1338,9 +1352,12 @@
     }
 
     .global-replace-toggle {
+        background: transparent;
+        border: 0;
         color: var(--text-secondary);
         cursor: pointer;
         transition: transform 0.2s;
+        padding: 0;
     }
 
     .global-search-loading-icon {

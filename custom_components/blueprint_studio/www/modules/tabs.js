@@ -2,7 +2,7 @@
 import { state, elements } from './state.js';
 import { getFileIcon, getEditorMode, isTextFile, enableLongPressContextMenu } from './utils.js';
 import { eventBus } from './event-bus.js';
-import { API_BASE, IMAGE_EXTENSIONS, VIDEO_EXTENSIONS, AUDIO_EXTENSIONS } from './constants.js';
+import { API_BASE, IMAGE_EXTENSIONS, VIDEO_EXTENSIONS, AUDIO_EXTENSIONS } from './constants.js?v=2.5.270';
 import { fetchWithAuth } from './api.js';
 import { 
     getPaneForTab, 
@@ -12,7 +12,7 @@ import {
     disableSplitView,
     updatePaneSizes,
     initSplitResize
-} from './split-view.js?v=2.5.188';
+} from './split-view.js?v=2.5.270';
 import { cleanupMarkdownPreview } from './asset-preview.js';
 import { showConfirmDialog } from './ui.js';
 import { 
@@ -21,7 +21,7 @@ import {
     fitTerminal,
     toggleTerminal as toggleTerminalImpl,
     setTerminalMode
-} from './terminal.js?v=2.5.188';
+} from './terminal.js?v=2.5.270';
 import {
     createEditor,
     createSecondaryEditor,
@@ -45,15 +45,15 @@ import {
 } from './status-bar.js';
 import {
     saveSettings as saveSettingsImpl
-} from './settings.js?v=2.5.188';
+} from './settings.js?v=2.5.270';
 import {
     isSftpPath as isSftpPathImpl,
     parseSftpPath as parseSftpPathImpl,
     openSftpFile as openSftpFileImpl
-} from './sftp.js?v=2.5.188';
-import { setOverflowTooltip } from './tooltip.js?v=2.5.188';
+} from './sftp.js?v=2.5.270';
+import { setOverflowTooltip } from './tooltip.js?v=2.5.270';
 import { getEditorConfigIndent } from './editorconfig.js';
-import { restoreWelcomeWorkspace } from './editor-workflow.js?v=2.5.188';
+import { restoreWelcomeWorkspace } from './editor-workflow.js?v=2.5.270';
 
 /**
  * Pause all playing <video> and <audio> elements in the asset preview containers.
@@ -408,10 +408,28 @@ function createTabElement(tab, tabIndex, isActive, pane) {
     }
   });
   tabEl.addEventListener('keydown', (event) => {
+    if (event.target.closest('.tab-close')) return;
     if ((event.key === 'Enter' || event.key === ' ') && !event.target.closest('.tab-close')) {
       event.preventDefault();
       tabEl.click();
+      return;
     }
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+    const tabContainer = tabEl.parentElement;
+    const tabs = Array.from(tabContainer?.querySelectorAll(':scope > .tab') || []);
+    const current = tabs.indexOf(tabEl);
+    if (current < 0 || tabs.length < 2) return;
+    event.preventDefault();
+    const targetIndex = event.key === 'Home'
+      ? 0
+      : event.key === 'End'
+        ? tabs.length - 1
+        : (current + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
+    const targetTabIndex = tabs[targetIndex].dataset.tabIndex;
+    tabs[targetIndex].click();
+    window.requestAnimationFrame(() => {
+      tabContainer?.querySelector(`[data-tab-index="${targetTabIndex}"]`)?.focus();
+    });
   });
 
   // Drag-drop handlers (wrapped to pass the original event)

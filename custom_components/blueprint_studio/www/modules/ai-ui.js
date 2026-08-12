@@ -1,21 +1,22 @@
-import { renderMarkdown, addCodeCopyButtons } from './asset-preview.js';
+import { renderMarkdown, addCodeCopyButtons, ensureMarkdownDependencies } from './asset-preview.js';
 /** AI-UI.JS | Purpose: * Handles AI sidebar, chat interface, code formatting, and AI provider */
 import { state } from './state.js';
 import { copyToClipboard, ensureDiffLibrariesLoaded } from './utils.js';
 import { eventBus } from './event-bus.js';
 import { fetchWithAuth } from './api.js';
-import { API_BASE } from './constants.js';
-import { t } from './translations.js';
-import { saveSettings } from './settings.js?v=2.5.188';
+import { API_BASE } from './constants.js?v=2.5.270';
+import { t, tp } from './translations.js?v=2.5.270';
+import { saveSettings } from './settings.js?v=2.5.270';
 import {
   AI_SIDEBAR_MIN_WIDTH,
   constrainAiSidebarWidth,
   getAiSidebarMaxWidth,
   isWorkspaceDrawerMode,
-} from './workspace-layout.js?v=2.5.188';
-import { captureEditorViewports, scheduleEditorViewportRestore } from './editor-viewport.js?v=2.5.188';
-import { createDiffReviewToolbar, createDiffToggle, markWhitespaceOnlyChanges, renderTextDiff } from './diff-review.js?v=2.5.188';
-import { startOperationFeedback } from './feedback-service.js?v=2.5.188';
+} from './workspace-layout.js?v=2.5.270';
+import { captureEditorViewports, scheduleEditorViewportRestore } from './editor-viewport.js?v=2.5.270';
+import { createDiffReviewToolbar, createDiffToggle, markWhitespaceOnlyChanges, renderTextDiff } from './diff-review.js?v=2.5.270';
+import { startOperationFeedback } from './feedback-service.js?v=2.5.270';
+import { MAX_AI_CHAT_HISTORY, appendBoundedHistory } from './history-limits.js?v=2.5.270';
 
 let aiSidebarInitialized = false;
 let activeAiRequest = null;
@@ -83,17 +84,17 @@ function revealAiStudio() {
 
 function compactPathTarget(paths = []) {
   const normalized = [...new Set((paths || []).filter(Boolean).map(String))];
-  if (!normalized.length) return 'No file target';
+  if (!normalized.length) return t('ai_ops.no_file_target');
   if (normalized.length === 1) return normalized[0];
-  return `${normalized.length} files -> ${normalized[0]}`;
+  return tp('ai_ops.files_target', normalized.length, { path: normalized[0] });
 }
 
 function requestProviderLabel(request) {
   if (request.providerLabel) return request.providerLabel;
-  if (request.ai_type === 'cloud') return request.cloud_provider || 'Cloud provider';
-  if (request.ai_type === 'local-ai') return state.localAiProvider || 'Local AI';
-  if (request.ai_type === 'hass-agent') return 'Home Assistant agent';
-  return 'Rule-based assistant';
+  if (request.ai_type === 'cloud') return request.cloud_provider || t('ai_ops.cloud_provider');
+  if (request.ai_type === 'local-ai') return state.localAiProvider || t('ai_ops.local_ai');
+  if (request.ai_type === 'hass-agent') return t('ai_ops.hass_agent');
+  return t('ai_ops.rule_based_assistant');
 }
 
 function aiRequestTarget(request) {
@@ -111,7 +112,7 @@ function startAiOperation({ label, icon, message, scope, target, retry, runningA
     target,
     retry,
     runningActions,
-    openLabel: 'AI Studio',
+    openLabel: t('ai_ops.ai_studio'),
     openIcon: 'smart_toy',
     open: revealAiStudio,
   });
@@ -193,10 +194,10 @@ export async function undoAiProposal(request, editorContext = null) {
     files: [...new Set((request.files || []).map(String))],
   };
   const operation = startAiOperation({
-    label: 'Undo AI proposal apply',
+    label: t('ai_ops.undo_label'),
     icon: 'undo',
-    message: 'Restoring files from the one-time undo record...',
-    scope: 'Reviewed AI proposal',
+    message: t('ai_ops.undo_restoring'),
+    scope: t('ai_ops.proposal_scope'),
     target: compactPathTarget(immutableRequest.files),
     retry: () => undoAiProposal(immutableRequest),
   });
@@ -206,9 +207,9 @@ export async function undoAiProposal(request, editorContext = null) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'ai_undo_proposal', undo_id: immutableRequest.undoId }),
     });
-    if (!result?.success) throw new Error(resultFailure(result, 'Proposal could not be undone'));
+    if (!result?.success) throw new Error(resultFailure(result, t('ai_ops.undo_rejected')));
     const restoredPaths = result.restored_paths || immutableRequest.files;
-    operation.finish(`Restored ${restoredPaths.length} file${restoredPaths.length === 1 ? '' : 's'}`, {
+    operation.finish(tp('ai_ops.restored_files', restoredPaths.length), {
       detail: compactPathTarget(restoredPaths),
     });
     await reloadProposalPaths(restoredPaths);
@@ -217,8 +218,8 @@ export async function undoAiProposal(request, editorContext = null) {
     restoreProposalEditorContext(editorContext);
     return true;
   } catch (error) {
-    operation.fail('AI proposal apply could not be undone', error.message, {
-      detail: 'The one-time undo record may still be usable. Retry preserves the original undo identifier and file scope.',
+    operation.fail(t('ai_ops.undo_failed'), error.message, {
+      detail: t('ai_ops.undo_retry_detail'),
     });
     updateProposalHistory(immutableRequest.proposalId, 'conflicted');
     setAiRequestState('conflicted', error.message);
@@ -264,7 +265,7 @@ async function cancelAiRequest(request = activeAiRequest) {
   setAiRequestState('cancelling', t('ai.state_cancelling') || 'Cancelling request...');
   request.operation?.update({
     status: 'cancelling',
-    message: 'Requesting provider cancellation...',
+    message: t('ai_ops.cancel_requesting'),
     actions: [],
   });
   try {
@@ -274,11 +275,11 @@ async function cancelAiRequest(request = activeAiRequest) {
       body: JSON.stringify({ action: 'ai_cancel', request_id: request.requestId }),
     });
     request.cancelDetail = result?.success
-      ? 'Provider cancellation was confirmed.'
-      : `The browser stopped waiting, but provider cancellation was not confirmed: ${resultFailure(result, 'Unknown response')}`;
+      ? t('ai_ops.cancel_confirmed')
+      : t('ai_ops.cancel_unconfirmed', { error: resultFailure(result, t('ai_ops.unknown_response')) });
     return Boolean(result?.success);
   } catch (error) {
-    request.cancelDetail = `The browser stopped waiting, but provider cancellation could not be confirmed: ${error.message}`;
+    request.cancelDetail = t('ai_ops.cancel_error', { error: error.message });
     return false;
   } finally {
     request.controller.abort();
@@ -288,7 +289,7 @@ async function cancelAiRequest(request = activeAiRequest) {
 function setAiTaskMode(mode) {
   if (!AI_TASK_MODES.has(mode)) return;
   state.aiTaskMode = mode;
-  document.querySelectorAll('[data-ai-mode]').forEach((button) => {
+  document.getElementById('ai-sidebar')?.querySelectorAll('[data-ai-mode]').forEach((button) => {
     const selected = button.dataset.aiMode === mode;
     button.classList.toggle('active', selected);
     button.setAttribute('aria-pressed', String(selected));
@@ -456,7 +457,7 @@ function initAiSidebar() {
     state.editor?.refresh();
   });
 
-  document.querySelectorAll('[data-ai-mode]').forEach((button) => {
+  document.getElementById('ai-sidebar')?.querySelectorAll('[data-ai-mode]').forEach((button) => {
     button.addEventListener('click', () => setAiTaskMode(button.dataset.aiMode));
   });
   const includeFile = document.getElementById('ai-include-file-context');
@@ -519,6 +520,9 @@ function setAiSidebarVisibility(visible, { restoreFocus = false } = {}) {
     applyAiSidebarWidth();
     updateAIProcessingBoundary();
     renderAiChatHistory();
+    void ensureMarkdownDependencies().then(renderAiChatHistory).catch(error => {
+      console.warn('[AI] Markdown renderer unavailable:', error);
+    });
     scheduleAiContextPreview();
     document.getElementById('ai-chat-input')?.focus();
   } else if (restoreFocus && button && !button.classList.contains('hidden')) {
@@ -689,7 +693,7 @@ function renderGenerationValidation(container, result) {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'ui-button';
-    button.innerHTML = `<span class="ui-icon material-icons" aria-hidden="true">fact_check</span>${escapeHtml(t('ai.run_config_check') || 'Run HA configuration check')}`;
+    button.innerHTML = `<span class="ui-icon material-icons" aria-hidden="true">fact_check</span>${escapeHtml(t('ai.run_config_check'))}`;
     button.addEventListener('click', () => runAiConfigurationCheck({ statusElement: status, button }));
     section.append(button, status);
   }
@@ -698,35 +702,35 @@ function renderGenerationValidation(container, result) {
 
 export async function runAiConfigurationCheck({ statusElement = null, button = null } = {}) {
   const operation = startOperationFeedback({
-    label: 'Check configuration from AI review',
+    label: t('ai_ops.check_label'),
     icon: 'fact_check',
-    message: 'Checking Home Assistant configuration...',
-    scope: 'Home Assistant instance',
-    target: 'Active configuration',
+    message: t('ai_ops.checking_configuration'),
+    scope: t('ai_ops.ha_instance'),
+    target: t('ai_ops.active_configuration'),
     retry: runAiConfigurationCheck,
-    openLabel: 'Developer Tools',
+    openLabel: t('ai_ops.developer_tools'),
     openIcon: 'construction',
     open: () => eventBus.emit('ha:dev-tools', { tab: 'config' }),
   });
   if (button) button.disabled = true;
-  if (statusElement) statusElement.textContent = t('ai.config_check_running') || 'Checking Home Assistant configuration...';
+  if (statusElement) statusElement.textContent = t('ai.config_check_running');
   try {
     const response = await fetchWithAuth(`${API_BASE}?action=run_config_check`);
-    if (response?.success === false) throw new Error(resultFailure(response, 'Configuration check was rejected'));
+    if (response?.success === false) throw new Error(resultFailure(response, t('ai_ops.check_rejected')));
     const check = response?.result || {};
     const message = check.output || (check.success
-      ? (t('ai.config_check_passed') || 'Home Assistant configuration check passed.')
-      : (t('ai.config_check_unavailable') || 'Configuration check was unavailable or found errors.'));
+      ? t('ai.config_check_passed')
+      : t('ai.config_check_unavailable'));
     if (!check.success) {
-      operation.fail('Home Assistant configuration check failed', message);
+      operation.fail(t('ai_ops.check_failed'), message);
       if (statusElement) statusElement.textContent = message;
       return false;
     }
-    operation.finish('Home Assistant configuration check passed', { detail: message });
+    operation.finish(t('ai_ops.check_passed'), { detail: message });
     if (statusElement) statusElement.textContent = message;
     return true;
   } catch (error) {
-    operation.fail('Home Assistant configuration check failed', error.message);
+    operation.fail(t('ai_ops.check_failed'), error.message);
     if (statusElement) statusElement.textContent = error.message;
     return false;
   } finally {
@@ -1083,10 +1087,10 @@ async function renderProposalReview(container, proposal, editorContext = capture
     }
     const immutablePaths = [...paths];
     const operation = startAiOperation({
-      label: 'Apply reviewed AI proposal',
+      label: t('ai_ops.apply_label'),
       icon: 'published_with_changes',
-      message: `Applying reviewed changes to ${immutablePaths.length} file${immutablePaths.length === 1 ? '' : 's'}...`,
-      scope: 'Reviewed AI proposal',
+      message: tp('ai_ops.applying_files', immutablePaths.length),
+      scope: t('ai_ops.proposal_scope'),
       target: compactPathTarget(immutablePaths),
       retry: () => apply(selectedOnly, immutablePaths),
     });
@@ -1098,19 +1102,19 @@ async function renderProposalReview(container, proposal, editorContext = capture
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
       });
       if (result.status === 409) {
-        const message = resultFailure(result, 'Files changed after this proposal was created');
-        operation.fail('AI proposal conflicts with current files', message, {
-          detail: 'The original proposal cannot be retried safely. Open AI Studio to compare, regenerate, or discard the refreshed proposal.',
-          actions: [{ label: 'AI Studio', icon: 'smart_toy', callback: revealAiStudio }],
+        const message = resultFailure(result, t('ai_ops.conflict_fallback'));
+        operation.fail(t('ai_ops.conflict_title'), message, {
+          detail: t('ai_ops.conflict_detail'),
+          actions: [{ label: t('ai_ops.ai_studio'), icon: 'smart_toy', callback: revealAiStudio }],
         });
         setBusy(false);
         showConflict(result);
         return false;
       }
-      if (!result.success) throw new Error(result.message || 'Proposal could not be applied');
+      if (!result.success) throw new Error(result.message || t('ai_ops.apply_rejected'));
       status.textContent = t('ai.proposal_applied') || 'Proposal applied.';
       const appliedPaths = result.applied_paths || immutablePaths;
-      operation.finish(`Applied reviewed changes to ${appliedPaths.length} file${appliedPaths.length === 1 ? '' : 's'}`, {
+      operation.finish(tp('ai_ops.applied_files', appliedPaths.length), {
         detail: compactPathTarget(appliedPaths),
       });
       updateProposalHistory(proposal.id, 'applied', {
@@ -1124,7 +1128,7 @@ async function renderProposalReview(container, proposal, editorContext = capture
       restoreProposalEditorContext(editorContext);
       return true;
     } catch (error) {
-      operation.fail('Reviewed AI proposal could not be applied', error.message);
+      operation.fail(t('ai_ops.apply_failed'), error.message);
       updateProposalHistory(proposal.id, 'failed');
       status.textContent = error.message;
       setAiRequestState('failed', error.message, { canRetry: true });
@@ -1181,21 +1185,24 @@ export async function sendAIChatMessage(requestOverride = null) {
   const editorContext = captureProposalEditorContext();
   const request = { controller, editorContext, requestId, requestPayload };
   request.operation = startAiOperation({
-    label: 'Generate AI response',
+    label: t('ai_ops.generate_label'),
     icon: 'auto_awesome',
-    message: 'Waiting for the configured AI provider...',
-    scope: 'AI generation request',
+    message: t('ai_ops.waiting_provider'),
+    scope: t('ai_ops.generation_scope'),
     target: aiRequestTarget(requestPayload),
     retry: () => sendAIChatMessage(requestPayload),
-    runningActions: [{ label: 'Cancel', icon: 'stop_circle', callback: () => cancelAiRequest(request) }],
+    runningActions: [{ label: t('modal.cancel'), icon: 'stop_circle', callback: () => cancelAiRequest(request) }],
   });
   activeAiRequest = request;
   updateAIProcessingBoundary();
   setAiRequestState('running', t('ai.state_running') || 'Request running...', { canCancel: true });
 
   // Add user message to history
-  if (!state.aiChatHistory) state.aiChatHistory = [];
-  state.aiChatHistory.push({ role: 'user', text: query });
+  state.aiChatHistory = appendBoundedHistory(
+    state.aiChatHistory,
+    { role: 'user', text: query },
+    MAX_AI_CHAT_HISTORY,
+  );
   saveSettings();
 
   // Add user message to UI
@@ -1237,10 +1244,11 @@ export async function sendAIChatMessage(requestOverride = null) {
     });
 
     if (result.success) {
-      request.operation.update({ message: 'Provider response received; validating output...', percent: 80 });
+      await ensureMarkdownDependencies();
+      request.operation.update({ message: t('ai_ops.response_validating'), percent: 80 });
       setAiRequestState('validating', t('ai.state_validating') || 'Validating response...');
       // Save response to history
-      state.aiChatHistory.push({ role: 'assistant', text: result.response });
+      appendBoundedHistory(state.aiChatHistory, { role: 'assistant', text: result.response }, MAX_AI_CHAT_HISTORY);
       saveSettings();
 
       // Parse markdown code blocks and format them
@@ -1263,17 +1271,17 @@ export async function sendAIChatMessage(requestOverride = null) {
         result.proposal ? 'proposed' : 'completed',
         result.proposal ? (t('ai.state_proposed') || 'Proposal ready for review.') : (t('ai.state_completed') || 'Response complete.'),
       );
-      request.operation.finish(result.proposal ? 'AI proposal ready for review' : 'AI response complete', {
+      request.operation.finish(result.proposal ? t('ai_ops.proposal_ready') : t('ai_ops.response_complete'), {
         detail: result.proposal_error || (result.proposal
           ? compactPathTarget(result.proposal.edits?.map(edit => edit.path))
-          : `${requestProviderLabel(requestPayload)} response`),
+          : t('ai_ops.provider_response', { provider: requestProviderLabel(requestPayload) })),
       });
     } else {
       const errorMsg = "Error: " + (result.message || "Failed to get response from AI");
-      request.operation.fail('AI generation request failed', resultFailure(result, errorMsg));
+      request.operation.fail(t('ai_ops.generation_failed'), resultFailure(result, errorMsg));
       loadingMsg.textContent = errorMsg;
       loadingMsg.classList.add("ai-message-error");
-      state.aiChatHistory.push({ role: 'assistant', text: errorMsg });
+      appendBoundedHistory(state.aiChatHistory, { role: 'assistant', text: errorMsg }, MAX_AI_CHAT_HISTORY);
       saveSettings();
       input.value = query;
       setAiRequestState('failed', errorMsg, { canRetry: true });
@@ -1283,18 +1291,18 @@ export async function sendAIChatMessage(requestOverride = null) {
       loadingMsg.textContent = t('ai.state_cancelled') || 'Request cancelled. Your prompt is ready to edit or retry.';
       input.value = query;
       setAiRequestState('cancelled', loadingMsg.textContent, { canRetry: true });
-      request.operation.cancel('AI generation request cancelled', {
-        failureDetail: request.cancelDetail || 'The browser stopped waiting for the provider response.',
+      request.operation.cancel(t('ai_ops.generation_cancelled'), {
+        failureDetail: request.cancelDetail || t('ai_ops.browser_stopped_waiting'),
       });
       input.focus();
       return;
     }
     console.error("AI Copilot Error:", e);
     const errorMsg = "Error connecting to AI service: " + e.message;
-    request.operation.fail('AI generation request failed', e.message);
+    request.operation.fail(t('ai_ops.generation_failed'), e.message);
     loadingMsg.textContent = errorMsg;
     loadingMsg.classList.add("ai-message-error");
-    state.aiChatHistory.push({ role: 'assistant', text: errorMsg });
+    appendBoundedHistory(state.aiChatHistory, { role: 'assistant', text: errorMsg }, MAX_AI_CHAT_HISTORY);
     saveSettings();
     input.value = query;
     setAiRequestState('failed', errorMsg, { canRetry: true });

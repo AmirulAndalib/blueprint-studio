@@ -410,6 +410,35 @@
       padding: 20px 16px;
     }
 
+    body[data-workspace-mode="phone"] .help-version-details > div {
+      gap: 4px;
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    body[data-workspace-mode="phone"] .help-support-actions {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    body[data-workspace-mode="phone"] .help-support-actions .ui-button {
+      justify-content: flex-start;
+      width: 100%;
+    }
+
+    html[dir="rtl"] .CodeMirror,
+    html[dir="rtl"] .diff-content,
+    html[dir="rtl"] .terminal-container,
+    html[dir="rtl"] code,
+    html[dir="rtl"] pre {
+      direction: ltr;
+      text-align: left;
+    }
+
+    html[dir="rtl"] .settings-tab-chevron,
+    html[dir="rtl"] .settings-search-result > .ui-icon:last-child {
+      transform: rotate(180deg);
+    }
+
     /* Touch input can be present at any viewport width. Keep desktop pointer
        density unchanged while exposing actions that otherwise require hover. */
     @media (hover: none), (pointer: coarse), (any-pointer: coarse) {
@@ -640,6 +669,47 @@
         min-height: 24px !important;
         padding: 2px 8px !important;
         padding-bottom: max(2px, env(safe-area-inset-bottom)) !important;
+        gap: 2px;
+      }
+
+      /* Keep metadata in its own touch target. Allowing these flex items to
+         shrink makes long labels paint over the next item on narrow phones. */
+      body[data-workspace-mode="phone"] .status-bar .status-item {
+        flex: 0 0 auto;
+        min-width: max-content;
+        max-width: none;
+        padding-inline: 5px;
+        overflow: hidden;
+      }
+
+      body[data-workspace-mode="phone"] .status-bar .status-item > span:not(.material-icons),
+      body[data-workspace-mode="phone"] .status-bar .theme-trigger > span:not(.material-icons) {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      body[data-workspace-mode="phone"] #status-connection > span:not(.material-icons),
+      body[data-workspace-mode="phone"] #theme-label {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+      }
+
+      body[data-workspace-mode="phone"] #status-position { max-width: 88px; }
+      body[data-workspace-mode="phone"] #status-indent { max-width: 72px; }
+      body[data-workspace-mode="phone"] #status-encoding { max-width: 54px; }
+      body[data-workspace-mode="phone"] #status-language { max-width: 84px; }
+      body[data-workspace-mode="phone"] #status-repository { max-width: 130px; }
+
+      body[data-workspace-mode="phone"] .status-bar .status-spacer {
+        display: none;
       }
 
       .status-bar::-webkit-scrollbar {
@@ -1091,14 +1161,55 @@
         max-height: 90vh;
       }
 
+      .settings-workbench { display: block; height: 100%; min-height: 0; }
       .settings-tabs {
-        padding: 0 4px;
+        background: var(--bg-primary);
+        border: 0;
+        display: grid;
+        gap: 0;
+        height: 100%;
+        overflow-y: auto;
+        padding: 8px 12px 16px;
       }
-
+      .settings-nav-header {
+        align-items: center;
+        border-bottom: 1px solid var(--border-color);
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 4px;
+        min-height: 48px;
+        padding: 0 4px 0 10px;
+      }
+      .settings-nav-header strong { font-size: 13px; }
       .settings-tab {
-        padding: 10px 14px;
-        font-size: 13px;
+        border-bottom: 1px solid var(--divider-color);
+        border-radius: 0;
+        min-height: 48px;
+        padding: 10px;
       }
+      .settings-tab .settings-tab-chevron { color: var(--text-muted); display: inline-flex; margin-left: auto; }
+      .settings-tab.active { background: transparent; color: var(--text-primary); font-weight: 400; }
+      .settings-main { display: none; height: 100%; min-height: 0; padding: 0 12px; }
+      .settings-workbench.is-section-open .settings-tabs { display: none; }
+      .settings-workbench.is-section-open .settings-main { display: flex; }
+      .settings-drilldown-header {
+        align-items: center;
+        border-bottom: 1px solid var(--border-color);
+        display: flex;
+        flex: 0 0 auto;
+        gap: 8px;
+        margin-bottom: 10px;
+        min-height: 48px;
+      }
+      .settings-drilldown-header .ui-button { flex: 0 0 auto; padding-left: 6px; }
+      .settings-drilldown-header strong { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .settings-guidance-grid { grid-template-columns: minmax(0, 1fr); }
+      .setting-meta { flex-wrap: wrap; row-gap: 4px; }
+      .setting-disabled-reason:not([hidden]) { flex: 1 0 calc(100% - 38px); }
+      .settings-segmented { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .settings-segmented label:nth-child(2) span { border-radius: 0 4px 4px 0; }
+      .settings-segmented label:nth-child(3) span { border-left: 1px solid var(--border-color); border-radius: 4px 0 0 4px; border-top: 0; }
+      .settings-segmented label:nth-child(4) span { border-radius: 0 4px 4px 0; border-top: 0; }
       /* Selection toolbar mobile */
       .selection-toolbar {
         padding: 10px 12px;

@@ -975,8 +975,7 @@
     }
 
     body[data-theme-preset="native"] .tree-item.modified::after {
-        width: 6px;
-        height: 6px;
+        font-size: 12px;
     }
 
     body[data-theme-preset="native"] .tree-item-actions button {

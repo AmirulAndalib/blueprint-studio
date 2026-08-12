@@ -1,8 +1,8 @@
 /** GITHUB-INTEGRATION.JS | Purpose: * Handles GitHub-specific operations: OAuth authentication, repository creation, */
 
 import { state, elements, gitState } from './state.js';
-import { fetchWithAuth } from './api.js?v=2.5.188';
-import { API_BASE } from './constants.js';
+import { fetchWithAuth } from './api.js?v=2.5.270';
+import { API_BASE } from './constants.js?v=2.5.270';
 import { eventBus } from './event-bus.js';
 import {
   activateSharedModal,
@@ -15,16 +15,16 @@ import {
 } from './ui.js';
 import { buildFileTree } from './file-tree.js';
 import { formatBytes, isTextFile } from './utils.js';
-import { t } from './translations.js';
+import { t, tp } from './translations.js?v=2.5.270';
 import {
   gitStatus,
   gitSetCredentials,
   gitInit,
   gitGetRemotes,
   gitCleanLocks
-} from './git-operations.js';
-import { startOperationFeedback } from './feedback-service.js?v=2.5.188';
-import { getGitActionConfirmation } from './git-action-confirmation.js?v=2.5.188';
+} from './git-operations.js?v=2.5.270';
+import { startOperationFeedback } from './feedback-service.js?v=2.5.270';
+import { getGitActionConfirmation } from './git-action-confirmation.js?v=2.5.270';
 
 // ============================================
 // Module-level Variables
@@ -60,13 +60,13 @@ function remoteEndpointLabel(url, fallback = 'remote endpoint') {
 export async function gitAddRemote(name, url) {
   const request = Object.freeze({ name: String(name || 'origin'), url: String(url || '') });
   const operation = startOperationFeedback({
-    label: `Configure ${request.name} remote`,
+    label: t('provider_ops.configure_remote', { remote: request.name }),
     icon: 'cloud_sync',
-    message: 'Saving GitHub remote...',
-    scope: 'Local Git repository',
+    message: t('github_ops.remote_saving'),
+    scope: t('provider_ops.local_git_repository'),
     target: `${request.name} -> ${remoteEndpointLabel(request.url, 'GitHub')}`,
     retry: () => gitAddRemote(request.name, request.url),
-    openLabel: 'Source Control',
+    openLabel: t('sidebar.source_control'),
     openIcon: 'account_tree',
     open: () => eventBus.emit('ui:switch-sidebar-view', 'source-control'),
   });
@@ -78,17 +78,17 @@ export async function gitAddRemote(name, url) {
     });
 
     if (data.success) {
-      operation.finish(`${request.name} remote configured`);
+      operation.finish(t('github_ops.remote_configured', { remote: request.name }));
       showToast(data.message, "success");
       await gitStatus(false, true);
       return true;
     }
     const message = data.message || data.error || 'Remote configuration failed';
-    operation.fail(`Could not configure ${request.name} remote`, message);
+    operation.fail(t('github_ops.remote_configure_failed', { remote: request.name }), message);
     showToast(t("toast.github_error", { error: message }), "error");
     return false;
   } catch (error) {
-    operation.fail(`Could not configure ${request.name} remote`, error.message);
+    operation.fail(t('github_ops.remote_configure_failed', { remote: request.name }), error.message);
     showToast(t("toast.github_error", { error: error.message }), "error");
     return false;
   }
@@ -105,13 +105,13 @@ export async function gitRemoveRemote(name) {
   });
   if (!confirmed) return false;
   const operation = startOperationFeedback({
-    label: `Remove ${remoteName} remote`,
+    label: t('provider_ops.remove_remote', { remote: remoteName }),
     icon: 'link_off',
-    message: 'Removing local remote...',
-    scope: 'Local Git repository',
+    message: t('provider_ops.remote_removing'),
+    scope: t('provider_ops.local_git_repository'),
     target: remoteName,
     retry: () => gitRemoveRemote(remoteName),
-    openLabel: 'Source Control',
+    openLabel: t('sidebar.source_control'),
     openIcon: 'account_tree',
     open: () => eventBus.emit('ui:switch-sidebar-view', 'source-control'),
   });
@@ -122,12 +122,12 @@ export async function gitRemoveRemote(name) {
       body: JSON.stringify({ action: 'git_remove_remote', name: remoteName }),
     });
     if (!data.success) throw new Error(data.message || data.error || 'Remote removal failed');
-    operation.finish(`${remoteName} remote removed`);
+    operation.finish(t('github_ops.remote_removed', { remote: remoteName }));
     showToast(data.message, 'success');
     await gitStatus(false, true);
     return true;
   } catch (error) {
-    operation.fail(`Could not remove ${remoteName} remote`, error.message);
+    operation.fail(t('github_ops.remote_remove_failed', { remote: remoteName }), error.message);
     showToast(t("toast.remove_remote_error", { error: error.message }), 'error');
     return false;
   }
@@ -143,15 +143,15 @@ export async function githubCreateRepo(repoName, description, isPrivate) {
     description: String(description || ''),
     isPrivate: Boolean(isPrivate),
   });
-  const visibility = request.isPrivate ? 'Private' : 'Public';
+  const visibility = request.isPrivate ? t('provider_ops.private') : t('provider_ops.public');
   const operation = startOperationFeedback({
-    label: 'Create GitHub repository',
+    label: t('github_ops.create_repository'),
     icon: 'add_circle',
-    message: 'Creating remote repository...',
-    scope: 'GitHub account',
+    message: t('provider_ops.repository_creating'),
+    scope: t('github_ops.account'),
     target: `${request.repoName} (${visibility})`,
     retry: () => githubCreateRepo(request.repoName, request.description, request.isPrivate),
-    openLabel: 'Source Control',
+    openLabel: t('sidebar.source_control'),
     openIcon: 'account_tree',
     open: () => eventBus.emit('ui:switch-sidebar-view', 'source-control'),
   });
@@ -170,7 +170,7 @@ export async function githubCreateRepo(repoName, description, isPrivate) {
     });
 
     if (data.success) {
-      operation.finish('Repository created');
+      operation.finish(t('github_ops.repository_created'));
       showToast(data.message, "success");
 
       // Show link to new repo
@@ -187,12 +187,12 @@ export async function githubCreateRepo(repoName, description, isPrivate) {
       return data;
     } else {
       const message = data.message || data.error || "Unknown error";
-      operation.fail('Repository creation failed', message);
+      operation.fail(t('github_ops.repository_create_failed'), message);
       showToast(t("toast.github_create_repo_failed", { error: message }), "error");
       return null;
     }
   } catch (error) {
-    operation.fail('Repository creation failed', error.message);
+    operation.fail(t('github_ops.repository_create_failed'), error.message);
     showToast(t("toast.github_create_repo_failed", { error: error.message }), "error");
     return null;
   }
@@ -219,30 +219,30 @@ async function confirmBranchMismatchRepair(startStep = 0) {
   const steps = [
     {
       action: 'git_abort',
-      running: 'Clearing merge or rebase state...',
-      complete: 'Merge or rebase state cleared',
+      running: t('github_ops.repair_clearing'),
+      complete: t('github_ops.repair_cleared'),
     },
     {
       action: 'git_rename_branch',
       request: { old_name: 'master', new_name: 'main' },
-      running: 'Renaming master to main...',
-      complete: 'Local branch renamed to main',
+      running: t('github_ops.repair_renaming'),
+      complete: t('github_ops.repair_renamed'),
     },
     {
       action: 'git_merge_unrelated',
       request: { remote: 'origin', branch: 'main' },
-      running: 'Merging origin/main into main...',
-      complete: 'GitHub history merged into main',
+      running: t('github_ops.repair_merging'),
+      complete: t('github_ops.repair_merged'),
     },
   ];
   const operation = startOperationFeedback({
-    label: 'Repair GitHub branch mismatch',
+    label: t('github_ops.repair_label'),
     icon: 'account_tree',
-    message: steps[startStep]?.running || 'Preparing branch repair...',
-    scope: 'Local Git repository and GitHub',
+    message: steps[startStep]?.running || t('github_ops.repair_preparing'),
+    scope: t('github_ops.repair_scope'),
     target: 'master -> main; origin/main -> main',
     retry: () => confirmBranchMismatchRepair(resumeStep),
-    openLabel: 'Source Control',
+    openLabel: t('sidebar.source_control'),
     openIcon: 'account_tree',
     open: () => eventBus.emit('ui:switch-sidebar-view', 'source-control'),
   });
@@ -253,7 +253,7 @@ async function confirmBranchMismatchRepair(startStep = 0) {
       resumeStep = index;
       operation.update({
         message: step.running,
-        detail: `Step ${index + 1} of ${steps.length}`,
+        detail: t('provider_ops.step_progress', { current: index + 1, count: steps.length }),
         percent: Math.round((index / steps.length) * 100),
       });
       const data = await fetchWithAuth(API_BASE, {
@@ -268,8 +268,8 @@ async function confirmBranchMismatchRepair(startStep = 0) {
       resumeStep = index + 1;
     }
 
-    operation.finish('Branch mismatch repaired', {
-      detail: 'Local main now includes origin/main',
+    operation.finish(t('github_ops.branch_repaired'), {
+      detail: t('github_ops.repair_complete_detail'),
       percent: 100,
     });
     showToast(t("toast.github_repair_success"), "success");
@@ -278,12 +278,12 @@ async function confirmBranchMismatchRepair(startStep = 0) {
   } catch (e) {
     const failedStep = steps[resumeStep];
     const completed = completedSteps.length
-      ? `Completed during this attempt:\n- ${completedSteps.join('\n- ')}\n\nCompleted steps remain applied.`
-      : 'No repair steps completed during this attempt.';
+      ? t('github_ops.repair_completed_steps', { steps: completedSteps.join('\n- ') })
+      : t('github_ops.repair_no_steps');
     operation.fail(
-      failedStep ? `Repair stopped at step ${resumeStep + 1} of ${steps.length}` : 'Branch repair incomplete',
+      failedStep ? t('github_ops.repair_stopped', { step: resumeStep + 1, total: steps.length }) : t('github_ops.repair_incomplete'),
       `${e.message}\n\n${completed}`,
-      { detail: failedStep?.running.replace(/\.\.\.$/, '') || 'Refresh Source Control before retrying' },
+      { detail: failedStep?.running.replace(/\.\.\.$/, '') || t('github_ops.repair_refresh') },
     );
     showToast(t("toast.github_repair_failed", { error: e.message }), "error", 0);
     await gitStatus(false, true);
@@ -297,13 +297,13 @@ async function confirmBranchMismatchRepair(startStep = 0) {
 
 export async function gitTestConnection() {
   const operation = startOperationFeedback({
-    label: 'Test GitHub connection',
+    label: t('github_ops.test_connection'),
     icon: 'network_check',
-    message: 'Contacting GitHub remote...',
-    scope: 'GitHub remote',
+    message: t('github_ops.remote_contacting'),
+    scope: t('github_ops.remote'),
     target: 'origin',
     retry: gitTestConnection,
-    openLabel: 'GitHub Settings',
+    openLabel: t('github_ops.settings'),
     openIcon: 'settings',
     open: () => eventBus.emit('git:show-settings'),
   });
@@ -315,17 +315,17 @@ export async function gitTestConnection() {
     });
 
     if (data.success) {
-      operation.finish('GitHub connection verified');
+      operation.finish(t('github_ops.connection_verified'));
       showToast(t("toast.git_conn_success"), "success");
       return true;
     } else {
       const message = data.message || data.error || "Unknown connection error";
-      operation.fail('GitHub connection failed', message);
+      operation.fail(t('github_ops.connection_failed'), message);
       showToast(t("toast.git_conn_failed") + ": " + message, "error");
       return false;
     }
   } catch (error) {
-    operation.fail('GitHub connection failed', error.message);
+    operation.fail(t('github_ops.connection_failed'), error.message);
     showToast(t("toast.git_conn_failed") + ": " + error.message, "error");
     return false;
   }
@@ -345,13 +345,13 @@ export async function gitClearCredentials() {
   });
   if (!confirmed) return false;
   const operation = startOperationFeedback({
-    label: 'Sign out from GitHub',
+    label: t('github_ops.signout_label'),
     icon: 'logout',
-    message: 'Removing saved GitHub credentials...',
-    scope: 'GitHub authentication',
-    target: 'Saved credentials',
+    message: t('github_ops.credentials_removing'),
+    scope: t('github_ops.authentication'),
+    target: t('provider_ops.saved_credentials'),
     retry: gitClearCredentials,
-    openLabel: 'GitHub Settings',
+    openLabel: t('github_ops.settings'),
     openIcon: 'settings',
     open: () => eventBus.emit('git:show-settings'),
   });
@@ -363,17 +363,17 @@ export async function gitClearCredentials() {
     });
 
     if (data.success) {
-      operation.finish('Signed out from GitHub');
+      operation.finish(t('github_ops.signed_out'));
       showToast(t("toast.git_signout"), "success");
       return true;
     } else {
       const message = data.message || data.error || "Credential removal was rejected";
-      operation.fail('Could not sign out from GitHub', message);
+      operation.fail(t('github_ops.signout_failed'), message);
       showToast(t("toast.github_error", { error: message }), "error");
       return false;
     }
   } catch (error) {
-    operation.fail('Could not sign out from GitHub', error.message);
+    operation.fail(t('github_ops.signout_failed'), error.message);
     showToast(t("toast.github_error", { error: error.message }), "error");
     return false;
   }
@@ -438,18 +438,18 @@ export async function showGithubDeviceFlowLogin() {
   const finalClientId = customClientId || SHARED_CLIENT_ID;
   let closeDeviceFlow = null;
   const operation = startOperationFeedback({
-    label: 'Sign in to GitHub',
+    label: t('github_ops.signin_label'),
     icon: 'verified_user',
-    message: 'Requesting a GitHub device authorization code...',
-    scope: 'GitHub account',
-    target: 'Device authorization',
+    message: t('github_ops.device_code_requesting'),
+    scope: t('github_ops.account'),
+    target: t('github_ops.device_authorization'),
     retry: () => showGithubDeviceFlowLogin(),
     runningActions: [{
-      label: 'Cancel',
+      label: t('modal.cancel'),
       icon: 'close',
       callback: () => closeDeviceFlow?.(false),
     }],
-    openLabel: 'Source Control',
+    openLabel: t('sidebar.source_control'),
     openIcon: 'account_tree',
     open: () => eventBus.emit('ui:switch-sidebar-view', 'source-control'),
   });
@@ -459,7 +459,7 @@ export async function showGithubDeviceFlowLogin() {
 
   if (!flowData.success) {
     const message = flowData.error || "Unknown error";
-    operation.fail('Could not start GitHub sign-in', message);
+    operation.fail(t('github_ops.signin_start_failed'), message);
     showToast(t("toast.github_error", { error: message }), "error");
     return false;
   }
@@ -522,7 +522,7 @@ export async function showGithubDeviceFlowLogin() {
     let pollCount = 0;
 
     // Function to clean up and close
-    closeDeviceFlow = (result, { cancelled = true, cancelMessage = 'GitHub authorization polling stopped.' } = {}) => {
+    closeDeviceFlow = (result, { cancelled = true, cancelMessage = t('github_ops.authorization_stopped') } = {}) => {
       if (closed) return;
       closed = true;
       if (activePollTimer) {
@@ -538,12 +538,12 @@ export async function showGithubDeviceFlowLogin() {
     };
     cancelActiveDeviceFlow = closeDeviceFlow;
     operation.update({
-      message: 'Waiting for GitHub authorization...',
-      detail: `Code ${flowData.userCode}`,
+      message: t('github_ops.authorization_waiting'),
+      detail: t('github_ops.device_code', { code: flowData.userCode }),
     });
 
     const settleFailure = (message) => {
-      operation.fail('GitHub sign-in failed', message);
+      operation.fail(t('github_ops.signin_failed'), message);
       setTimeout(() => closeDeviceFlow(false, { cancelled: false }), 1000);
     };
 
@@ -563,8 +563,8 @@ export async function showGithubDeviceFlowLogin() {
       if (closed) return true;
       if (result.success && result.status === "authorized") {
         setModalStatus('check_circle', t("toast.git_conn_success"), 'ui-icon--tone-success');
-        operation.finish('GitHub account connected', {
-          target: result.username || 'Authorized account',
+        operation.finish(t('github_ops.account_connected'), {
+          target: result.username || t('github_ops.authorized_account'),
         });
         showToast(t("toast.git_conn_success"), "success");
         setTimeout(() => closeDeviceFlow(true, { cancelled: false }), 2000);
@@ -585,8 +585,8 @@ export async function showGithubDeviceFlowLogin() {
       if (result.status === "pending" || result.status === "slow_down") {
         if (result.status === "slow_down") pollInterval += 5000;
         operation.update({
-          message: result.status === "slow_down" ? 'GitHub requested slower authorization checks...' : 'Waiting for GitHub authorization...',
-          detail: `Code ${flowData.userCode}`,
+          message: result.status === "slow_down" ? t('github_ops.authorization_slow') : t('github_ops.authorization_waiting'),
+          detail: t('github_ops.device_code', { code: flowData.userCode }),
         });
         return false;
       }
@@ -672,19 +672,19 @@ export async function saveGitExclusions(content, ignoredPaths = []) {
   });
   let gitignoreSaved = false;
   const operation = startOperationFeedback({
-    label: 'Save Git exclusions',
+    label: t('github_ops.exclusions_save_label'),
     icon: 'filter_alt',
-    message: 'Writing .gitignore...',
-    scope: 'Local Git repository',
-    target: `.gitignore; ${request.ignoredPaths.length} ${request.ignoredPaths.length === 1 ? 'path' : 'paths'} to untrack`,
+    message: t('github_ops.gitignore_writing'),
+    scope: t('provider_ops.local_git_repository'),
+    target: tp('github_ops.exclusions_target', request.ignoredPaths.length),
     retry: () => saveGitExclusions(request.content, request.ignoredPaths),
-    openLabel: 'Source Control',
+    openLabel: t('sidebar.source_control'),
     openIcon: 'account_tree',
     open: () => eventBus.emit('ui:switch-sidebar-view', 'source-control'),
   });
 
   try {
-    operation.update({ message: 'Writing .gitignore...', detail: 'Step 1 of 2', percent: 20 });
+    operation.update({ message: t('github_ops.gitignore_writing'), detail: t('provider_ops.step_progress', { current: 1, count: 2 }), percent: 20 });
     const writeResponse = await fetchWithAuth(API_BASE, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -696,7 +696,7 @@ export async function saveGitExclusions(content, ignoredPaths = []) {
     gitignoreSaved = true;
 
     if (request.ignoredPaths.length > 0) {
-      operation.update({ message: 'Removing ignored paths from the Git index...', detail: 'Step 2 of 2', percent: 65 });
+      operation.update({ message: t('github_ops.index_removing'), detail: t('provider_ops.step_progress', { current: 2, count: 2 }), percent: 65 });
       const indexResponse = await fetchWithAuth(API_BASE, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -707,22 +707,22 @@ export async function saveGitExclusions(content, ignoredPaths = []) {
       }
     }
 
-    operation.finish('Git exclusions saved', {
+    operation.finish(t('github_ops.exclusions_saved'), {
       detail: request.ignoredPaths.length
-        ? `${request.ignoredPaths.length} ${request.ignoredPaths.length === 1 ? 'path' : 'paths'} removed from tracking`
-        : 'No tracked paths required removal',
+        ? tp('github_ops.paths_untracked', request.ignoredPaths.length)
+        : t('github_ops.no_paths_untracked'),
       percent: 100,
     });
-    showToast('Git exclusions saved', 'success');
+    showToast(t('toast.git_exclusions_saved'), 'success');
     await gitStatus(false, true);
     return true;
   } catch (error) {
-    operation.fail(gitignoreSaved ? '.gitignore saved; index update failed' : 'Could not save .gitignore', error.message, {
+    operation.fail(gitignoreSaved ? t('github_ops.gitignore_index_failed') : t('github_ops.gitignore_save_failed'), error.message, {
       detail: gitignoreSaved
-        ? 'The exclusion file is already updated. Some paths may still be tracked until Retry succeeds.'
-        : 'No index update was attempted.',
+        ? t('github_ops.exclusions_partial_detail')
+        : t('github_ops.index_not_attempted'),
     });
-    showToast(`Failed to save Git exclusions: ${error.message}`, 'error');
+    showToast(t('toast.git_exclusions_failed', { error: error.message }), 'error');
     if (gitignoreSaved) await gitStatus(false, true);
     return false;
   }
@@ -731,13 +731,13 @@ export async function saveGitExclusions(content, ignoredPaths = []) {
 export async function showGitExclusions() {
   return new Promise(async (resolve) => {
     const loadOperation = startOperationFeedback({
-      label: 'Load Git exclusions',
+      label: t('github_ops.exclusions_load_label'),
       icon: 'filter_alt',
-      message: 'Loading repository file list...',
-      scope: 'Local Git repository',
-      target: '.gitignore and workspace paths',
+      message: t('github_ops.exclusions_loading'),
+      scope: t('provider_ops.local_git_repository'),
+      target: t('github_ops.exclusions_load_target'),
       retry: showGitExclusions,
-      openLabel: 'Source Control',
+      openLabel: t('sidebar.source_control'),
       openIcon: 'account_tree',
       open: () => eventBus.emit('ui:switch-sidebar-view', 'source-control'),
     });
@@ -1189,13 +1189,13 @@ export async function showGitExclusions() {
 
       btnConfirm.addEventListener("click", saveHandler);
       btnCancel.addEventListener("click", cancelHandler);
-      loadOperation.finish('Git exclusions ready', {
-        detail: `${items.length} workspace entries loaded`,
+      loadOperation.finish(t('github_ops.exclusions_ready'), {
+        detail: tp('github_ops.workspace_entries_loaded', items.length),
         percent: 100,
       });
 
     } catch (error) {
-      loadOperation.fail('Could not load Git exclusions', error.message);
+      loadOperation.fail(t('github_ops.exclusions_load_failed'), error.message);
       showToast(t("toast.load_file_list_failed", { error: error.message }), "error");
       resolve(false);
     }

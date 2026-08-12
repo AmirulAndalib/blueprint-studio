@@ -1,9 +1,9 @@
-import { t } from './translations.js';
+import { t, tp } from './translations.js?v=2.5.270';
 /** GIT-DIFF.JS | Purpose: * Visualizes git diffs and commit history. Shows file changes, commit details, */
 import { state, elements, gitState, giteaState } from './state.js';
 import { fetchWithAuth } from './api.js';
 import { eventBus } from './event-bus.js';
-import { API_BASE } from './constants.js';
+import { API_BASE } from './constants.js?v=2.5.270';
 import {
   showToast,
   showModal,
@@ -12,10 +12,10 @@ import {
   deactivateSharedModal
 } from './ui.js';
 import { getEditorMode, ensureDiffLibrariesLoaded } from './utils.js';
-import { isGitEnabled } from './git-operations.js';
+import { isGitEnabled } from './git-operations.js?v=2.5.270';
 import { revealAndOpenFile as _revealAndOpenFile, showNavIndicator } from './file-nav-helper.js';
-import { createTextDiffReview, getRawDiffRows } from './diff-review.js?v=2.5.188';
-import { startOperationFeedback } from './feedback-service.js?v=2.5.188';
+import { createTextDiffReview, getRawDiffRows } from './diff-review.js?v=2.5.270';
+import { startOperationFeedback } from './feedback-service.js?v=2.5.270';
 
 let _aiDiffQueue = [];
 let _aiDiffActive = false;
@@ -37,12 +37,12 @@ function startHistoryOperation({ label, target, message, retry, open }) {
   return startOperationFeedback({
     label,
     icon: 'history',
-    scope: 'Local Git repository',
+    scope: t('provider_ops.local_git_repository'),
     target,
     message,
     retry,
     open,
-    openLabel: 'History',
+    openLabel: t('git_diff_ops.history'),
     openIcon: 'history',
   });
 }
@@ -90,7 +90,7 @@ export async function undoLastDiff() {
   const history = _loadDiffHistory();
   const last = [...history].reverse().find(r => r.action === 'accepted' && !r.undone);
   if (!last) {
-    showToast('No AI diff to undo', 'warning', 2000);
+    showToast(t('toast.ai_diff_nothing_to_undo'), 'warning', 2000);
     return false;
   }
   last.undone = true;
@@ -116,7 +116,7 @@ export async function undoLastDiff() {
       body: JSON.stringify({ action: 'write_file', path: last.path, content: last.oldContent })
     });
   } catch (_) {}
-  showToast(`Reverted: ${last.path.split('/').pop()}`, 'info', 2500);
+  showToast(t('toast.ai_diff_reverted', { file: last.path.split('/').pop() }), 'info', 2500);
   return true;
 }
 
@@ -124,7 +124,7 @@ export async function undoDiffByIndex(index) {
   const history = _loadDiffHistory();
   if (index < 0 || index >= history.length) return false;
   const entry = history[index];
-  if (entry.undone) { showToast('Already undone', 'warning', 1500); return false; }
+  if (entry.undone) { showToast(t('toast.ai_diff_already_undone'), 'warning', 1500); return false; }
   entry.undone = true;
   _saveDiffHistory(history);
 
@@ -149,7 +149,7 @@ export async function undoDiffByIndex(index) {
       body: JSON.stringify({ action: 'write_file', path: entry.path, content: restoreContent })
     });
   } catch (_) {}
-  showToast(`Reverted: ${entry.path.split('/').pop()}`, 'info', 2500);
+  showToast(t('toast.ai_diff_reverted', { file: entry.path.split('/').pop() }), 'info', 2500);
   return true;
 }
 
@@ -314,7 +314,7 @@ function _buildCompactDiffRows(oldContent, newContent) {
 
 function _buildCompactDiffHtml(oldContent, newContent) {
   const rows = _buildCompactDiffRows(oldContent, newContent);
-  if (!rows.length) return '<div class="ai-diff-preview-empty">No visible changes</div>';
+  if (!rows.length) return `<div class="ai-diff-preview-empty">${t('git_diff_ops.no_visible_changes')}</div>`;
   return rows.join('');
 }
 
@@ -327,15 +327,15 @@ function _showRejectDiffPrompt(path, oldContent, newContent) {
     const modalFooter = document.querySelector(".modal-footer");
 
     resetModalToDefault();
-    modalTitle.textContent = `Reject File: ${path.split('/').pop()}`;
+    modalTitle.textContent = t('git_diff_ops.reject_file_title', { file: path.split('/').pop() });
     modal.style.maxWidth = "900px";
     modal.style.width = "min(900px, 92vw)";
     modalBody.innerHTML = `<div class="ai-reject-diff">${_buildCompactDiffHtml(oldContent, newContent)}</div>`;
     if (modalFooter) {
       modalFooter.style.display = "flex";
       modalFooter.innerHTML = `
-        <button id="ai-reject-cancel" class="modal-btn secondary">Keep Changes</button>
-        <button id="ai-reject-confirm" class="modal-btn danger">Reject File</button>
+        <button id="ai-reject-cancel" class="modal-btn secondary">${t('git_diff_ops.keep_changes')}</button>
+        <button id="ai-reject-confirm" class="modal-btn danger">${t('git_diff_ops.reject_file')}</button>
       `;
     }
     activateSharedModal({ initialFocus: '#ai-reject-cancel' });
@@ -386,42 +386,42 @@ function _showAiActionBar(path, oldContent, newContent, diffMarkers) {
   bar.id = 'ai-edit-bar';
   bar.innerHTML = `
     <div class="ai-bar-nav">
-      <button id="ai-bar-prev" class="ai-bar-nav-btn" title="Previous edit">
+      <button id="ai-bar-prev" class="ai-bar-nav-btn" title="${t('git_diff_ops.previous_edit')}" aria-label="${t('git_diff_ops.previous_edit')}">
         <span class="ui-icon material-icons">keyboard_arrow_up</span>
       </button>
-      <span id="ai-bar-edit-count" class="ai-bar-edit-label">${editCount} edit${editCount !== 1 ? 's' : ''}</span>
-      <button id="ai-bar-next" class="ai-bar-nav-btn" title="Next edit">
+      <span id="ai-bar-edit-count" class="ai-bar-edit-label">${tp('git_diff_ops.edits', editCount, { count: editCount })}</span>
+      <button id="ai-bar-next" class="ai-bar-nav-btn" title="${t('git_diff_ops.next_edit')}" aria-label="${t('git_diff_ops.next_edit')}">
         <span class="ui-icon material-icons">keyboard_arrow_down</span>
       </button>
     </div>
     <span class="ai-bar-sep"></span>
     <div class="ai-bar-center">
-      <button id="ai-bar-accept" class="ai-bar-btn ai-bar-btn-accept" title="Accept File (${acceptKey})">
-        Accept File <kbd>${acceptKey}</kbd>
+      <button id="ai-bar-accept" class="ai-bar-btn ai-bar-btn-accept" title="${t('git_diff_ops.accept_file_shortcut', { shortcut: acceptKey })}">
+        ${t('git_diff_ops.accept_file')} <kbd>${acceptKey}</kbd>
       </button>
-      <button id="ai-bar-reject" class="ai-bar-btn ai-bar-btn-reject" title="Reject File (${rejectKey})">
-        Reject File <kbd>${rejectKey}</kbd>
+      <button id="ai-bar-reject" class="ai-bar-btn ai-bar-btn-reject" title="${t('git_diff_ops.reject_file_shortcut', { shortcut: rejectKey })}">
+        ${t('git_diff_ops.reject_file')} <kbd>${rejectKey}</kbd>
       </button>
     </div>
     <span class="ai-bar-sep"></span>
-    <button id="ai-bar-toggle-preview" class="ai-bar-nav-btn" title="Toggle diff preview">
+    <button id="ai-bar-toggle-preview" class="ai-bar-nav-btn" title="${t('git_diff_ops.toggle_preview')}" aria-label="${t('git_diff_ops.toggle_preview')}">
       <span class="ui-icon material-icons">unfold_more</span>
     </button>
     <span class="ai-bar-sep"></span>
     <div class="ai-bar-file-nav">
-      <button id="ai-bar-file-prev" class="ai-bar-nav-btn" title="Previous file" ${totalFiles <= 1 ? 'disabled' : ''}>
+      <button id="ai-bar-file-prev" class="ai-bar-nav-btn" title="${t('git_diff_ops.previous_file')}" aria-label="${t('git_diff_ops.previous_file')}" ${totalFiles <= 1 ? 'disabled' : ''}>
         <span class="ui-icon material-icons">chevron_left</span>
       </button>
-      <span id="ai-bar-file-count" class="ai-bar-file-label">${fileNum} of ${totalFiles} file${totalFiles !== 1 ? 's' : ''}</span>
-      <button id="ai-bar-file-next" class="ai-bar-nav-btn" title="Next file" ${totalFiles <= 1 ? 'disabled' : ''}>
+      <span id="ai-bar-file-count" class="ai-bar-file-label">${t('git_diff_ops.file_position', { current: fileNum, total: totalFiles, files: tp('git_diff_ops.files', totalFiles, { count: totalFiles }) })}</span>
+      <button id="ai-bar-file-next" class="ai-bar-nav-btn" title="${t('git_diff_ops.next_file')}" aria-label="${t('git_diff_ops.next_file')}" ${totalFiles <= 1 ? 'disabled' : ''}>
         <span class="ui-icon material-icons">chevron_right</span>
       </button>
     </div>
     <span class="ai-bar-sep"></span>
-    <button id="ai-bar-undo" class="ai-bar-nav-btn" title="Undo last accepted AI diff">
+    <button id="ai-bar-undo" class="ai-bar-nav-btn" title="${t('git_diff_ops.undo_last')}" aria-label="${t('git_diff_ops.undo_last')}">
       <span class="ui-icon material-icons">undo</span>
     </button>
-    <button id="ai-bar-history" class="ai-bar-nav-btn" title="AI diff history">
+    <button id="ai-bar-history" class="ai-bar-nav-btn" title="${t('git_diff_ops.history')}" aria-label="${t('git_diff_ops.history')}">
       <span class="ui-icon material-icons">history</span>
     </button>
   `;
@@ -436,7 +436,7 @@ function _showAiActionBar(path, oldContent, newContent, diffMarkers) {
 
   const _updateEditLabel = () => {
     const el = document.getElementById('ai-bar-edit-count');
-    if (el) el.textContent = `${editCount} edit${editCount !== 1 ? 's' : ''}`;
+    if (el) el.textContent = tp('git_diff_ops.edits', editCount, { count: editCount });
   };
 
   const jumpToEdit = (idx) => {
@@ -507,7 +507,7 @@ function _showAiActionBar(path, oldContent, newContent, diffMarkers) {
     if (!next) {
       const accepted = _aiDiffFileQueue.filter(f => f.status === 'accepted').length;
       const rejected = _aiDiffFileQueue.filter(f => f.status === 'rejected').length;
-      showToast(`${accepted} accepted, ${rejected} rejected`, 'info');
+      showToast(t('toast.ai_diff_summary', { accepted, rejected }), 'info');
       _aiDiffFileQueue = [];
       _aiDiffFileIndex = -1;
       return;
@@ -573,7 +573,7 @@ function _showDiffHistoryPanel() {
 
   const header = document.createElement('div');
   header.className = 'ai-diff-history-header';
-  header.innerHTML = `<span>AI Diff History (${history.length}/${DIFF_HISTORY_MAX})</span>
+  header.innerHTML = `<span>${t('git_diff_ops.ai_history_count', { count: history.length, max: DIFF_HISTORY_MAX })}</span>
     <button class="ai-diff-history-close"><span class="ui-icon material-icons">close</span></button>`;
   panel.appendChild(header);
 
@@ -581,7 +581,7 @@ function _showDiffHistoryPanel() {
   body.className = 'ai-diff-history-body';
 
   if (!history.length) {
-    body.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text-secondary)">No AI diff history yet</div>';
+    body.innerHTML = `<div style="padding:24px;text-align:center;color:var(--text-secondary)">${t('ai.diff_history_empty')}</div>`;
   } else {
     [...history].reverse().forEach((entry, ri) => {
       const idx = history.length - 1 - ri;
@@ -591,8 +591,8 @@ function _showDiffHistoryPanel() {
       const date = new Date(entry.ts);
       const time = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       const day = date.toLocaleDateString([], { month: 'short', day: 'numeric' });
-      const badge = entry.action === 'accepted' ? '<span class="badge-accept">accepted</span>' : '<span class="badge-reject">rejected</span>';
-      const undoneLabel = entry.undone ? ' <span class="badge-undone">undone</span>' : '';
+      const badge = entry.action === 'accepted' ? `<span class="badge-accept">${t('git_diff_ops.accepted')}</span>` : `<span class="badge-reject">${t('git_diff_ops.rejected')}</span>`;
+      const undoneLabel = entry.undone ? ` <span class="badge-undone">${t('git_diff_ops.undone')}</span>` : '';
       row.innerHTML = `
         <div class="history-row-info">
           <span class="history-file">${_escapeHtml(fname)}</span>
@@ -600,8 +600,8 @@ function _showDiffHistoryPanel() {
           <span class="history-time">${day} ${time}</span>
         </div>
         <div class="history-row-actions">
-          <button class="history-view-btn" data-idx="${idx}" title="View diff"><span class="ui-icon material-icons">visibility</span></button>
-          ${!entry.undone ? `<button class="history-undo-btn" data-idx="${idx}" title="Undo this change"><span class="ui-icon material-icons">undo</span></button>` : ''}
+          <button class="history-view-btn" data-idx="${idx}" title="${t('git_diff_ops.view_diff')}" aria-label="${t('git_diff_ops.view_diff')}"><span class="ui-icon material-icons">visibility</span></button>
+          ${!entry.undone ? `<button class="history-undo-btn" data-idx="${idx}" title="${t('git_diff_ops.undo_change')}" aria-label="${t('git_diff_ops.undo_change')}"><span class="ui-icon material-icons">undo</span></button>` : ''}
         </div>`;
       body.appendChild(row);
     });
@@ -610,7 +610,7 @@ function _showDiffHistoryPanel() {
 
   const footer = document.createElement('div');
   footer.className = 'ai-diff-history-footer';
-  footer.innerHTML = '<button class="ai-diff-history-clear-btn">Clear All History</button>';
+  footer.innerHTML = `<button class="ai-diff-history-clear-btn">${t('git_diff_ops.clear_history')}</button>`;
   panel.appendChild(footer);
 
   overlay.appendChild(panel);
@@ -621,7 +621,7 @@ function _showDiffHistoryPanel() {
   footer.querySelector('.ai-diff-history-clear-btn').onclick = () => {
     _saveDiffHistory([]);
     overlay.remove();
-    showToast('Diff history cleared', 'info', 1500);
+    showToast(t('toast.ai_diff_history_cleared'), 'info', 1500);
   };
 
   body.querySelectorAll('.history-undo-btn').forEach(btn => {
@@ -942,20 +942,20 @@ export async function showFullDiffModal(path, oldContent, newContent) {
       <div class="diff-viewer-toolbar" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-bottom:1px solid var(--border-color);">
         <div class="diff-viewer-summary" style="display:flex;align-items:center;gap:8px;">
           <span class="ui-icon ui-icon--tone-accent material-icons">difference</span>
-          <span id="diff-nav-count">Calculating...</span>
+          <span id="diff-nav-count">${t('git_diff_ops.calculating')}</span>
         </div>
         <div style="display:flex;gap:8px;align-items:center;">
           <div class="diff-viewer-actions" style="display:flex;gap:4px;">
-            <button id="diff-nav-prev" class="diff-nav-btn" type="button" title="Previous difference">
+            <button id="diff-nav-prev" class="diff-nav-btn" type="button" title="${t('git_diff_ops.previous_difference')}" aria-label="${t('git_diff_ops.previous_difference')}">
               <span class="ui-icon material-icons">keyboard_arrow_up</span>
             </button>
-            <button id="diff-nav-next" class="diff-nav-btn" type="button" title="Next difference">
+            <button id="diff-nav-next" class="diff-nav-btn" type="button" title="${t('git_diff_ops.next_difference')}" aria-label="${t('git_diff_ops.next_difference')}">
               <span class="ui-icon material-icons">keyboard_arrow_down</span>
             </button>
-            <button id="diff-whitespace-toggle" class="ui-icon-button" type="button" title="Hide whitespace-only changes" aria-label="Hide whitespace-only changes" aria-pressed="false">
+            <button id="diff-whitespace-toggle" class="ui-icon-button" type="button" title="${t('git_diff_ops.hide_whitespace')}" aria-label="${t('git_diff_ops.hide_whitespace')}" aria-pressed="false">
               <span class="ui-icon material-icons" aria-hidden="true">space_bar</span>
             </button>
-            <button id="diff-wrap-toggle" class="ui-icon-button" type="button" title="Wrap long lines" aria-label="Wrap long lines" aria-pressed="true">
+            <button id="diff-wrap-toggle" class="ui-icon-button" type="button" title="${t('git_diff_ops.wrap_lines')}" aria-label="${t('git_diff_ops.wrap_lines')}" aria-pressed="true">
               <span class="ui-icon material-icons" aria-hidden="true">wrap_text</span>
             </button>
           </div>
@@ -1040,7 +1040,7 @@ export async function showFullDiffModal(path, oldContent, newContent) {
       unsubscribeHideModal = eventBus.on("ui:hide-modal", () => closeHandler("dismiss"));
 
       document.getElementById("ai-diff-accept").onclick = async () => {
-        showToast(`✅ Accepted changes to ${path}`, "success");
+        showToast(t('toast.ai_diff_accepted', { file: path }), "success");
         const tab = state.openTabs.find(t => t.path === path);
         if (tab) {
           tab.content = newContent;
@@ -1063,7 +1063,7 @@ export async function showFullDiffModal(path, oldContent, newContent) {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ action: "write_file", path: path, content: oldContent }),
           });
-          showToast(`↩️ Reverted ${path}`, "success");
+          showToast(t('toast.ai_diff_reverted', { file: path }), "success");
           const tab = state.openTabs.find(t => t.path === path);
           if (tab) {
             tab.content = oldContent;
@@ -1074,14 +1074,14 @@ export async function showFullDiffModal(path, oldContent, newContent) {
             eventBus.emit('file:check-updates');
           }
         } catch (err) {
-          showToast(`Failed to revert: ${err.message}`, "error");
+          showToast(t('toast.ai_diff_revert_failed', { error: err.message }), "error");
         }
         closeHandler("reject");
       };
     });
 
   } catch (error) {
-    showToast(`Diff failed: ${error.message}`, "error");
+    showToast(t('toast.diff_failed', { error: error.message }), "error");
   }
 }
 
@@ -1128,7 +1128,7 @@ function setupMergeViewDisplayControls({
     const enabled = !getIgnoreWhitespace();
     setIgnoreWhitespace(enabled);
     whitespaceButton.setAttribute('aria-pressed', String(enabled));
-    whitespaceButton.title = enabled ? 'Show whitespace-only changes' : 'Hide whitespace-only changes';
+    whitespaceButton.title = enabled ? t('git_diff_ops.show_whitespace') : t('git_diff_ops.hide_whitespace');
     whitespaceButton.setAttribute('aria-label', whitespaceButton.title);
     recreate();
   });
@@ -1192,12 +1192,14 @@ function setupDiffNavigation(mergeView, initialIndex = 0) {
     if (!countLabel) return;
 
     if (!chunks.length) {
-      countLabel.textContent = "No differences";
+      countLabel.textContent = t('git_diff_ops.no_differences');
       return;
     }
 
-    const plural = chunks.length === 1 ? "difference" : "differences";
-    countLabel.textContent = `${activeIndex + 1} / ${chunks.length} ${plural}`;
+    countLabel.textContent = tp('diff.change_position', chunks.length, {
+      current: activeIndex + 1,
+      count: chunks.length,
+    });
   }
 
   function updateButtonState() {
@@ -1288,7 +1290,7 @@ function scheduleMergeViewContextRestore(mergeView, context) {
 
 function resetFailedWorkingDiffModal(path) {
   const modalTitle = document.getElementById('modal-title');
-  if (modalTitle?.textContent !== `Diff: ${path}`) return;
+  if (modalTitle?.textContent !== t('git_diff_ops.diff_title', { path })) return;
   deactivateSharedModal();
   resetModalToDefault();
   const modal = document.getElementById('modal');
@@ -1307,20 +1309,21 @@ function resetFailedWorkingDiffModal(path) {
  */
 export async function showDiffModal(path, provider = 'git') {
   const providerLabel = provider === 'gitea' ? 'Gitea' : 'GitHub';
+  const fileName = path.split('/').pop();
   const operation = startOperationFeedback({
-    label: `Load diff for ${path.split('/').pop()}`,
+    label: t('git_diff_ops.load_file_diff', { file: fileName }),
     icon: 'difference',
-    scope: `Local Git repository (${providerLabel})`,
-    target: `HEAD -> ${path}`,
-    message: 'Preparing diff components...',
+    scope: t('git_diff_ops.local_repository_provider', { provider: providerLabel }),
+    target: t('git_diff_ops.head_to_path', { path }),
+    message: t('git_diff_ops.preparing_components'),
     retry: () => showDiffModal(path, provider),
     open: () => _revealAndOpenFile(path, 'diff'),
-    openLabel: 'Open File',
+    openLabel: t('git_diff_ops.open_file'),
     openIcon: 'description',
   });
   try {
     await ensureDiffLibrariesLoaded();
-    operation.update({ message: `Loading HEAD and working content for ${path}...` });
+    operation.update({ message: t('git_diff_ops.loading_file_content', { path }) });
 
     // 1. Get HEAD content (Old)
     const headData = await fetchWithAuth(API_BASE, {
@@ -1330,7 +1333,7 @@ export async function showDiffModal(path, provider = 'git') {
     });
 
     if (!headData.success) {
-      throw new Error(headData.message || headData.error || 'Could not load the HEAD version');
+      throw new Error(headData.message || headData.error || t('git_diff_ops.head_load_failed'));
     }
     const oldContent = headData.content || "";
 
@@ -1360,7 +1363,7 @@ export async function showDiffModal(path, provider = 'git') {
     modal.style.display = "flex";
     modal.style.flexDirection = "column";
 
-    modalTitle.textContent = `Diff: ${path}`;
+    modalTitle.textContent = t('git_diff_ops.diff_title', { path });
     modalFooter.style.display = "none";
 
     // Use flex column for body to let MergeView fill it
@@ -1368,19 +1371,19 @@ export async function showDiffModal(path, provider = 'git') {
       <div class="diff-viewer-toolbar">
         <div class="diff-viewer-summary">
           <span class="ui-icon material-icons">difference</span>
-          <span id="diff-nav-count">No differences</span>
+          <span id="diff-nav-count">${t('git_diff_ops.no_differences')}</span>
         </div>
         <div class="diff-viewer-actions" aria-label="Diff navigation and staging">
-          <button id="diff-nav-prev" class="diff-nav-btn" type="button" title="Previous difference" aria-label="Previous difference">
+          <button id="diff-nav-prev" class="diff-nav-btn" type="button" title="${t('git_diff_ops.previous_difference')}" aria-label="${t('git_diff_ops.previous_difference')}">
             <span class="ui-icon material-icons">keyboard_arrow_up</span>
           </button>
-          <button id="diff-nav-next" class="diff-nav-btn" type="button" title="Next difference" aria-label="Next difference">
+          <button id="diff-nav-next" class="diff-nav-btn" type="button" title="${t('git_diff_ops.next_difference')}" aria-label="${t('git_diff_ops.next_difference')}">
             <span class="ui-icon material-icons">keyboard_arrow_down</span>
           </button>
-          <button id="diff-whitespace-toggle" class="ui-icon-button" type="button" title="Hide whitespace-only changes" aria-label="Hide whitespace-only changes" aria-pressed="false">
+          <button id="diff-whitespace-toggle" class="ui-icon-button" type="button" title="${t('git_diff_ops.hide_whitespace')}" aria-label="${t('git_diff_ops.hide_whitespace')}" aria-pressed="false">
             <span class="ui-icon material-icons" aria-hidden="true">space_bar</span>
           </button>
-          <button id="diff-wrap-toggle" class="ui-icon-button" type="button" title="Wrap long lines" aria-label="Wrap long lines" aria-pressed="true">
+          <button id="diff-wrap-toggle" class="ui-icon-button" type="button" title="${t('git_diff_ops.wrap_lines')}" aria-label="${t('git_diff_ops.wrap_lines')}" aria-pressed="true">
             <span class="ui-icon material-icons" aria-hidden="true">wrap_text</span>
           </button>
           <button id="diff-change-stage" class="ui-button" type="button"></button>
@@ -1434,7 +1437,7 @@ export async function showDiffModal(path, provider = 'git') {
     const repositoryState = provider === 'gitea' ? giteaState : gitState;
     const stageButton = document.getElementById('diff-change-stage');
     const staged = repositoryState.files.staged.includes(path);
-    stageButton.textContent = staged ? 'Unstage file' : 'Stage file';
+    stageButton.textContent = staged ? t('git_diff_ops.unstage_file') : t('git_diff_ops.stage_file');
     stageButton.addEventListener('click', async () => {
       stageButton.disabled = true;
       await Promise.all(eventBus.emit('source-control:change-stage', {
@@ -1476,14 +1479,14 @@ export async function showDiffModal(path, provider = 'git') {
     modalOverlay.addEventListener("click", overlayClickHandler);
     document.getElementById("modal-close").onclick = closeHandler;
     unsubscribeHideModal = eventBus.on("ui:hide-modal", closeHandler);
-    operation.finish(`Diff ready for ${path.split('/').pop()}`, {
-      detail: `Compared HEAD with the current working content for ${path}`,
+    operation.finish(t('git_diff_ops.file_diff_ready', { file: fileName }), {
+      detail: t('git_diff_ops.file_diff_detail', { path }),
     });
     return true;
 
   } catch (error) {
     resetFailedWorkingDiffModal(path);
-    operation.fail(`Could not load diff for ${path.split('/').pop()}`, error.message);
+    operation.fail(t('git_diff_ops.file_diff_failed', { file: fileName }), error.message);
     showToast(t("toast.diff_failed", { error: error.message }), "error");
   }
   return false;
@@ -1503,11 +1506,11 @@ export async function showGitHistory() {
     return;
   }
 
-  const branch = gitState.currentBranch || 'Current branch';
+  const branch = gitState.currentBranch || t('git_diff_ops.current_branch');
   const operation = startHistoryOperation({
-    label: 'Load Git history',
-    target: `${branch} -> latest 30 commits`,
-    message: 'Fetching commit history...',
+    label: t('git_diff_ops.load_history'),
+    target: t('git_diff_ops.history_target', { branch, count: 30 }),
+    message: t('git_diff_ops.fetching_history'),
     retry: () => showGitHistory(),
     open: () => showGitHistory(),
   });
@@ -1519,7 +1522,7 @@ export async function showGitHistory() {
     });
     if (data.success) {
       if (data.commits.length === 0) {
-        operation.finish('No commits found');
+        operation.finish(t('git_diff_ops.no_commits'));
         showToast(t("toast.no_commits_found_in_this_repos"), "success");
         return true;
       }
@@ -1534,21 +1537,21 @@ export async function showGitHistory() {
               <span style="font-size: 11px; color: var(--text-muted);">${escapeHtml(date)}</span>
             </div>
             <div style="font-size: 14px; color: var(--text-primary); margin-bottom: 4px;">${escapeHtml(commit.message)}</div>
-            <div style="font-size: 12px; color: var(--text-secondary); opacity: 0.8;">by ${escapeHtml(commit.author)}</div>
+            <div style="font-size: 12px; color: var(--text-secondary); opacity: 0.8;">${t('git_diff_ops.by_author', { author: escapeHtml(commit.author) })}</div>
           </div>
         `;
       }).join("");
-      operation.finish(`${data.commits.length} ${data.commits.length === 1 ? 'commit' : 'commits'} loaded`);
+      operation.finish(tp('git_diff_ops.commits_loaded', data.commits.length));
 
       // Show commit history modal
       showModal({
-        title: "Commit History",
+        title: t('git_diff_ops.commit_history'),
         message: `
           <div style="max-height: 60vh; overflow-y: auto; margin: -16px; background: var(--bg-primary);">
             ${commitListHtml}
           </div>
         `,
-        confirmText: "Close",
+        confirmText: t('common.close'),
         onConfirm: () => {}
       });
 
@@ -1561,7 +1564,7 @@ export async function showGitHistory() {
 
       // Add click listeners to history items
       setTimeout(() => {
-        const items = document.querySelectorAll(".git-history-item");
+        const items = modal?.querySelectorAll(".git-history-item") || [];
         items.forEach(item => {
           item.addEventListener("click", () => {
             const hash = item.getAttribute("data-hash");
@@ -1575,12 +1578,12 @@ export async function showGitHistory() {
       return true;
 
     } else {
-      const message = data.message || data.error || 'Unknown history error';
-      operation.fail('Could not load Git history', message);
+      const message = data.message || data.error || t('git_diff_ops.unknown_history_error');
+      operation.fail(t('git_diff_ops.history_failed'), message);
       showToast(t("toast.fetch_history_failed", { error: message }), "error");
     }
   } catch (e) {
-    operation.fail('Could not load Git history', e.message);
+    operation.fail(t('git_diff_ops.history_failed'), e.message);
     showToast(t("toast.fetch_history_error", { error: e.message }), "error");
   }
   return false;
@@ -1596,11 +1599,11 @@ export async function showGitCommitDiff(commit) {
 
 async function loadGitCommitDiff(commit) {
   const shortHash = commit.hash.substring(0, 7);
-  const branch = gitState.currentBranch || 'Current branch';
+  const branch = gitState.currentBranch || t('git_diff_ops.current_branch');
   const operation = startHistoryOperation({
-    label: `Load commit ${shortHash}`,
-    target: `${branch} -> ${commit.hash}`,
-    message: `Loading diff for ${shortHash}...`,
+    label: t('git_diff_ops.load_commit', { hash: shortHash }),
+    target: t('git_diff_ops.commit_target', { branch, hash: commit.hash }),
+    message: t('git_diff_ops.loading_commit', { hash: shortHash }),
     retry: () => loadGitCommitDiff(commit),
     open: () => showGitHistory(),
   });
@@ -1615,23 +1618,23 @@ async function loadGitCommitDiff(commit) {
       const date = new Date(commit.timestamp * 1000).toLocaleString();
 
       const diffRows = getRawDiffRows(data.diff);
-      operation.finish(`${diffRows.length} diff ${diffRows.length === 1 ? 'line' : 'lines'} loaded`);
+      operation.finish(tp('git_diff_ops.diff_lines_loaded', diffRows.length));
 
       // Show commit diff modal
       const diffPromise = showModal({
-        title: `Commit: ${shortHash}`,
+        title: t('git_diff_ops.commit_title', { hash: shortHash }),
         message: `
           <div style="display: flex; flex-direction: column; height: 70vh;">
             <div style="padding-bottom: 12px; border-bottom: 1px solid var(--border-color); margin-bottom: 12px;">
               <div style="font-size: 16px; font-weight: 600; margin-bottom: 4px;">${escapeHtml(commit.message)}</div>
               <div style="font-size: 12px; color: var(--text-secondary);">
-                <strong>Author:</strong> ${escapeHtml(commit.author)} | <strong>Date:</strong> ${escapeHtml(date)}
+                <strong>${t('git_diff_ops.author')}:</strong> ${escapeHtml(commit.author)} | <strong>${t('git_diff_ops.date')}:</strong> ${escapeHtml(date)}
               </div>
             </div>
             <div id="commit-diff-content" class="diff-review-shell"></div>
           </div>
         `,
-        confirmText: "Back to History"
+        confirmText: t('git_diff_ops.back_to_history')
       });
 
       // Make modal wider (responsive for mobile)
@@ -1641,8 +1644,8 @@ async function loadGitCommitDiff(commit) {
         modal.style.width = "min(900px, 95vw)";
       }
       createTextDiffReview(document.getElementById('commit-diff-content'), diffRows, {
-        emptyMessage: 'No changes to display in this commit',
-        label: 'Commit diff controls',
+        emptyMessage: t('git_diff_ops.commit_empty'),
+        label: t('git_diff_ops.commit_controls'),
       });
 
       // Wait for user to close the modal
@@ -1656,12 +1659,12 @@ async function loadGitCommitDiff(commit) {
       return true;
 
     } else {
-      const message = data.message || data.error || 'Unknown commit diff error';
-      operation.fail('Could not load commit diff', message);
+      const message = data.message || data.error || t('git_diff_ops.unknown_commit_error');
+      operation.fail(t('git_diff_ops.commit_failed'), message);
       showToast(t("toast.fetch_diff_failed", { error: message }), "error");
     }
   } catch (e) {
-    operation.fail('Could not load commit diff', e.message);
+    operation.fail(t('git_diff_ops.commit_failed'), e.message);
     showToast(t("toast.fetch_diff_error", { error: e.message }), "error");
   }
   return false;

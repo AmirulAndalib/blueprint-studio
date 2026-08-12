@@ -6,8 +6,8 @@ import {
   constrainSplitPercent,
   SPLIT_MAX_PERCENT,
   SPLIT_MIN_PERCENT,
-} from './workspace-layout.js?v=2.5.188';
-import { captureEditorViewports, scheduleEditorViewportRestore } from './editor-viewport.js?v=2.5.188';
+} from './workspace-layout.js?v=2.5.270';
+import { captureEditorViewports, scheduleEditorViewportRestore } from './editor-viewport.js?v=2.5.270';
 
 // Drag-and-drop state
 let draggedTabIndex = null;
@@ -664,7 +664,7 @@ export function handleTabDragOver(e) {
   const dropTabIndex = parseInt(dropTarget.getAttribute('data-tab-index'));
 
   if (dropTabIndex !== draggedTabIndex) {
-    document.querySelectorAll('.tab.drop-target, .tab.drop-before, .tab.drop-after').forEach(el => {
+    dropTarget.closest('.tabs-container')?.querySelectorAll('.tab.drop-target, .tab.drop-before, .tab.drop-after').forEach(el => {
       el.classList.remove('drop-target', 'drop-before', 'drop-after');
     });
 
@@ -722,9 +722,11 @@ export function handleTabDragEnd(e) {
  * Cleans up drag state
  */
 function cleanupDragState() {
-  document.querySelectorAll('.tab.dragging, .tab.drop-target, .tab.drop-before, .tab.drop-after').forEach(el => {
-    el.classList.remove('dragging', 'drop-target', 'drop-before', 'drop-after');
-  });
+  for (const container of [document.getElementById('primary-tabs-container'), document.getElementById('secondary-tabs-container')]) {
+    container?.querySelectorAll('.tab.dragging, .tab.drop-target, .tab.drop-before, .tab.drop-after').forEach(el => {
+      el.classList.remove('dragging', 'drop-target', 'drop-before', 'drop-after');
+    });
+  }
   draggedTabIndex = null;
   draggedTabPane = null;
 }

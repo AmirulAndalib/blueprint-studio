@@ -1,9 +1,10 @@
 /** POLLING.JS | Purpose: Background polling for git status and file changes. */
 import { state } from './state.js';
 import { fetchWithAuth } from './api.js';
-import { API_BASE } from './constants.js';
+import { API_BASE } from './constants.js?v=2.5.270';
 import { showToast } from './ui.js';
 import { eventBus } from './event-bus.js';
+import { t } from './translations.js?v=2.5.270';
 
 // Polling interval reference
 export let gitStatusPollingInterval = null;
@@ -41,14 +42,14 @@ export async function checkFileUpdates() {
           state.activeTab.externallyChanged = true;
           eventBus.emit('ui:refresh-tabs');
           await Promise.all(eventBus.emit('file:open', { path, forceReload: true }));
-          showToast(`File updated externally: ${path.split('/').pop()}`, "info");
+          showToast(t('toast.file_updated_externally', { file: path.split('/').pop() }), "info");
           state.activeTab.externallyChanged = false;
           eventBus.emit('ui:refresh-tabs');
         } else {
           if (!state.activeTab.externalConflict) {
             state.activeTab.externalConflict = true;
             eventBus.emit('ui:refresh-tabs');
-            showToast(`Save conflict: ${state.activeTab.path.split('/').pop()} changed outside Blueprint Studio`, "warning", 10000);
+            showToast(t('toast.external_save_conflict', { file: state.activeTab.path.split('/').pop() }), "warning", 10000);
           }
         }
       }

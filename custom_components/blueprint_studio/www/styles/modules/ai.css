@@ -72,6 +72,43 @@
       flex: 1 0 auto;
       min-height: 32px;
       padding-inline: 9px;
+      position: relative;
+      background: var(--surface-subtle, var(--bg-tertiary));
+      border: 1px solid transparent;
+      border-radius: 6px;
+      color: var(--content-secondary, var(--text-secondary));
+      font-weight: 600;
+      transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+    }
+
+    .ai-task-modes .ui-segmented-control-item:hover {
+      background: var(--surface-hover, var(--bg-hover));
+      color: var(--content-primary, var(--text-primary));
+    }
+
+    .ai-task-modes .ui-segmented-control-item.active,
+    .ai-task-modes .ui-segmented-control-item[aria-pressed="true"] {
+      background: var(--accent-color);
+      border-color: var(--accent-color);
+      box-shadow: 0 1px 3px color-mix(in srgb, var(--accent-color) 35%, transparent);
+      color: #fff;
+    }
+
+    .ai-task-modes .ui-segmented-control-item.active::after,
+    .ai-task-modes .ui-segmented-control-item[aria-pressed="true"]::after {
+      background: currentColor;
+      border-radius: 50%;
+      content: '';
+      height: 4px;
+      inset: auto 50% 3px auto;
+      position: absolute;
+      transform: translateX(50%);
+      width: 4px;
+    }
+
+    .ai-task-modes .ui-segmented-control-item:focus-visible {
+      outline: 2px solid var(--focus-color);
+      outline-offset: 1px;
     }
 
     .ai-chat-messages {

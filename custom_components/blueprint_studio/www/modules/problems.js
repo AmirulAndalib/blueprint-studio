@@ -2,6 +2,7 @@
 
 import { state } from './state.js';
 import { eventBus } from './event-bus.js';
+import { t, tp } from './translations.js?v=2.5.270';
 
 let markerHandles = [];
 let markedLines = [];
@@ -83,10 +84,10 @@ function quickFixFor(finding) {
 
 function recoveryGuidance(finding) {
   if (finding.solution) return finding.solution;
-  if (finding.category === 'instance') return 'Check the target or action against the connected Home Assistant instance, then validate again.';
-  if (finding.category === 'deprecation') return 'Review the current Home Assistant syntax and replace the deprecated form.';
-  if (finding.category === 'error') return 'Correct the highlighted syntax or schema value, then validate again.';
-  return 'Review this recommendation and update the file if it applies.';
+  if (finding.category === 'instance') return t('problems.recovery_instance');
+  if (finding.category === 'deprecation') return t('problems.recovery_deprecation');
+  if (finding.category === 'error') return t('problems.recovery_error');
+  return t('problems.recovery_recommendation');
 }
 
 function addQuickFix(item, finding) {
@@ -95,7 +96,7 @@ function addQuickFix(item, finding) {
   const review = document.createElement('button');
   review.type = 'button';
   review.className = 'problem-quick-fix';
-  review.textContent = 'Review fix';
+  review.textContent = t('problems.review_fix');
   review.addEventListener('click', () => {
     const editor = state.editor;
     if (!editor) return;
@@ -111,19 +112,19 @@ function addQuickFix(item, finding) {
     const apply = document.createElement('button');
     apply.type = 'button';
     apply.className = 'problem-quick-fix';
-    apply.textContent = 'Apply fix';
+    apply.textContent = t('problems.apply_fix');
     apply.addEventListener('click', () => {
       if (editor.getLine(line)?.trim() !== finding.original.trim()) {
-        setStatus('stale', 'Fix preview is stale; validate again');
+        setStatus('stale', t('problems.fix_stale'));
         return;
       }
       editor.replaceRange(`${indent}${replacement}`, { line, ch: 0 }, { line, ch: current.length }, 'problems-quick-fix');
-      setStatus('stale', 'Quick fix applied; Undo is available');
+      setStatus('stale', t('problems.fix_applied'));
       const undo = document.createElement('button');
       undo.type = 'button';
       undo.className = 'problem-quick-fix';
-      undo.textContent = 'Undo fix';
-      undo.addEventListener('click', () => { editor.undo(); setStatus('stale', 'Quick fix undone; validate again'); });
+      undo.textContent = t('problems.undo_fix');
+      undo.addEventListener('click', () => { editor.undo(); setStatus('stale', t('problems.fix_undone')); });
       apply.replaceWith(undo);
     });
     preview.append(before, after, apply);
@@ -140,12 +141,12 @@ function renderFindings(findings) {
   const visible = matches.slice(0, visibleLimit);
   const errors = findings.filter(finding => finding.severity === 'error').length;
   const warnings = findings.length - errors;
-  summary.textContent = findings.length ? `${errors} error${errors === 1 ? '' : 's'}, ${warnings} advisory finding${warnings === 1 ? '' : 's'}` : 'No problems found';
+  summary.textContent = findings.length ? `${tp('problems.error_count', errors)}${warnings ? `, ${tp('problems.advisory_count', warnings)}` : ''}` : t('problems.none_found');
   list.replaceChildren();
   if (!visible.length) {
     const empty = document.createElement('p');
     empty.className = 'problems-empty';
-    empty.textContent = findings.length ? 'No problems match this filter.' : 'Validation has not found any problems.';
+    empty.textContent = findings.length ? t('problems.no_filter_match') : t('problems.validation_empty');
     list.append(empty);
     return;
   }
@@ -164,10 +165,11 @@ function renderFindings(findings) {
     entries.forEach(finding => {
       const item = document.createElement('div');
       item.className = `problem-item problem-item--${finding.severity}`;
+      const severityLabel = t(`problems.severity_${finding.severity}`);
       const navigate = document.createElement('button');
       navigate.type = 'button';
       navigate.className = 'problem-navigation';
-      navigate.setAttribute('aria-label', `Go to ${finding.path}, line ${finding.line || 1}: ${finding.message}`);
+      navigate.setAttribute('aria-label', t('problems.go_to_line', { path: finding.path, line: finding.line || 1, message: `${severityLabel}: ${finding.message}` }));
       const icon = document.createElement('span');
       icon.className = 'ui-icon material-icons';
       icon.setAttribute('aria-hidden', 'true');
@@ -176,9 +178,12 @@ function renderFindings(findings) {
       copy.className = 'problem-item-copy';
       const message = document.createElement('strong');
       message.textContent = finding.message;
+      const severity = document.createElement('span');
+      severity.className = 'problem-severity';
+      severity.textContent = severityLabel;
       const metadata = document.createElement('small');
-      metadata.textContent = `${finding.category} | ${finding.authority}${finding.line ? ` | Line ${finding.line}${finding.column ? `, column ${finding.column}` : ''}` : ''}`;
-      copy.append(message, metadata);
+      metadata.textContent = `${finding.category} | ${finding.authority}${finding.line ? ` | ${t('problems.line', { line: finding.line })}${finding.column ? `, ${t('problems.column', { column: finding.column })}` : ''}` : ''}`;
+      copy.append(message, severity, metadata);
       const solution = document.createElement('em');
       solution.textContent = recoveryGuidance(finding);
       copy.append(solution);
@@ -194,7 +199,7 @@ function renderFindings(findings) {
     const more = document.createElement('button');
     more.type = 'button';
     more.className = 'problems-show-more';
-    more.textContent = `Show ${Math.min(100, matches.length - visible.length)} more of ${matches.length}`;
+    more.textContent = t('problems.show_more', { visible: Math.min(100, matches.length - visible.length), total: matches.length });
     more.addEventListener('click', () => { visibleLimit += 100; renderFindings(findingsState); });
     list.append(more);
   }
@@ -205,7 +210,7 @@ function setStatus(status, message) {
   if (panel) panel.dataset.status = status;
   if (statusNode) statusNode.textContent = message;
   if (announcer) announcer.textContent = message;
-  if (trigger) trigger.setAttribute('aria-label', `Problems: ${message}`);
+  if (trigger) trigger.setAttribute('aria-label', t('problems.aria_status', { message }));
 }
 
 export function publishValidationResult({ fileName, result, editor }) {
@@ -224,8 +229,7 @@ export function publishValidationResult({ fileName, result, editor }) {
   renderFindings(findings);
   const unavailable = !result.valid && !findings.length && Boolean(result.error);
   const status = unavailable ? 'unavailable' : !result.valid ? 'failed' : findings.length ? 'warnings' : 'passed';
-  const count = `${findings.length} finding${findings.length === 1 ? '' : 's'}`;
-  setStatus(status, status === 'unavailable' ? 'Validation unavailable' : status === 'failed' ? `Validation failed, ${count}` : status === 'warnings' ? `Validation passed with ${count}` : 'Validation passed, no findings');
+  setStatus(status, status === 'unavailable' ? t('problems.validation_unavailable') : status === 'failed' ? t('problems.validation_failed', { count: tp('problems.finding_count', findings.length) }) : status === 'warnings' ? t('problems.validation_warnings', { count: tp('problems.finding_count', findings.length) }) : t('problems.validation_passed'));
   if (findings.length && !dismissedForCurrentValidation) {
     showProblems();
     // Validation also updates lint markers, operation results, and toolbar
@@ -244,7 +248,7 @@ export function setValidationRunning(fileName) {
   findingsState = [];
   visibleLimit = 100;
   renderFindings([]);
-  setStatus('running', `Validating ${fileName}`);
+  setStatus('running', t('problems.validating', { file: fileName }));
 }
 
 export function showProblems() {
@@ -271,6 +275,6 @@ export function initProblems() {
   trigger?.addEventListener('click', () => panel.hidden ? showProblems() : hideProblems());
   search?.addEventListener('input', () => { visibleLimit = 100; renderFindings(findingsState); });
   eventBus.on('validation:stale', ({ tab }) => {
-    if (findingsState.length && tab?.path === findingsState[0]?.path) setStatus('stale', 'Validation is stale; run validation again');
+    if (findingsState.length && tab?.path === findingsState[0]?.path) setStatus('stale', t('problems.validation_stale'));
   });
 }

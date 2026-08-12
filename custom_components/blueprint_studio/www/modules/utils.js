@@ -1,5 +1,5 @@
 /** UTILS.JS | Purpose: * Collection of utility/helper functions used throughout Blueprint Studio. */
-import { MOBILE_BREAKPOINT, TEXT_FILE_EXTENSIONS } from './constants.js';
+import { MOBILE_BREAKPOINT, TEXT_FILE_EXTENSIONS } from './constants.js?v=2.5.270';
 
 /**
  * ============================================================================

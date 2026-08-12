@@ -140,6 +140,11 @@
       overflow: hidden;
     }
     .sftp-crumb {
+      background: transparent;
+      border: 0;
+      color: inherit;
+      cursor: pointer;
+      font: inherit;
       overflow: hidden;
       min-width: 0;
       max-width: min(180px, 42vw);

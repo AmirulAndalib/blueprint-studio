@@ -1,12 +1,12 @@
-import { t } from './translations.js';
+import { t } from './translations.js?v=2.5.270';
 /** SELECTION.JS | Purpose: Multi-file/folder selection mode for bulk operations. */
 import { state, elements } from './state.js';
 import { fetchWithAuth } from './api.js';
 import { eventBus } from './event-bus.js';
-import { API_BASE } from './constants.js';
+import { API_BASE } from './constants.js?v=2.5.270';
 import { showToast, showConfirmDialog } from './ui.js';
-import { parseSftpPath } from './sftp.js?v=2.5.188';
-import { startOperationFeedback } from './feedback-service.js?v=2.5.188';
+import { parseSftpPath } from './sftp.js?v=2.5.270';
+import { startOperationFeedback } from './feedback-service.js?v=2.5.270';
 
 /**
  * Toggle selection mode on/off
@@ -124,13 +124,13 @@ export async function deleteSelectedItems() {
 async function confirmDeleteSelectedItems(paths) {
   const localCount = paths.filter((path) => !path.startsWith('sftp://')).length;
   const remoteCount = paths.length - localCount;
-  const locationSummary = `<div class="operation-location ${localCount && remoteCount ? 'is-mixed' : remoteCount ? 'is-remote' : 'is-local'}"><span class="ui-icon material-icons" aria-hidden="true">${localCount && remoteCount ? 'compare_arrows' : remoteCount ? 'cloud' : 'home'}</span><span><strong>${localCount && remoteCount ? 'Mixed locations' : remoteCount ? 'Remote SFTP' : 'Local Home Assistant'}</strong><small>${localCount} local · ${remoteCount} remote</small></span></div>`;
+  const locationSummary = `<div class="operation-location ${localCount && remoteCount ? 'is-mixed' : remoteCount ? 'is-remote' : 'is-local'}"><span class="ui-icon material-icons" aria-hidden="true">${localCount && remoteCount ? 'compare_arrows' : remoteCount ? 'cloud' : 'home'}</span><span><strong>${localCount && remoteCount ? t('selection.mixed_locations') : remoteCount ? t('selection.remote_sftp') : t('selection.local_home_assistant')}</strong><small>${t('selection.location_counts', { local: localCount, remote: remoteCount })}</small></span></div>`;
 
   const confirmed = await showConfirmDialog({
-    title: "Delete Selected Items?",
-    message: `${locationSummary}Are you sure you want to permanently delete <b>${paths.length} items</b>? This action cannot be undone.`,
-    confirmText: "Delete All",
-    cancelText: "Cancel",
+    title: t('selection.delete_title'),
+    message: `${locationSummary}${t('selection.delete_message', { count: paths.length })}`,
+    confirmText: t('selection.delete_all'),
+    cancelText: t('modal.cancel_button'),
     isDanger: true
   });
 
@@ -147,7 +147,7 @@ function closeDeletedTabs(paths) {
 }
 
 async function runDeleteSelectedItems(paths) {
-  const itemCountLabel = count => `${count} ${count === 1 ? 'item' : 'items'}`;
+  const itemCountLabel = count => t(count === 1 ? 'selection.item_count.one' : 'selection.item_count.other', { count });
   const localPaths = paths.filter(path => !path.startsWith('sftp://'));
   const sftpGroups = new Map();
   for (const virtualPath of paths.filter(path => path.startsWith('sftp://'))) {
@@ -157,21 +157,21 @@ async function runDeleteSelectedItems(paths) {
   }
   const locationCount = (localPaths.length ? 1 : 0) + sftpGroups.size;
   const scope = localPaths.length && sftpGroups.size
-    ? 'Local Home Assistant and SFTP'
+    ? t('selection.local_and_sftp')
     : sftpGroups.size
-      ? 'SFTP workspaces'
-      : 'Local Home Assistant';
+      ? t('selection.sftp_workspaces')
+      : t('selection.local_home_assistant');
   const targetPreview = paths.slice(0, 3).join(', ');
-  const target = `${paths.length} items${targetPreview ? `: ${targetPreview}${paths.length > 3 ? ` and ${paths.length - 3} more` : ''}` : ''}`;
+  const target = t('selection.target', { count: paths.length, preview: targetPreview, suffix: paths.length > 3 ? t('selection.more', { count: paths.length - 3 }) : '' });
   const operation = startOperationFeedback({
-    label: `Delete ${paths.length} selected ${paths.length === 1 ? 'item' : 'items'}`,
+    label: t('selection.delete_label', { count: paths.length }),
     icon: 'delete',
     scope,
     target,
-    message: `Deleting from ${locationCount} ${locationCount === 1 ? 'location' : 'locations'}...`,
+    message: t(locationCount === 1 ? 'selection.deleting_one_location' : 'selection.deleting_many_locations', { count: locationCount }),
     retry: () => confirmDeleteSelectedItems(paths),
     open: () => eventBus.emit('ui:switch-sidebar-view', localPaths.length ? 'explorer' : 'sftp'),
-    openLabel: 'Browse',
+    openLabel: t('selection.browse'),
     openIcon: 'folder_open',
   });
   const completedPaths = [];
@@ -194,13 +194,13 @@ async function runDeleteSelectedItems(paths) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "delete_multi", paths: localPaths }),
       });
-      if (!response.success) throw new Error(response.message || response.error || 'Local deletion request failed');
+      if (!response.success) throw new Error(response.message || response.error || t('selection.local_delete_request_failed'));
       completedPaths.push(...localPaths);
-      completedGroups.push(`Local Home Assistant (${itemCountLabel(localPaths.length)})`);
-      updateProgress('Local deletion request completed');
+      completedGroups.push(`${t('selection.local_home_assistant')} (${itemCountLabel(localPaths.length)})`);
+      updateProgress(t('selection.local_delete_request_completed'));
     } catch (error) {
-      failures.push(`Local Home Assistant (${itemCountLabel(localPaths.length)}): ${error.message}`);
-      updateProgress('Local deletion request failed');
+      failures.push(`${t('selection.local_home_assistant')} (${itemCountLabel(localPaths.length)}): ${error.message}`);
+      updateProgress(t('selection.local_delete_request_failed'));
     }
   }
 
@@ -208,8 +208,8 @@ async function runDeleteSelectedItems(paths) {
     const conn = state.sftpConnections.find(candidate => candidate.id === connId);
     const connectionLabel = conn?.name || connId;
     if (!conn) {
-      failures.push(`SFTP ${connectionLabel} (${itemCountLabel(items.length)}): connection not found`);
-      updateProgress(`SFTP ${connectionLabel} is unavailable`);
+      failures.push(`${t('selection.sftp_connection', { name: connectionLabel })} (${itemCountLabel(items.length)}): ${t('selection.connection_not_found')}`);
+      updateProgress(t('selection.sftp_unavailable', { name: connectionLabel }));
       continue;
     }
     try {
@@ -229,13 +229,13 @@ async function runDeleteSelectedItems(paths) {
           paths: items.map(item => item.remotePath)
         }),
       });
-      if (!response.success) throw new Error(response.message || response.error || 'Remote deletion request failed');
+      if (!response.success) throw new Error(response.message || response.error || t('selection.remote_delete_request_failed'));
       completedPaths.push(...items.map(item => item.virtualPath));
-      completedGroups.push(`SFTP ${connectionLabel} (${itemCountLabel(items.length)})`);
-      updateProgress(`SFTP ${connectionLabel} deletion request completed`);
+      completedGroups.push(`${t('selection.sftp_connection', { name: connectionLabel })} (${itemCountLabel(items.length)})`);
+      updateProgress(t('selection.remote_delete_request_completed', { name: connectionLabel }));
     } catch (error) {
-      failures.push(`SFTP ${connectionLabel} (${itemCountLabel(items.length)}): ${error.message}`);
-      updateProgress(`SFTP ${connectionLabel} deletion request failed`);
+      failures.push(`${t('selection.sftp_connection', { name: connectionLabel })} (${itemCountLabel(items.length)}): ${error.message}`);
+      updateProgress(t('selection.remote_delete_request_failed', { name: connectionLabel }));
     }
   }
 
@@ -249,16 +249,16 @@ async function runDeleteSelectedItems(paths) {
 
   if (failures.length) {
     const detail = [
-      completedGroups.length ? `Accepted request groups:\n- ${completedGroups.join('\n- ')}` : 'No deletion request groups completed.',
-      `Failed request groups:\n- ${failures.join('\n- ')}`,
-      completedGroups.length ? 'Items in accepted groups may already be deleted. No changes were rolled back.' : '',
+      completedGroups.length ? t('selection.accepted_groups', { groups: completedGroups.join('\n- ') }) : t('selection.no_groups_completed'),
+      t('selection.failed_groups', { groups: failures.join('\n- ') }),
+      completedGroups.length ? t('selection.partial_detail') : '',
     ].filter(Boolean).join('\n\n');
-    operation.fail('Deletion incomplete', detail);
+    operation.fail(t('selection.deletion_incomplete'), detail);
     showToast(t("toast.delete_items_failed", { error: failures[0] }), "error");
     return false;
   }
 
-  operation.finish(`Deletion requests completed for ${paths.length} items`, {
+  operation.finish(t('selection.deletion_complete', { count: paths.length }), {
     detail: completedGroups.join(' · '),
   });
   showToast(t("toast.deleted_items", { count: paths.length }), "success");

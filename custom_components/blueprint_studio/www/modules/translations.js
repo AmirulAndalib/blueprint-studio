@@ -7,6 +7,41 @@ import { setToolbarControlLabel } from './toolbar.js';
 const loadedLanguages = {};
 let currentBundle = {};
 let currentLang = 'en';
+let translationsInitialized = false;
+const missingTranslationKeys = new Set();
+const pluralRules = new Map();
+const RTL_LANGUAGES = new Set(['ar', 'fa', 'he', 'ur']);
+
+function expandPseudoString(value) {
+  const source = String(value);
+  const expanded = source.replace(/\{[^}]+\}|[^\s]+/g, (part) => (
+    part.startsWith('{') ? part : `${part}${'~'.repeat(Math.max(1, Math.ceil(part.length * 0.35)))}`
+  ));
+  return `[[ ${expanded} ]]`;
+}
+
+function createPseudoBundle(bundle) {
+  return Object.fromEntries(Object.entries(bundle).map(([key, value]) => [
+    key,
+    typeof value === 'string' ? expandPseudoString(value) : value,
+  ]));
+}
+
+function resolveTranslation(key, { recordMissing = true } = {}) {
+  const translated = currentBundle[key] ?? loadedLanguages.en?.[key];
+  if (translated !== undefined) return translated;
+  if (translationsInitialized && recordMissing && !missingTranslationKeys.has(key)) {
+    missingTranslationKeys.add(key);
+    console.warn(`[i18n] Missing translation key: ${key}`);
+  }
+  return key;
+}
+
+function interpolate(value, params) {
+  return String(value).replace(/\{([a-zA-Z0-9_]+)\}/g, (token, name) => (
+    Object.prototype.hasOwnProperty.call(params, name) ? String(params[name]) : token
+  ));
+}
 
 function localeUrl(lang) {
   const url = new URL(`../locales/${lang}.json`, import.meta.url);
@@ -21,15 +56,21 @@ function localeUrl(lang) {
  * @returns {string} - The translated string
  */
 export function t(key, params = {}) {
-  // Fallback to key if string is missing
-  let str = currentBundle[key] || (loadedLanguages['en'] && loadedLanguages['en'][key]) || key;
+  return interpolate(resolveTranslation(key), params);
+}
 
-  // Simple interpolation: replaces {key} with params.key
-  for (const [k, v] of Object.entries(params)) {
-    str = str.replace(`{${k}}`, v);
-  }
+export function tp(key, count, params = {}) {
+  const locale = currentLang === 'en-XA' ? 'en' : currentLang;
+  if (!pluralRules.has(locale)) pluralRules.set(locale, new Intl.PluralRules(locale));
+  const category = pluralRules.get(locale).select(Number(count));
+  const candidates = [`${key}.${category}`, `${key}.other`, key];
+  const selected = candidates.find((candidate) => resolveTranslation(candidate, { recordMissing: false }) !== candidate);
+  if (!selected) return t(key, { ...params, count });
+  return interpolate(resolveTranslation(selected), { ...params, count });
+}
 
-  return str;
+export function getMissingTranslationKeys() {
+  return [...missingTranslationKeys];
 }
 
 /**
@@ -57,6 +98,10 @@ export async function initTranslations(lang) {
     }
   }
 
+  if (currentLang === 'en-XA') {
+    loadedLanguages['en-XA'] = createPseudoBundle(loadedLanguages.en);
+  }
+
   // Load the target language
   if (currentLang !== 'en' && !loadedLanguages[currentLang]) {
     try {
@@ -74,6 +119,12 @@ export async function initTranslations(lang) {
   }
 
   currentBundle = loadedLanguages[currentLang] || loadedLanguages['en'];
+  translationsInitialized = true;
+  const languageBase = currentLang.split('-')[0].toLowerCase();
+  const direction = RTL_LANGUAGES.has(languageBase) ? 'rtl' : 'ltr';
+  document.documentElement.lang = currentLang;
+  document.documentElement.dir = direction;
+  document.body?.setAttribute('dir', direction);
   
   // Inform the UI to refresh
   if (window.app && typeof window.app.onLanguageLoaded === 'function') {
@@ -272,7 +323,7 @@ export function refreshAllUIStrings() {
     files: t("search.scope_file_content"),
     entities: t("search.scope_entities"),
   };
-  document.querySelectorAll(".search-mode-tab").forEach((tab) => {
+  document.getElementById('view-search')?.querySelectorAll(".search-mode-tab").forEach((tab) => {
     tab.textContent = globalScopeLabels[tab.dataset.mode] || tab.textContent;
   });
   

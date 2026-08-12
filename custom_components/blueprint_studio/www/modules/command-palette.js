@@ -1,14 +1,14 @@
-import { t } from './translations.js';
+import { t, tp } from './translations.js?v=2.5.270';
 /** COMMAND-PALETTE.JS | Purpose: * Provides a unified quick-access command and file switcher (VS Code style) */
 import { state, elements, gitState, giteaState } from './state.js';
 import { getTruePath, getFileIcon, copyToClipboard } from './utils.js';
 import { eventBus } from './event-bus.js';
-import { API_BASE } from './constants.js';
+import { API_BASE } from './constants.js?v=2.5.270';
 import { fetchWithAuth } from './api.js';
 import { showToast, showConfirmDialog } from './ui.js';
-import { closeDialog, openDialog } from './dialog-manager.js';
-import { startOperationFeedback } from './feedback-service.js?v=2.5.188';
-import { getGitActionConfirmation } from './git-action-confirmation.js?v=2.5.188';
+import { closeDialog, openDialog } from './dialog-manager.js?v=2.5.270';
+import { startOperationFeedback } from './feedback-service.js?v=2.5.270';
+import { getGitActionConfirmation } from './git-action-confirmation.js?v=2.5.270';
 
 const TOOLBAR_REQUIREMENTS = {
   'btn-format': () => state.activeTab ? null : 'Open a file to format it',
@@ -82,7 +82,7 @@ function toolbarCommands() {
 }
 
 export async function cleanGitLocks() {
-  const branch = gitState.currentBranch || 'Current branch';
+  const branch = gitState.currentBranch || t('provider_ops.current_branch');
   return confirmCleanGitLocks(branch);
 }
 
@@ -93,14 +93,14 @@ async function confirmCleanGitLocks(branch) {
   if (!confirmed) return false;
 
   const operation = startOperationFeedback({
-    label: 'Clean Git recovery state',
+    label: t('git_ops.cleanup_label'),
     icon: 'delete_sweep',
-    scope: 'Local Git repository',
-    target: `${branch} -> .git locks and operation state`,
-    message: 'Removing stale Git recovery state...',
+    scope: t('provider_ops.local_git_repository'),
+    target: t('git_ops.cleanup_target', { branch }),
+    message: t('git_ops.cleanup_running'),
     retry: () => confirmCleanGitLocks(branch),
     open: () => eventBus.emit('ui:switch-sidebar-view', 'source-control'),
-    openLabel: 'Source Control',
+    openLabel: t('sidebar.source_control'),
     openIcon: 'account_tree',
   });
   try {
@@ -110,21 +110,21 @@ async function confirmCleanGitLocks(branch) {
       body: JSON.stringify({ action: 'git_clean_locks' }),
     });
     if (!response.success) {
-      const message = response.message || response.error || 'Unknown Git cleanup error';
-      operation.fail('Could not clean Git recovery state', message);
+      const message = response.message || response.error || t('git_ops.cleanup_unknown_error');
+      operation.fail(t('git_ops.cleanup_failed'), message);
       showToast(t('toast.clean_locks_failed', { error: message }), 'error');
       return false;
     }
 
     const removed = Array.isArray(response.removed) ? response.removed : [];
-    operation.finish(response.message || `Removed ${removed.length} Git state entries`, {
-      detail: removed.length ? `Removed: ${removed.join(', ')}` : 'No stale Git recovery state was found.',
+    operation.finish(response.message || tp('git_ops.cleanup_removed', removed.length), {
+      detail: removed.length ? t('git_ops.cleanup_removed_detail', { entries: removed.join(', ') }) : t('git_ops.cleanup_none'),
     });
-    showToast(response.message || 'Git recovery state cleaned', 'success');
+    showToast(response.message || t('toast.git_recovery_cleaned'), 'success');
     eventBus.emit('git:refresh');
     return true;
   } catch (error) {
-    operation.fail('Could not clean Git recovery state', error.message);
+    operation.fail(t('git_ops.cleanup_failed'), error.message);
     showToast(t('toast.generic_error', { error: error.message }), 'error');
     return false;
   }
@@ -173,7 +173,7 @@ function paletteOnlyCommands() {
       state.wordWrap = !state.wordWrap;
       state.editor.setOption('lineWrapping', state.wordWrap);
       eventBus.emit('settings:save');
-      showToast(`Word wrap ${state.wordWrap ? 'enabled' : 'disabled'}`, 'info');
+      showToast(t(state.wordWrap ? 'toast.word_wrap_enabled' : 'toast.word_wrap_disabled'), 'info');
     }},
     { id: 'fold_all', label: t('palette.cmd_fold_all'), icon: 'unfold_less', scope: 'Editor', shortcut: 'Ctrl+Alt+[', availability: editor('Open a file to fold it'), action: () => state.editor.execCommand('foldAll') },
     { id: 'unfold_all', label: t('palette.cmd_unfold_all'), icon: 'unfold_more', scope: 'Editor', shortcut: 'Ctrl+Alt+]', availability: editor('Open a file to unfold it'), action: () => state.editor.execCommand('unfoldAll') },
@@ -269,7 +269,7 @@ export function showCommandPalette(initialMode = "") {
               const availability = item.availability();
               div.classList.toggle('is-disabled', !availability.enabled);
               div.setAttribute('aria-disabled', String(!availability.enabled));
-              div.setAttribute('aria-label', `${item.label}, ${item.scope}${item.shortcut ? `, ${item.shortcut}` : ''}${availability.reason ? `, unavailable: ${availability.reason}` : ''}`);
+              div.setAttribute('aria-label', `${item.label}, ${item.scope}${item.shortcut ? `, ${item.shortcut}` : ''}${availability.reason ? `, ${t('palette.unavailable_reason', { reason: availability.reason })}` : ''}`);
 
               const label = document.createElement('div');
               label.className = 'command-item-label';
@@ -289,7 +289,7 @@ export function showCommandPalette(initialMode = "") {
               metadata.appendChild(scope);
               const status = document.createElement('span');
               status.className = availability.enabled ? 'command-item-status' : 'command-item-disabled-reason';
-              status.textContent = availability.enabled ? 'Available' : `Unavailable: ${availability.reason}`;
+              status.textContent = availability.enabled ? t('palette.available') : t('palette.unavailable_reason', { reason: availability.reason });
               metadata.appendChild(status);
               text.append(name, metadata);
               label.append(icon, text);

@@ -229,7 +229,7 @@ import {
   gitPush,
   giteaStatus,
   checkGitStatusIfEnabled
-} from './coordinators/index.js?v=2.5.188';
+} from './coordinators/index.js?v=2.5.270';
 
 // Re-export everything for modules that still import from app.js
 export {

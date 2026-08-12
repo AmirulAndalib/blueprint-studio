@@ -1,13 +1,14 @@
 /** COMPLETION-DETAILS.JS | Stable documentation and target selection for active YAML context. */
 
-import { HA_AREAS, HA_DEVICES, HA_ENTITIES, HA_FLOORS, HA_LABELS, HA_SERVICES, getYamlContext } from './ha-autocomplete.js?v=2.5.188';
+import { HA_AREAS, HA_DEVICES, HA_ENTITIES, HA_FLOORS, HA_LABELS, HA_SERVICES, getYamlContext } from './ha-autocomplete.js?v=2.5.270';
+import { t, tp } from './translations.js?v=2.5.270';
 
 const TARGETS = {
-  entity_id: { label: 'Entity', source: 'Live Home Assistant entity registry', values: () => HA_ENTITIES.map(item => ({ id: item.entity_id, name: item.friendly_name })) },
-  device_id: { label: 'Device', source: 'Live Home Assistant device registry', values: () => HA_DEVICES.map(item => ({ id: item.id, name: item.name || item.name_by_user })) },
-  area_id: { label: 'Area', source: 'Live Home Assistant area registry', values: () => HA_AREAS.map(item => ({ id: item.id, name: item.name })) },
-  label_id: { label: 'Label', source: 'Live Home Assistant label registry', values: () => HA_LABELS.map(item => ({ id: item.id, name: item.name })) },
-  floor_id: { label: 'Floor', source: 'Live Home Assistant floor registry', values: () => HA_FLOORS.map(item => ({ id: item.id, name: item.name })) },
+  entity_id: { labelKey: 'entity', sourceKey: 'entity_registry', values: () => HA_ENTITIES.map(item => ({ id: item.entity_id, name: item.friendly_name })) },
+  device_id: { labelKey: 'device', sourceKey: 'device_registry', values: () => HA_DEVICES.map(item => ({ id: item.id, name: item.name || item.name_by_user })) },
+  area_id: { labelKey: 'area', sourceKey: 'area_registry', values: () => HA_AREAS.map(item => ({ id: item.id, name: item.name })) },
+  label_id: { labelKey: 'label', sourceKey: 'label_registry', values: () => HA_LABELS.map(item => ({ id: item.id, name: item.name })) },
+  floor_id: { labelKey: 'floor', sourceKey: 'floor_registry', values: () => HA_FLOORS.map(item => ({ id: item.id, name: item.name })) },
 };
 
 const SELECTOR_TARGETS = { entity: 'entity_id', device: 'device_id', area: 'area_id', label: 'label_id', floor: 'floor_id' };
@@ -21,6 +22,9 @@ function elements() {
     body: document.getElementById('completion-details-body'),
   };
 }
+
+function targetLabel(target) { return t(`completion.${target.labelKey}`); }
+function targetSource(target) { return t(`completion.${target.sourceKey}`); }
 
 function displayExample(field, selectorType) {
   const selectorConfig = selectorType && field.selector?.[selectorType];
@@ -59,13 +63,17 @@ function appendTargetPicker(body, editor, lineNumber, key, target) {
   const label = document.createElement('label');
   label.id = labelId;
   label.className = 'completion-target-label';
-  label.textContent = `Search ${target.label.toLowerCase()} targets`;
+  const labelText = targetLabel(target);
+  label.textContent = t('completion.search_targets', { target: labelText.toLowerCase() });
   const search = document.createElement('input');
   search.className = 'ui-input completion-target-search';
   search.type = 'search';
-  search.placeholder = `Name or ${target.label.toLowerCase()} ID`;
+  search.placeholder = t('completion.search_placeholder', { target: labelText.toLowerCase() });
   search.setAttribute('aria-labelledby', labelId);
   search.setAttribute('aria-controls', 'completion-target-results');
+  search.setAttribute('role', 'combobox');
+  search.setAttribute('aria-autocomplete', 'list');
+  search.setAttribute('aria-expanded', 'true');
   const status = document.createElement('span');
   status.id = statusId;
   status.className = 'completion-target-status';
@@ -73,23 +81,47 @@ function appendTargetPicker(body, editor, lineNumber, key, target) {
   const results = document.createElement('div');
   results.id = 'completion-target-results';
   results.className = 'completion-target-results';
-  results.setAttribute('role', 'group');
+  results.setAttribute('role', 'listbox');
+  results.setAttribute('aria-orientation', 'vertical');
   results.setAttribute('aria-labelledby', labelId);
+  let activeIndex = -1;
+
+  const options = () => [...results.querySelectorAll('.completion-target-option')];
+  const setActiveOption = (index, { scroll = true } = {}) => {
+    const available = options();
+    if (!available.length) {
+      activeIndex = -1;
+      search.removeAttribute('aria-activedescendant');
+      return;
+    }
+    activeIndex = Math.max(0, Math.min(index, available.length - 1));
+    available.forEach((option, optionIndex) => {
+      const selected = optionIndex === activeIndex;
+      option.setAttribute('aria-selected', String(selected));
+      option.classList.toggle('completion-target-option--active', selected);
+    });
+    search.setAttribute('aria-activedescendant', available[activeIndex].id);
+    if (scroll) available[activeIndex].scrollIntoView({ block: 'nearest' });
+  };
 
   const render = () => {
     const query = search.value.trim().toLowerCase();
     const matches = values.filter(item => !query || `${item.id} ${item.name || ''}`.toLowerCase().includes(query));
     const visible = matches.slice(0, RESULT_LIMIT);
-    status.textContent = `${matches.length} match${matches.length === 1 ? '' : 'es'}${matches.length > RESULT_LIMIT ? `; showing first ${RESULT_LIMIT}` : ''}`;
+    status.textContent = tp('search.matches_found', matches.length) + (matches.length > RESULT_LIMIT ? `; ${t('completion.showing_first', { count: RESULT_LIMIT })}` : '');
     results.replaceChildren();
-    visible.forEach(item => {
+    visible.forEach((item, index) => {
       const option = document.createElement('button');
       option.type = 'button';
       option.className = 'completion-target-option';
+      option.id = `completion-target-option-${index}`;
+      option.tabIndex = -1;
+      option.setAttribute('role', 'option');
+      option.setAttribute('aria-selected', 'false');
       const id = document.createElement('code');
       id.textContent = item.id;
       const name = document.createElement('span');
-      name.textContent = item.name || `Unnamed ${target.label.toLowerCase()}`;
+      name.textContent = item.name || t('completion.unnamed_target', { target: labelText.toLowerCase() });
       option.append(id, name);
       option.addEventListener('click', () => replaceTargetValue(editor, lineNumber, key, item.id));
       results.append(option);
@@ -97,12 +129,32 @@ function appendTargetPicker(body, editor, lineNumber, key, target) {
     if (!visible.length) {
       const empty = document.createElement('p');
       empty.className = 'completion-target-empty';
-      empty.textContent = values.length ? 'No targets match this search.' : `No ${target.label.toLowerCase()} targets are available from this instance.`;
+      empty.textContent = values.length ? t('completion.no_matches') : t('completion.no_targets', { target: labelText.toLowerCase() });
       results.append(empty);
     }
+    activeIndex = -1;
+    search.removeAttribute('aria-activedescendant');
   };
 
   search.addEventListener('input', render);
+  search.addEventListener('keydown', (event) => {
+    const available = options();
+    if (!available.length) return;
+    if (event.key === 'ArrowDown') setActiveOption(activeIndex < 0 ? 0 : (activeIndex + 1) % available.length);
+    else if (event.key === 'ArrowUp') setActiveOption(activeIndex < 0 ? available.length - 1 : (activeIndex - 1 + available.length) % available.length);
+    else if (event.key === 'Home') setActiveOption(0);
+    else if (event.key === 'End') setActiveOption(available.length - 1);
+    else if (event.key === 'Enter' && activeIndex >= 0) available[activeIndex].click();
+    else if (event.key === 'Escape' && activeIndex >= 0) {
+      activeIndex = -1;
+      available.forEach(option => {
+        option.setAttribute('aria-selected', 'false');
+        option.classList.remove('completion-target-option--active');
+      });
+      search.removeAttribute('aria-activedescendant');
+    } else return;
+    event.preventDefault();
+  });
   body.append(label, search, status, results);
   render();
 }
@@ -119,14 +171,14 @@ function showDetails({ title, source, detail, required = false, selector = '', e
   if (required || selector) {
     const metadata = document.createElement('p');
     metadata.className = 'completion-details-meta';
-    metadata.textContent = `${required ? 'Required field' : 'Optional field'}${selector ? ` | ${selector} selector` : ''}`;
+    metadata.textContent = `${required ? t('completion.required') : t('completion.optional')}${selector ? ` | ${t('completion.selector', { selector })}` : ''}`;
     body.append(metadata);
   }
   if (example) {
     const exampleNode = document.createElement('p');
     exampleNode.className = 'completion-details-example';
     const label = document.createElement('strong');
-    label.textContent = 'Example: ';
+    label.textContent = `${t('completion.example')}: `;
     const value = document.createElement('code');
     value.textContent = example;
     exampleNode.append(label, value);
@@ -150,11 +202,11 @@ export function updateCompletionDetails(editor) {
   const target = TARGETS[targetKey];
   if (target) {
     showDetails({
-      title: `${target.label} target`,
-      source: field ? `Installed action: ${action.service} | ${target.source}` : target.source,
-      detail: field?.description || `${target.values().length} ${target.label.toLowerCase()} targets are available from the connected instance.`,
+      title: t('completion.target_title', { target: targetLabel(target) }),
+      source: field ? `${t('completion.installed_action')}: ${action.service} | ${targetSource(target)}` : targetSource(target),
+      detail: field?.description || t('completion.available_targets', { count: target.values().length, target: targetLabel(target).toLowerCase() }),
       required: Boolean(field?.required),
-      selector: selector || target.label.toLowerCase(),
+      selector: selector || targetLabel(target).toLowerCase(),
       example: displayExample(field || {}, selector) || target.values()[0]?.id || '',
       target,
       editor,
@@ -166,15 +218,15 @@ export function updateCompletionDetails(editor) {
   if (field) {
     showDetails({
       title: key,
-      source: `Installed action: ${action.service}`,
-      detail: field.description || action.description || 'Action field provided by the connected Home Assistant instance.',
+      source: `${t('completion.installed_action')}: ${action.service}`,
+      detail: field.description || action.description || t('completion.action_field_detail'),
       required: Boolean(field.required),
       selector,
       example: displayExample(field, selector),
     });
     return;
   }
-  if (key === 'selector') showDetails({ title: 'Blueprint selector', source: 'Blueprint schema', detail: 'Choose a selector type to control how Blueprint users supply this input.' });
+  if (key === 'selector') showDetails({ title: t('completion.blueprint_selector'), source: t('completion.blueprint_schema'), detail: t('completion.selector_detail') });
 }
 
 export function initCompletionDetails() {

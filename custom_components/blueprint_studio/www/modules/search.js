@@ -1,4 +1,4 @@
-import { t } from './translations.js';
+import { t, tp } from './translations.js?v=2.5.270';
 /** SEARCH.JS | Purpose: * Handles in-editor find and replace functionality within a single file. */
 import { state, elements } from './state.js';
 import { showToast } from './ui.js';
@@ -107,10 +107,10 @@ export function updateMatchStatus(query) {
       if (currentIdx > 0) {
         elements.searchCount.textContent = `${currentIdx} of ${count}`;
       } else {
-        elements.searchCount.textContent = `${count} found`;
+        elements.searchCount.textContent = tp('search.matches_found', count);
       }
     } else {
-      elements.searchCount.textContent = "No results";
+      elements.searchCount.textContent = t('search.no_results_short');
     }
   }
 }

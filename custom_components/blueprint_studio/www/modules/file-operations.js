@@ -1,13 +1,13 @@
 /** FILE-OPERATIONS.JS | Purpose: * Handles all file system operations including creating, deleting, copying, */
 import { state, elements } from './state.js';
 import { fetchWithAuth } from './api.js';
-import { API_BASE } from './constants.js';
+import { API_BASE } from './constants.js?v=2.5.270';
 import { showToast, showConfirmDialog } from './ui.js';
 import { loadScript } from './utils.js';
-import { t } from './translations.js';
+import { t } from './translations.js?v=2.5.270';
 import { eventBus } from './event-bus.js';
-import { isSftpPath, saveSftpFile } from './sftp.js?v=2.5.188';
-import { startOperationFeedback } from './feedback-service.js?v=2.5.188';
+import { isSftpPath, saveSftpFile } from './sftp.js?v=2.5.270';
+import { startOperationFeedback } from './feedback-service.js?v=2.5.270';
 import { invalidateEditorConfigCache } from './editorconfig.js';
 
 function revealSavedFile(path) {
@@ -31,7 +31,7 @@ async function browseLocalPath(path, openFile = false) {
     eventBus.emit('file:open', { path });
     return;
   }
-  const { navigateToFolder } = await import('./file-tree.js?v=2.5.188');
+  const { navigateToFolder } = await import('./file-tree.js?v=2.5.270');
   await navigateToFolder(path);
 }
 
@@ -50,14 +50,14 @@ export async function saveFile(path, content, options = {}) {
   }
 
   const operation = options.silentOperation ? null : startOperationFeedback({
-    label: `Save ${request.path.split('/').pop() || 'file'}`,
+    label: t('file_ops.save_label', { file: request.path.split('/').pop() || t('file_ops.file') }),
     icon: 'save',
-    message: 'Writing file to Local Home Assistant...',
-    scope: 'Local Home Assistant',
+    message: t('file_ops.save_writing'),
+    scope: t('file_ops.local_ha'),
     target: request.path,
     retry: () => saveFile(request.path, request.content),
     open: () => revealSavedFile(request.path),
-    openLabel: 'Open file',
+    openLabel: t('file_ops.open_file'),
     openIcon: 'description',
   });
   try {
@@ -86,11 +86,11 @@ export async function saveFile(path, content, options = {}) {
     // Auto-refresh git status after saving to show changes immediately
     eventBus.emit('git:status-check', { fetch: false, silent: true });
 
-    operation?.finish(`${request.path.split('/').pop() || 'File'} saved`);
+    operation?.finish(t('file_ops.saved', { file: request.path.split('/').pop() || t('file_ops.file') }));
     options.onResult?.({ success: true, response });
     return true;
   } catch (error) {
-    operation?.fail(`Could not save ${request.path.split('/').pop() || 'file'}`, error.message);
+    operation?.fail(t('file_ops.save_failed', { file: request.path.split('/').pop() || t('file_ops.file') }), error.message);
     options.onResult?.({ success: false, message: error.message });
     if (!options.silentErrorToast) showToast(t("toast.save_failed", { error: error.message }), "error");
     return false;
@@ -115,14 +115,14 @@ async function confirmCreateFileRetry(request, options = {}) {
 
 async function runCreateFile(request, options = {}) {
   const operation = options.silentOperation ? null : startOperationFeedback({
-    label: `Create local file`,
+    label: t('file_ops.create_file'),
     icon: 'note_add',
-    scope: 'Local Home Assistant workspace',
+    scope: t('file_ops.local_workspace'),
     target: request.path,
-    message: `Creating ${request.path}...`,
+    message: t('file_ops.creating', { path: request.path }),
     retry: () => confirmCreateFileRetry(request),
     open: () => browseLocalPath(request.path, true),
-    openLabel: 'Open file',
+    openLabel: t('file_ops.open_file'),
     openIcon: 'description',
   });
   try {
@@ -145,11 +145,11 @@ async function runCreateFile(request, options = {}) {
     // Auto-refresh git status after creating file
     eventBus.emit('git:refresh');
 
-    operation?.finish(`Created ${request.path}`);
+    operation?.finish(t('file_ops.created', { path: request.path }));
     options.onResult?.({ success: true, response });
     return true;
   } catch (error) {
-    operation?.fail(`Could not create ${request.path}`, error.message);
+    operation?.fail(t('file_ops.create_failed', { path: request.path }), error.message);
     options.onResult?.({ success: false, message: error.message });
     if (!options.silentErrorToast) showToast(t("toast.file_create_fail", { error: error.message }), "error");
     return false;
@@ -171,14 +171,14 @@ export async function createFile(path, content = "", noOpen = false, overwrite =
  */
 async function runCreateFolder(request) {
   const operation = startOperationFeedback({
-    label: 'Create local folder',
+    label: t('file_ops.create_folder'),
     icon: 'create_new_folder',
-    scope: 'Local Home Assistant workspace',
+    scope: t('file_ops.local_workspace'),
     target: request.path,
-    message: `Creating ${request.path}...`,
+    message: t('file_ops.creating', { path: request.path }),
     retry: () => runCreateFolder(request),
     open: () => browseLocalPath(request.path),
-    openLabel: 'Open folder',
+    openLabel: t('file_ops.open_folder'),
     openIcon: 'folder_open',
   });
   try {
@@ -196,10 +196,10 @@ async function runCreateFolder(request) {
     // Auto-refresh git status after creating folder
     eventBus.emit('git:refresh');
 
-    operation.finish(`Created ${request.path}`);
+    operation.finish(t('file_ops.created', { path: request.path }));
     return true;
   } catch (error) {
-    operation.fail(`Could not create ${request.path}`, error.message);
+    operation.fail(t('file_ops.create_failed', { path: request.path }), error.message);
     showToast(t("toast.folder_create_fail", { error: error.message }), "error");
     return false;
   }
@@ -215,7 +215,7 @@ export async function createFolder(path) {
 async function browseLocalDelete(path) {
   eventBus.emit('ui:switch-sidebar-view', 'explorer');
   const parentPath = path.includes('/') ? path.split('/').slice(0, -1).join('/') : '';
-  const { navigateToFolder } = await import('./file-tree.js?v=2.5.188');
+  const { navigateToFolder } = await import('./file-tree.js?v=2.5.270');
   await navigateToFolder(parentPath);
 }
 
@@ -235,14 +235,14 @@ async function confirmDeleteItem(request) {
 async function runDeleteItem(request) {
   const item = request.isFolder ? 'folder' : 'file';
   const operation = startOperationFeedback({
-    label: `Delete local ${item}`,
+    label: t('file_ops.delete_local', { item }),
     icon: 'delete',
-    scope: 'Local Home Assistant workspace',
+    scope: t('file_ops.local_workspace'),
     target: request.path,
-    message: `Deleting ${request.path}...`,
+    message: t('file_ops.deleting', { path: request.path }),
     retry: () => confirmDeleteItem(request),
     open: () => browseLocalDelete(request.path),
-    openLabel: 'Browse',
+    openLabel: t('file_ops.browse'),
     openIcon: 'folder_open',
   });
   try {
@@ -264,12 +264,12 @@ async function runDeleteItem(request) {
     // Auto-refresh git status after deleting file
     eventBus.emit('git:refresh');
 
-    operation.finish(`Deleted ${request.path}`, { detail: 'Deletion is permanent and was not moved to a recovery location.' });
+    operation.finish(t('file_ops.deleted', { path: request.path }), { detail: t('file_ops.delete_permanent') });
     return true;
   } catch (error) {
     const message = error?.message || String(error);
     eventBus.emit('ui:reload-files', { force: true });
-    operation.fail(`Could not delete ${request.path}`, `${message}\n\nSome contents may already be deleted. No changes were rolled back.`);
+    operation.fail(t('file_ops.delete_failed', { path: request.path }), `${message}\n\n${t('file_ops.delete_partial')}`);
     showToast(t("toast.delete_fail", { error: message }), "error");
     return false;
   }
@@ -285,7 +285,7 @@ export async function deleteItem(path, isFolder = false) {
 async function browseLocalCopy(destination) {
   eventBus.emit('ui:switch-sidebar-view', 'explorer');
   const parentPath = destination.includes('/') ? destination.split('/').slice(0, -1).join('/') : '';
-  const { navigateToFolder } = await import('./file-tree.js?v=2.5.188');
+  const { navigateToFolder } = await import('./file-tree.js?v=2.5.270');
   await navigateToFolder(parentPath);
 }
 
@@ -305,14 +305,14 @@ async function confirmCopyItem(request) {
 async function runCopyItem(request) {
   const item = request.isFolder ? 'folder' : 'file';
   const operation = startOperationFeedback({
-    label: `Copy local ${item}`,
+    label: t('file_ops.copy_local', { item }),
     icon: 'content_copy',
-    scope: 'Local Home Assistant workspace',
+    scope: t('file_ops.local_workspace'),
     target: `${request.source} -> ${request.destination}`,
-    message: `Copying ${request.source}...`,
+    message: t('file_ops.copying', { source: request.source }),
     retry: () => confirmCopyItem(request),
     open: () => browseLocalCopy(request.destination),
-    openLabel: 'Browse Destination',
+    openLabel: t('file_ops.browse_destination'),
     openIcon: 'folder_open',
   });
   try {
@@ -333,12 +333,12 @@ async function runCopyItem(request) {
     // Auto-refresh git status after copying file
     eventBus.emit('git:refresh');
 
-    operation.finish(`Copied ${request.source}`, { detail: `${request.source} -> ${request.destination}` });
+    operation.finish(t('file_ops.copied', { source: request.source }), { detail: `${request.source} -> ${request.destination}` });
     return true;
   } catch (error) {
     const message = error?.message || String(error);
     eventBus.emit('ui:reload-files', { force: true });
-    operation.fail(`Could not copy ${request.source}`, message);
+    operation.fail(t('file_ops.copy_failed', { source: request.source }), message);
     showToast(t("toast.copy_fail", { error: message }), "error");
     return false;
   }
@@ -365,14 +365,14 @@ async function confirmRenameItemRetry(request) {
 
 async function runRenameItem(request) {
   const operation = startOperationFeedback({
-    label: 'Rename local item',
+    label: t('file_ops.rename_item'),
     icon: 'drive_file_rename_outline',
-    scope: 'Local Home Assistant workspace',
+    scope: t('file_ops.local_workspace'),
     target: `${request.source} -> ${request.destination}`,
-    message: `Renaming ${request.source}...`,
+    message: t('file_ops.renaming', { source: request.source }),
     retry: () => confirmRenameItemRetry(request),
     open: () => browseLocalPath(localParentPath(request.destination)),
-    openLabel: 'Browse Destination',
+    openLabel: t('file_ops.browse_destination'),
     openIcon: 'folder_open',
   });
   try {
@@ -409,12 +409,12 @@ async function runRenameItem(request) {
     // Auto-refresh git status after renaming file
     eventBus.emit('git:refresh');
 
-    operation.finish(`Renamed to ${request.destination}`, {
+    operation.finish(t('file_ops.renamed_to', { destination: request.destination }), {
       detail: `${request.source} -> ${request.destination}`,
     });
     return true;
   } catch (error) {
-    operation.fail(`Could not rename ${request.source}`, error.message);
+    operation.fail(t('file_ops.rename_failed', { source: request.source }), error.message);
     showToast(t("toast.rename_fail", { error: error.message }), "error");
     return false;
   }
@@ -493,7 +493,7 @@ function fixYamlIndentation(content) {
  */
 export async function formatCode() {
   if (!state.editor) {
-    eventBus.emit('editor:operation-result', { status: 'warning', title: 'Format unavailable', message: 'Open an editable file first.' });
+    eventBus.emit('editor:operation-result', { status: 'warning', title: t('format_ops.unavailable'), message: t('format_ops.open_editable') });
     return { success: false, reason: 'no-editor' };
   }
 
@@ -525,7 +525,7 @@ export async function formatCode() {
     parser = 'markdown';
   } else {
     showToast(t("toast.format_not_supported"), "warning");
-    eventBus.emit('editor:operation-result', { status: 'warning', title: 'Format unavailable', message: `${fileName} is not a supported format.` });
+    eventBus.emit('editor:operation-result', { status: 'warning', title: t('format_ops.unavailable'), message: t('format_ops.unsupported', { file: fileName }) });
     return { success: false, reason: 'unsupported' };
   }
 
@@ -537,14 +537,14 @@ export async function formatCode() {
     return formatCode();
   };
   const operation = startOperationFeedback({
-    label: `Format ${fileName}`,
+    label: t('format_ops.label', { file: fileName }),
     icon: 'format_align_left',
-    scope: 'Document',
+    scope: t('format_ops.document'),
     target: filePath,
-    message: `Preparing ${parser} formatter...`,
+    message: t('format_ops.preparing', { parser }),
     retry: retryFormatting,
     open: openFormattedFile,
-    openLabel: 'Open file',
+    openLabel: t('file_ops.open_file'),
     openIcon: 'description',
   });
 
@@ -552,7 +552,7 @@ export async function formatCode() {
     // Load Prettier if not already loaded
     if (!window.prettier) {
       showToast(t("toast.format_loading"), "info");
-      operation.update({ message: 'Loading formatting libraries...', percent: 20 });
+      operation.update({ message: t('format_ops.loading_libraries'), percent: 20 });
       await loadPrettier();
     }
 
@@ -563,7 +563,7 @@ export async function formatCode() {
     }
 
     // Format the code
-    operation.update({ message: `Formatting ${fileName}...`, percent: 60 });
+    operation.update({ message: t('format_ops.formatting', { file: fileName }), percent: 60 });
     const formatted = await window.prettier.format(contentToFormat, {
       parser: parser,
       plugins: window.prettierPlugins,
@@ -582,10 +582,10 @@ export async function formatCode() {
       || state.editor !== editor
       || editor.getValue() !== content;
     if (documentChanged) {
-      const message = 'The document changed while formatting. No formatted text was applied; Retry uses the current document content.';
-      operation.fail('Formatting was not applied', message);
+      const message = t('format_ops.document_changed_detail');
+      operation.fail(t('format_ops.not_applied'), message);
       showToast(message, 'warning');
-      eventBus.emit('editor:operation-result', { status: 'warning', title: 'Formatting not applied', message });
+      eventBus.emit('editor:operation-result', { status: 'warning', title: t('format_ops.not_applied'), message });
       return { success: false, reason: 'document-changed' };
     }
 
@@ -609,19 +609,19 @@ export async function formatCode() {
       eventBus.emit('ui:refresh-tabs');
       eventBus.emit('ui:update-toolbar-state');
 
-      operation.finish(`Formatted ${fileName}`, { detail: `Parser: ${parser}`, percent: 100 });
+      operation.finish(t('format_ops.formatted', { file: fileName }), { detail: t('format_ops.parser', { parser }), percent: 100 });
       showToast(t("toast.format_success"), "success");
-      eventBus.emit('editor:operation-result', { status: 'success', title: 'Formatting complete', message: `${fileName} was formatted without moving the editor view.` });
+      eventBus.emit('editor:operation-result', { status: 'success', title: t('editor.format_complete'), message: t('editor.format_complete_detail', { file: fileName }) });
       return { success: true, changed: true };
     } else {
-      operation.finish(`${fileName} is already formatted`, { detail: `Parser: ${parser}`, percent: 100 });
+      operation.finish(t('format_ops.already_formatted', { file: fileName }), { detail: t('format_ops.parser', { parser }), percent: 100 });
       showToast(t("toast.format_already"), "info");
-      eventBus.emit('editor:operation-result', { status: 'info', title: 'Already formatted', message: `${fileName} did not need changes.` });
+      eventBus.emit('editor:operation-result', { status: 'info', title: t('editor.already_formatted'), message: t('editor.already_formatted_detail', { file: fileName }) });
       return { success: true, changed: false };
     }
   } catch (error) {
     console.error("Formatting error:", error);
-    operation.fail(`Could not format ${fileName}`, error.message || String(error));
+    operation.fail(t('format_ops.failed', { file: fileName }), error.message || String(error));
 
     // Check if it's a syntax error
     if (error.message && (error.message.includes('SyntaxError') || error.message.includes('YAMLSyntaxError'))) {
@@ -629,11 +629,11 @@ export async function formatCode() {
 
       // Extract line number if available
       const lineMatch = error.message.match(/\((\d+):/);
-      const lineMessage = lineMatch ? ` near line ${parseInt(lineMatch[1], 10)}` : '';
-      eventBus.emit('editor:operation-result', { status: 'error', title: 'Formatting failed', message: `${fileName} has a syntax error${lineMessage}.` });
+      const lineMessage = lineMatch ? t('editor.near_line', { line: parseInt(lineMatch[1], 10) }) : '';
+      eventBus.emit('editor:operation-result', { status: 'error', title: t('editor.format_failed'), message: t('editor.syntax_error_detail', { file: fileName, location: lineMessage }) });
     } else {
-      showToast(`Formatting failed: ${error.message}`, "error");
-      eventBus.emit('editor:operation-result', { status: 'error', title: 'Formatting failed', message: `${fileName}: ${error.message}` });
+      showToast(t('toast.formatting_failed', { error: error.message }), "error");
+      eventBus.emit('editor:operation-result', { status: 'error', title: t('editor.format_failed'), message: t('editor.format_error_detail', { file: fileName, error: error.message }) });
     }
     return { success: false, error: error.message };
   }

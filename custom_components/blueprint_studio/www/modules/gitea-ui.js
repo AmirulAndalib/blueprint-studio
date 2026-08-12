@@ -1,18 +1,18 @@
 /** GITEA-UI.JS | Purpose: * Handles all UI rendering and user interactions for the Gitea integration */
 import { state, elements, giteaState } from './state.js';
-import { t } from './translations.js';
+import { t } from './translations.js?v=2.5.270';
 import { showToast, setButtonLoading } from './ui.js';
 import { isTextFile } from './utils.js';
 import { refreshActivityRail } from './activity-rail.js';
-import { renderRepositoryContext } from './context-indicators.js?v=2.5.188';
-import { bindSourceControlRecovery, renderSourceControlRecovery } from './source-control-recovery.js?v=2.5.188';
+import { renderRepositoryContext } from './context-indicators.js?v=2.5.270';
+import { bindSourceControlRecovery, renderSourceControlRecovery } from './source-control-recovery.js?v=2.5.270';
 import {
   captureSourceControlView,
   getUnstagedPaths,
   renderSourceControlFiles,
   scheduleSourceControlViewRestore,
   updateCommitComposer,
-} from './source-control-view.js?v=2.5.188';
+} from './source-control-view.js?v=2.5.270';
 import {
   giteaStage,
   giteaUnstage,
@@ -21,7 +21,7 @@ import {
   giteaHardReset,
   giteaPull,
   giteaStatus
-} from './gitea-integration.js?v=2.5.188';
+} from './gitea-integration.js?v=2.5.270';
 
 /**
  * Updates the Gitea panel UI with current status
@@ -49,7 +49,7 @@ export function updateGiteaPanel() {
   refreshActivityRail();
 
   renderRepositoryContext(panel, 'Gitea', giteaState, () => {
-    import('./git-operations.js').then(module => module.showBranchManager());
+    import('./git-operations.js?v=2.5.270').then(module => module.showBranchManager());
   });
 
   // Sync indicators
@@ -62,6 +62,7 @@ export function updateGiteaPanel() {
       pushBtn.className = "git-panel-btn git-sync-indicator";
       pushBtn.id = "btn-gitea-push-sync";
       pushBtn.title = `${giteaState.ahead} commits to push`;
+      pushBtn.setAttribute("aria-label", pushBtn.title);
       pushBtn.innerHTML = `
         <span class="ui-icon material-icons git-sync-icon git-sync-icon-ahead">arrow_upward</span>
         <span style="font-size: 10px; margin-left: -2px; font-weight: bold; color: var(--success-color);">${giteaState.ahead}</span>
@@ -73,6 +74,7 @@ export function updateGiteaPanel() {
       pullBtn.className = "git-panel-btn git-sync-indicator";
       pullBtn.id = "btn-gitea-pull-sync";
       pullBtn.title = `${giteaState.behind} commits to pull`;
+      pullBtn.setAttribute("aria-label", pullBtn.title);
       pullBtn.innerHTML = `
         <span class="ui-icon material-icons git-sync-icon git-sync-icon-behind">arrow_downward</span>
         <span style="font-size: 10px; margin-left: -2px; font-weight: bold; color: var(--warning-color);">${giteaState.behind}</span>

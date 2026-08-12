@@ -1,0 +1,89 @@
+/* Cross-feature accessibility overrides. Keep this stylesheet last. */
+
+html body[data-theme-preset] :is(
+  button,
+  a[href],
+  input:not([type="hidden"]),
+  select,
+  textarea,
+  summary,
+  [role="button"],
+  [role="tab"],
+  [role="menuitem"],
+  [role="option"],
+  [tabindex]:not([tabindex="-1"])
+):focus-visible {
+  outline: 2px solid var(--focus-color, var(--accent-color)) !important;
+  outline-offset: 2px;
+}
+
+/* CodeMirror owns focus through its cursor and active-line treatment. */
+.CodeMirror textarea:focus-visible {
+  outline: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+  }
+}
+
+@media (prefers-contrast: more) {
+  html body[data-theme-preset] :is(
+    button,
+    a[href],
+    input:not([type="hidden"]),
+    select,
+    textarea,
+    summary,
+    [role="button"],
+    [role="tab"],
+    [role="menuitem"],
+    [role="option"],
+    [tabindex]:not([tabindex="-1"])
+  ):focus-visible {
+    outline-width: 3px !important;
+  }
+}
+
+@media (forced-colors: active) {
+  html body[data-theme-preset] :is(
+    button,
+    a[href],
+    input:not([type="hidden"]),
+    select,
+    textarea,
+    summary,
+    [role="button"],
+    [role="tab"],
+    [role="menuitem"],
+    [role="option"],
+    [tabindex]:not([tabindex="-1"])
+  ):focus-visible {
+    outline-color: Highlight !important;
+  }
+
+  :where([aria-selected="true"], [aria-current], [aria-pressed="true"]) {
+    outline: 1px solid Highlight;
+    outline-offset: -2px;
+  }
+
+  :where(.problem-item, .editor-operation-result, .ui-alert, .toast, .zip-download-progress) {
+    border: 1px solid CanvasText;
+  }
+
+  :where(.diff-text-line--added, .diff-text-line--removed, .diff-text-line--active) {
+    border-inline-start: 3px solid CanvasText;
+  }
+
+  :where(.workspace-context-dot, .repository-state-badge, .status-repository-icon) {
+    forced-color-adjust: auto;
+  }
+}

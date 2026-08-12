@@ -1,5 +1,5 @@
 /** STATE.JS | Purpose: * Central state management for Blueprint Studio. This module exports reactive */
-import { MOBILE_BREAKPOINT } from './constants.js';
+import { MOBILE_BREAKPOINT } from './constants.js?v=2.5.270';
 
 export const state = {
   files: [],
@@ -123,6 +123,7 @@ export const state = {
   rememberWorkspace: true,
   autoHideSidebar: true,
   showToasts: true,
+  showOperationCenter: true,
   gitIntegrationEnabled: false,
   // Performance settings
   pollingInterval: 10000,        // Git status polling interval (ms)

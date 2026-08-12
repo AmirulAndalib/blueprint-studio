@@ -31,6 +31,7 @@
 ## 📖 Table of Contents
 - [Why Blueprint Studio? 🌟](#why-blueprint-studio-)
 - [Screenshots 📸](#screenshots-)
+- [Keyboard Shortcuts](FRONTEND_SHORTCUTS.md)
 - [✨ Features](#-features)
 - [🔧 Installation](#-installation)
 - [⚙️ Configuration](#️-configuration)
@@ -62,6 +63,11 @@ Tired of juggling external editors, SSH, or add-ons just to tweak your Home Assi
 ---
 
 ## Screenshots 📸
+
+The supported workspace is verified at desktop, tablet, and phone sizes in both
+light and dark themes. See [frontend visual baselines](FRONTEND_VISUAL_BASELINES.md)
+and the [release quality gates](FRONTEND_QUALITY_GATES.md) for the repeatable
+checks used for shipped interface changes.
 
 <div align="center">
 

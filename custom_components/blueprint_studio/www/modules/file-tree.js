@@ -1,23 +1,29 @@
-import { t } from './translations.js';
+import { t } from './translations.js?v=2.5.270';
 import { eventBus } from './event-bus.js';
 import { enableLongPressContextMenu } from './utils.js';
 /** FILE-TREE.JS | Purpose: * Handles file tree rendering, folder expansion/collapse, drag & drop, */
 import { state, elements, gitState } from './state.js';
 import { fetchWithAuth, urlWithTicket } from './api.js';
-import { API_BASE, STREAM_BASE, IMAGE_EXTENSIONS } from './constants.js';
+import { API_BASE, STREAM_BASE, IMAGE_EXTENSIONS } from './constants.js?v=2.5.270';
 import {
   showToast,
   showConfirmDialog
 } from './ui.js';
 import { getFileIcon, formatBytes, isMobile, isTouchDevice } from './utils.js';
-import { saveSettings } from './settings.js?v=2.5.188';
-import { setOverflowTooltip } from './tooltip.js?v=2.5.188';
+import { saveSettings } from './settings.js?v=2.5.270';
+import { setOverflowTooltip } from './tooltip.js?v=2.5.270';
 import { isItemSelected, updateSelectionCount } from './selection.js';
 import { refreshActivityRail } from './activity-rail.js';
-import { classifyTreeError, renderTreeViewState } from './tree-view-state.js?v=2.5.188';
-import { captureTreeViewContext, scheduleTreeViewContextRestore } from './tree-view-context.js?v=2.5.188';
-import { configureTreeKeyboard, markTreeItem } from './tree-keyboard.js?v=2.5.188';
-import { startOperationFeedback } from './feedback-service.js?v=2.5.188';
+import { classifyTreeError, renderTreeViewState } from './tree-view-state.js?v=2.5.270';
+import { captureTreeViewContext, scheduleTreeViewContextRestore } from './tree-view-context.js?v=2.5.270';
+import { configureTreeKeyboard, markTreeItem } from './tree-keyboard.js?v=2.5.270';
+import { startOperationFeedback } from './feedback-service.js?v=2.5.270';
+import { MAX_NAVIGATION_HISTORY, appendBoundedHistory } from './history-limits.js?v=2.5.270';
+
+// Directory requests are scoped by path so a refresh/navigation cannot let an
+// older response replace the contents requested most recently.
+const directoryRequestControllers = new Map();
+const directoryRequestSequences = new Map();
 
 // Timer for debounced rendering
 export let fileTreeRenderTimer = null;
@@ -1194,6 +1200,10 @@ export function createTreeItem(name, depth, isFolder, isExpanded, itemPath = nul
       badge.title = gitBadge.title;
       item.appendChild(badge);
     }
+    const openTab = state.openTabs.find((tab) => tab.path === itemPath);
+    const stateLabels = [gitBadge?.title];
+    if (openTab?.modified && gitBadge?.status !== 'unsaved') stateLabels.push(t('sidebar.unsaved'));
+    item.setAttribute('aria-label', [itemPath, ...stateLabels.filter(Boolean)].join(', '));
   }
 
   // File Size (if available)
@@ -1229,6 +1239,7 @@ export function createTreeItem(name, depth, isFolder, isExpanded, itemPath = nul
     const pinBtn = document.createElement("button");
     pinBtn.className = "tree-action-btn";
     pinBtn.title = isPinned ? "Unpin" : "Pin to top";
+    pinBtn.setAttribute("aria-label", pinBtn.title);
     pinBtn.innerHTML = `<span class="file-pin-icon ui-icon ui-icon--size-sm ${isPinned ? 'is-pinned' : ''} material-icons">push_pin</span>`;
     pinBtn.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -1242,6 +1253,7 @@ export function createTreeItem(name, depth, isFolder, isExpanded, itemPath = nul
     const diffBtn = document.createElement("button");
     diffBtn.className = "tree-action-btn";
     diffBtn.title = "View Diff";
+    diffBtn.setAttribute("aria-label", diffBtn.title);
     diffBtn.innerHTML = '<span class="ui-icon ui-icon--size-sm ui-icon--tone-warning material-icons">difference</span>';
 
     diffBtn.addEventListener("click", (e) => {
@@ -1337,15 +1349,23 @@ function createInlineExplorerInput(edit) {
   input.setAttribute("aria-label", edit.mode === "rename" ? "Rename item" : "Create item");
   wrap.appendChild(input);
 
-  input.addEventListener("input", () => {
+  const rememberSelection = () => {
     if (state.inlineExplorerEdit === edit) {
       edit.value = input.value;
+      edit.selectionStart = input.selectionStart;
+      edit.selectionEnd = input.selectionEnd;
+      edit.selectionDirection = input.selectionDirection;
     }
-  });
+  };
+  input.addEventListener("input", rememberSelection);
+  input.addEventListener("select", rememberSelection);
+  input.addEventListener("keyup", rememberSelection);
+  input.addEventListener("click", rememberSelection);
 
   const confirmBtn = document.createElement("button");
   confirmBtn.className = "inline-edit-btn";
   confirmBtn.title = t("modal.confirm_button");
+  confirmBtn.setAttribute("aria-label", confirmBtn.title);
   confirmBtn.innerHTML = '<span class="ui-icon material-icons">check</span>';
   confirmBtn.addEventListener("click", (e) => {
     e.stopPropagation();
@@ -1356,6 +1376,7 @@ function createInlineExplorerInput(edit) {
   const cancelBtn = document.createElement("button");
   cancelBtn.className = "inline-edit-btn";
   cancelBtn.title = t("modal.cancel_button");
+  cancelBtn.setAttribute("aria-label", cancelBtn.title);
   cancelBtn.innerHTML = '<span class="ui-icon material-icons">close</span>';
   cancelBtn.addEventListener("click", (e) => {
     e.stopPropagation();
@@ -1403,6 +1424,11 @@ function focusInlineExplorerInput() {
       const dotIndex = edit.type === "file" ? value.lastIndexOf(".") : -1;
       const end = dotIndex > 0 ? dotIndex : value.length;
       input.setSelectionRange(0, end);
+      edit.selectionStart = 0;
+      edit.selectionEnd = end;
+      edit.selectionDirection = "none";
+    } else if (Number.isInteger(edit.selectionStart) && Number.isInteger(edit.selectionEnd)) {
+      input.setSelectionRange(edit.selectionStart, edit.selectionEnd, edit.selectionDirection || "none");
     }
   }, 0);
 }
@@ -1731,7 +1757,7 @@ export async function handleDrop(e) {
 export async function navigateToFolder(folderPath) {
   // Add current path to history before navigating
   if (state.currentNavigationPath !== folderPath) {
-    state.navigationHistory.push(state.currentNavigationPath);
+    appendBoundedHistory(state.navigationHistory, state.currentNavigationPath, MAX_NAVIGATION_HISTORY);
   }
 
   state.currentNavigationPath = folderPath;
@@ -1770,16 +1796,9 @@ export async function navigateBack() {
 }
 
 function bindBreadcrumbButton(element, label, action) {
-  element.setAttribute("role", "button");
-  element.setAttribute("tabindex", "0");
+  element.type = "button";
   element.setAttribute("aria-label", label);
   element.addEventListener("click", action);
-  element.addEventListener("keydown", (event) => {
-    if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      action();
-    }
-  });
 }
 
 /**
@@ -1792,7 +1811,7 @@ export function updateFolderNavigationBreadcrumb() {
   breadcrumb.innerHTML = "";
 
   // Home (root)
-  const homeItem = document.createElement("span");
+  const homeItem = document.createElement("button");
   homeItem.className = `breadcrumb-item breadcrumb-home ${state.currentNavigationPath === "" ? "active" : ""}`;
   homeItem.dataset.path = "";
   homeItem.innerHTML = `
@@ -1836,7 +1855,7 @@ export function updateFolderNavigationBreadcrumb() {
       const isLast = index === parts.length - 1;
       const itemPath = currentPath; // Capture for closure
 
-      const item = document.createElement("span");
+      const item = document.createElement("button");
       item.className = `breadcrumb-item ${isLast ? "active" : ""}`;
       item.dataset.path = itemPath;
       item.textContent = part;
@@ -1920,6 +1939,12 @@ export async function loadDirectory(path) {
   }
 
   try {
+    directoryRequestControllers.get(path)?.abort();
+    const controller = new AbortController();
+    directoryRequestControllers.set(path, controller);
+    const sequence = (directoryRequestSequences.get(path) || 0) + 1;
+    directoryRequestSequences.set(path, sequence);
+
     state.loadingDirectories.add(path);
     state.failedDirectories.delete(path);
     state.directoryErrors.delete(path);
@@ -1930,7 +1955,10 @@ export async function loadDirectory(path) {
 
     const result = await fetchWithAuth(
       `${API_BASE}?action=list_directory&path=${encodeURIComponent(path)}&show_hidden=${state.showHidden}`
+      , { signal: controller.signal }
     );
+
+    if (controller.signal.aborted || directoryRequestSequences.get(path) !== sequence) return;
 
 
     if (result.error) {
@@ -1959,10 +1987,12 @@ export async function loadDirectory(path) {
     for (const folder of childFolders) {
       const childPath = path ? `${path}/${folder.name}` : folder.name;
       if (!state.loadedDirectories.has(childPath) && !state.loadingDirectories.has(childPath)) {
+        const childSequence = (directoryRequestSequences.get(childPath) || 0) + 1;
+        directoryRequestSequences.set(childPath, childSequence);
         fetchWithAuth(
           `${API_BASE}?action=list_directory&path=${encodeURIComponent(childPath)}&show_hidden=${state.showHidden}`
         ).then(childResult => {
-          if (childResult && !childResult.error) {
+          if (childResult && !childResult.error && directoryRequestSequences.get(childPath) === childSequence) {
             state.loadedDirectories.set(childPath, {
               folders: childResult.folders || [],
               files: childResult.files || []
@@ -1974,11 +2004,13 @@ export async function loadDirectory(path) {
     }
 
   } catch (error) {
+    if (error?.name === "AbortError") return;
     console.error(`Error loading directory ${path}:`, error);
     state.failedDirectories.add(path);
     state.directoryErrors.set(path, error.message || String(error));
     showToast(t("toast.load_folder_error", { error: error.message }), "error");
   } finally {
+    directoryRequestControllers.delete(path);
     state.loadingDirectories.delete(path);
     renderFileTree();
   }

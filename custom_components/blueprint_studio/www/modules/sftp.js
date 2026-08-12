@@ -2,26 +2,27 @@
 
 import { state } from './state.js';
 import { getFileIcon, formatBytes, isTextFile } from './utils.js';
-import { t } from './translations.js';
+import { t } from './translations.js?v=2.5.270';
 import { enableLongPressContextMenu } from './utils.js';
 import { eventBus } from './event-bus.js';
-import { API_BASE, STREAM_BASE, IMAGE_EXTENSIONS, VIDEO_EXTENSIONS, AUDIO_EXTENSIONS } from './constants.js';
+import { API_BASE, STREAM_BASE, IMAGE_EXTENSIONS, VIDEO_EXTENSIONS, AUDIO_EXTENSIONS } from './constants.js?v=2.5.270';
 import { fetchWithAuth, getAuthToken, urlWithTicket } from './api.js';
 import {
   showToast,
   showConfirmDialog,
   showModal as showInputModal
 } from './ui.js';
-import { updateSshDropdown } from './terminal.js?v=2.5.188';
+import { updateSshDropdown } from './terminal.js?v=2.5.270';
 import { createZipProgressId, startZipProgress } from './zip-progress.js';
-import { closeDialog, openDialog } from './dialog-manager.js';
+import { closeDialog, openDialog } from './dialog-manager.js?v=2.5.270';
 import { refreshActivityRail } from './activity-rail.js';
-import { renderSftpConnectionContext } from './context-indicators.js?v=2.5.188';
-import { setOverflowTooltip } from './tooltip.js?v=2.5.188';
-import { classifyTreeError, renderTreeViewState } from './tree-view-state.js?v=2.5.188';
-import { captureTreeViewContext, scheduleTreeViewContextRestore } from './tree-view-context.js?v=2.5.188';
-import { configureTreeKeyboard, markTreeItem } from './tree-keyboard.js?v=2.5.188';
-import { startOperationFeedback } from './feedback-service.js?v=2.5.188';
+import { renderSftpConnectionContext } from './context-indicators.js?v=2.5.270';
+import { setOverflowTooltip } from './tooltip.js?v=2.5.270';
+import { MAX_NAVIGATION_HISTORY, appendBoundedHistory } from './history-limits.js?v=2.5.270';
+import { classifyTreeError, renderTreeViewState } from './tree-view-state.js?v=2.5.270';
+import { captureTreeViewContext, scheduleTreeViewContextRestore } from './tree-view-context.js?v=2.5.270';
+import { configureTreeKeyboard, markTreeItem } from './tree-keyboard.js?v=2.5.270';
+import { startOperationFeedback } from './feedback-service.js?v=2.5.270';
 
 // ─── Visibility ───────────────────────────────────────────────────────────────
 
@@ -274,7 +275,7 @@ export function renderSftpPanel() {
       t("sftp.disabled_title") || 'SFTP is disabled',
       t("sftp.disabled_copy") || 'Enable SFTP in Settings to browse remote files.',
       t("sftp.open_settings"),
-      () => eventBus.emit('ui:show-settings', { tab: 'integrations' }),
+      () => eventBus.emit('ui:show-settings', { tab: 'connections' }),
     );
   } else if (!state.activeSftp.connectionId) {
     showViewState(
@@ -352,12 +353,14 @@ export function renderSftpPanel() {
     const editBtn = document.createElement('button');
     editBtn.className = 'sidebar-header-btn sftp-dynamic-btn';
     editBtn.title = t("common.edit") || "Edit connection";
+    editBtn.setAttribute('aria-label', editBtn.title);
     editBtn.innerHTML = '<span class="ui-icon material-icons">edit</span>';
     editBtn.onclick = () => showEditConnectionDialog(connId);
 
     const deleteBtn = document.createElement('button');
     deleteBtn.className = 'sidebar-header-btn sftp-dynamic-btn';
     deleteBtn.title = t("common.delete") || "Remove connection";
+    deleteBtn.setAttribute('aria-label', deleteBtn.title);
     deleteBtn.innerHTML = '<span class="ui-icon material-icons">delete_outline</span>';
     deleteBtn.onclick = () => deleteConnection(connId);
 
@@ -631,20 +634,13 @@ function _renderBreadcrumb(el, connId, remotePath) {
   const parts = remotePath.split('/').filter(Boolean);
   
   el.innerHTML = '';
-  const rootCrumb = document.createElement('span');
+  const rootCrumb = document.createElement('button');
+  rootCrumb.type = 'button';
   rootCrumb.className = 'sftp-crumb';
   rootCrumb.textContent = connName;
-  rootCrumb.tabIndex = 0;
-  rootCrumb.setAttribute('role', 'button');
   rootCrumb.setAttribute('aria-label', `sftp://${connId}/`);
   setOverflowTooltip(rootCrumb, `sftp://${connId}/`);
   rootCrumb.onclick = () => navigateSftp(connId, '/');
-  rootCrumb.onkeydown = (event) => {
-    if (event.key === 'Enter' || event.key === ' ') {
-      event.preventDefault();
-      navigateSftp(connId, '/');
-    }
-  };
   _setupItemDropHandler(rootCrumb, connId, '/');
   el.appendChild(rootCrumb);
 
@@ -654,24 +650,18 @@ function _renderBreadcrumb(el, connId, remotePath) {
     const p = built;
     const sep = document.createElement('span');
     sep.className = 'ui-icon material-icons';
+    sep.setAttribute('aria-hidden', 'true');
     sep.style.fontSize = '12px';
     sep.textContent = 'chevron_right';
     el.appendChild(sep);
     
-    const crumb = document.createElement('span');
+    const crumb = document.createElement('button');
+    crumb.type = 'button';
     crumb.className = 'sftp-crumb';
     crumb.textContent = part;
-    crumb.tabIndex = 0;
-    crumb.setAttribute('role', 'button');
     crumb.setAttribute('aria-label', `sftp://${connId}${p}`);
     setOverflowTooltip(crumb, `sftp://${connId}${p}`);
     crumb.onclick = () => navigateSftp(connId, p);
-    crumb.onkeydown = (event) => {
-      if (event.key === 'Enter' || event.key === ' ') {
-        event.preventDefault();
-        navigateSftp(connId, p);
-      }
-    };
     _setupItemDropHandler(crumb, connId, p);
     el.appendChild(crumb);
   });
@@ -911,13 +901,13 @@ export async function connectToServer(connId, options = {}) {
   const conn = findConnection(connId);
   if (!conn) return false;
   const operation = options.silentOperation ? null : startOperationFeedback({
-    label: `Connect to ${conn.name || connId}`,
+    label: t('sftp_ops.connect_label', { connection: conn.name || connId }),
     icon: 'cloud',
-    scope: `SFTP ${conn.name || connId}`,
+    scope: t('sftp_ops.scope', { connection: conn.name || connId }),
     target: `${conn.username}@${conn.host}:${conn.port || 22} /`,
-    message: 'Opening remote workspace...',
+    message: t('sftp_ops.connecting'),
     retry: () => connectToServer(connId),
-    openLabel: 'Open SFTP',
+    openLabel: t('sftp_ops.open_sftp'),
     openIcon: 'cloud',
     open: () => eventBus.emit('ui:switch-sidebar-view', 'sftp'),
   });
@@ -941,16 +931,16 @@ export async function connectToServer(connId, options = {}) {
         state.activeSftp.loadedDirectories.set('/', { folders: result.folders || [], files: result.files || [] });
       }
       state.activeSftp.viewStatus = 'ready';
-      operation?.finish(`Connected to ${conn.name || connId}`, {
-        detail: `${state.activeSftp.folders.length} folders · ${state.activeSftp.files.length} files at /`,
+      operation?.finish(t('sftp_ops.connected', { connection: conn.name || connId }), {
+        detail: t('sftp_ops.root_contents', { folders: state.activeSftp.folders.length, files: state.activeSftp.files.length }),
       });
       return true;
     } else {
-      const message = result.message || result.error || 'SFTP connection failed';
+      const message = result.message || result.error || t('sftp_ops.connection_failed');
       showToast(t("toast.sftp_error", { error: message }), 'error');
       state.activeSftp.viewStatus = classifyTreeError(result.message);
       state.activeSftp.error = message;
-      operation?.fail(`Could not connect to ${conn.name || connId}`, message);
+      operation?.fail(t('sftp_ops.connect_failed', { connection: conn.name || connId }), message);
       return false;
     }
   } catch (err) {
@@ -958,7 +948,7 @@ export async function connectToServer(connId, options = {}) {
     showToast(t("toast.sftp_error", { error: message }), 'error');
     state.activeSftp.viewStatus = classifyTreeError(err);
     state.activeSftp.error = message;
-    operation?.fail(`Could not connect to ${conn.name || connId}`, message);
+    operation?.fail(t('sftp_ops.connect_failed', { connection: conn.name || connId }), message);
     return false;
   } finally {
     state.activeSftp.loading = false;
@@ -969,7 +959,9 @@ export async function connectToServer(connId, options = {}) {
 export async function navigateSftp(connId, path, preserveHistory = false) {
   const conn = findConnection(connId);
   if (!conn) return;
-  if (!preserveHistory) state.activeSftp.navigationHistory.push(state.activeSftp.currentPath);
+  if (!preserveHistory) {
+    appendBoundedHistory(state.activeSftp.navigationHistory, state.activeSftp.currentPath, MAX_NAVIGATION_HISTORY);
+  }
   state.activeSftp.currentPath = path;
   state.activeSftp.loading = true;
   state.activeSftp.viewStatus = 'loading';
@@ -1021,14 +1013,14 @@ export async function openSftpFile(connId, remotePath, noActivate = false) {
     await navigateSftp(connId, parentRemotePath(remotePath));
   };
   const operation = startOperationFeedback({
-    label: `Open ${fileName}`,
+    label: t('sftp_ops.open_file_label', { file: fileName }),
     icon: 'cloud_download',
-    scope: `SFTP ${conn.name || connId}`,
+    scope: t('sftp_ops.scope', { connection: conn.name || connId }),
     target: remotePath,
-    message: 'Reading remote file...',
+    message: t('sftp_ops.reading_file'),
     retry: () => openSftpFile(connId, remotePath, noActivate),
     open: showSource,
-    openLabel: 'Open',
+    openLabel: t('sftp_ops.open'),
     openIcon: 'open_in_new',
   });
 
@@ -1067,9 +1059,9 @@ export async function openSftpFile(connId, remotePath, noActivate = false) {
         mtime: null,
       };
       eventBus.emit("tab:open", { tab: tab, noActivate: noActivate });
-      operation.finish(`${fileName} is ready to stream`);
+      operation.finish(t('sftp_ops.stream_ready', { file: fileName }));
     } catch (err) {
-      operation.fail(`Could not open ${fileName}`, err.message);
+      operation.fail(t('sftp_ops.open_file_failed', { file: fileName }), err.message);
     }
     return;
   }
@@ -1077,7 +1069,7 @@ export async function openSftpFile(connId, remotePath, noActivate = false) {
   try {
     const result = await callSftpApi('sftp_read', conn, { path: remotePath });
     if (!result.success) {
-      operation.fail(`Could not open ${fileName}`, result.message || 'The remote file could not be read');
+      operation.fail(t('sftp_ops.open_file_failed', { file: fileName }), result.message || t('sftp_ops.remote_read_failed'));
       return;
     }
     const content = result.content || '';
@@ -1098,9 +1090,9 @@ export async function openSftpFile(connId, remotePath, noActivate = false) {
       mtime: result.mtime
     };
     eventBus.emit("tab:open", { tab: tab, noActivate: noActivate });
-    operation.finish(`${fileName} opened`);
+    operation.finish(t('sftp_ops.file_opened', { file: fileName }));
   } catch (err) {
-    operation.fail(`Could not open ${fileName}`, err.message);
+    operation.fail(t('sftp_ops.open_file_failed', { file: fileName }), err.message);
   }
 }
 
@@ -1109,22 +1101,22 @@ export async function saveSftpFile(tab, content, options = {}) {
   const conn = findConnection(connId);
   const request = { path: String(tab.path), content: String(content ?? ''), name: tab.name || remotePath.split('/').pop() };
   const operation = options.silentOperation ? null : startOperationFeedback({
-    label: `Save ${request.name}`,
+    label: t('sftp_ops.save_file_label', { file: request.name }),
     icon: 'save',
-    message: 'Writing file to the remote server...',
-    scope: `SFTP ${conn?.name || connId}`,
+    message: t('sftp_ops.writing_file'),
+    scope: t('sftp_ops.scope', { connection: conn?.name || connId }),
     target: remotePath,
     retry: () => saveSftpFile(
       state.openTabs.find(candidate => candidate.path === request.path) || { path: request.path, name: request.name },
       request.content,
     ),
     open: () => _browseSftpMutation(connId, remotePath),
-    openLabel: 'Browse',
+    openLabel: t('sftp_ops.browse'),
     openIcon: 'folder_open',
   });
   if (!conn) {
     const message = t("toast.sftp_conn_not_found");
-    operation?.fail(`Could not save ${request.name}`, message);
+    operation?.fail(t('sftp_ops.save_file_failed', { file: request.name }), message);
     options.onResult?.({ success: false, message });
     if (!options.silentErrorToast) showToast(message, 'error');
     return false;
@@ -1136,18 +1128,18 @@ export async function saveSftpFile(tab, content, options = {}) {
       tab.originalContent = request.content;
       if (tab.content === request.content) tab.modified = false;
       await _refreshCurrentDir(connId);
-      operation?.finish(`${request.name} saved`);
+      operation?.finish(t('sftp_ops.file_saved', { file: request.name }));
       options.onResult?.({ success: true, response: result });
       return true;
     } else {
-      const message = result.message || result.error || 'Remote server rejected the file write';
-      operation?.fail(`Could not save ${request.name}`, message);
+      const message = result.message || result.error || t('sftp_ops.remote_write_rejected');
+      operation?.fail(t('sftp_ops.save_file_failed', { file: request.name }), message);
       options.onResult?.({ success: false, message });
       if (!options.silentErrorToast) showToast(t("toast.sftp_save_fail", { error: message }), 'error');
       return false;
     }
   } catch (err) {
-    operation?.fail(`Could not save ${request.name}`, err.message);
+    operation?.fail(t('sftp_ops.save_file_failed', { file: request.name }), err.message);
     options.onResult?.({ success: false, message: err.message });
     if (!options.silentErrorToast) showToast(t("toast.sftp_error", { error: err.message }), 'error');
     return false;
@@ -1262,7 +1254,7 @@ function _showItemContextMenu(x, y, connId, remotePath, isFolder) {
   items.push({ icon: 'drive_file_move', label: t("menu.move") || 'Move', action: () => _promptMove(connId, remotePath, isFolder) });
   items.push('divider');
   items.push({ icon: 'link', label: t("menu.copy_path") || 'Copy Path', action: () => { navigator.clipboard.writeText(remotePath); showToast(t("toast.path_copied"), 'success'); }});
-  items.push({ icon: 'terminal', label: 'Copy Virtual Path', action: () => { navigator.clipboard.writeText(virtualPath); showToast('Virtual path copied', 'success'); }});
+  items.push({ icon: 'terminal', label: t('menu.copy_virtual_path'), action: () => { navigator.clipboard.writeText(virtualPath); showToast(t('toast.virtual_path_copied'), 'success'); }});
   const isPinned = state.favoriteFiles.includes(virtualPath);
   items.push({ icon: 'push_pin', label: isPinned ? 'Unpin' : 'Pin to top', action: () => eventBus.emit('file:toggle-favorite', { path: virtualPath }) });
   if (state.terminalIntegrationEnabled) {
@@ -1326,9 +1318,9 @@ async function _promptNewFolder(connId, dirPath) {
 async function _confirmSftpCreateRetry(request) {
   if (request.kind === 'folder' || !request.overwrite) return _runSftpCreate(request);
   const confirmed = await showConfirmDialog({
-    title: 'Retry creating remote file?',
-    message: `Create ${request.remotePath} on SFTP ${request.connectionName} again? The destination will be replaced with an empty file if it now exists.`,
-    confirmText: 'Retry Create',
+    title: t('sftp_ops.retry_create_title'),
+    message: t('sftp_ops.retry_create_message', { path: request.remotePath, connection: request.connectionName }),
+    confirmText: t('sftp_ops.retry_create_confirm'),
     cancelText: t('modal.cancel_button'),
     isDanger: true,
   });
@@ -1337,24 +1329,24 @@ async function _confirmSftpCreateRetry(request) {
 }
 
 async function _runSftpCreate(request) {
-  const item = request.kind === 'folder' ? 'folder' : 'file';
+  const item = request.kind === 'folder' ? t('sftp_ops.folder') : t('sftp_ops.file');
   const operation = startOperationFeedback({
-    label: `Create remote ${item}`,
+    label: t('sftp_ops.create_label', { item }),
     icon: request.kind === 'folder' ? 'create_new_folder' : 'note_add',
-    scope: `SFTP ${request.connectionName}`,
+    scope: t('sftp_ops.scope', { connection: request.connectionName }),
     target: request.remotePath,
-    message: `Creating ${request.remotePath}...`,
+    message: t('sftp_ops.creating_path', { path: request.remotePath }),
     retry: () => _confirmSftpCreateRetry(request),
     open: () => request.kind === 'folder'
       ? _openSftpFolder(request.connId, request.remotePath)
       : openSftpFile(request.connId, request.remotePath),
-    openLabel: request.kind === 'folder' ? 'Open folder' : 'Open file',
+    openLabel: request.kind === 'folder' ? t('sftp_ops.open_folder') : t('sftp_ops.open_file'),
     openIcon: request.kind === 'folder' ? 'folder_open' : 'description',
   });
   const conn = findConnection(request.connId);
   if (!conn) {
     const message = 'The saved SFTP connection is no longer available.';
-    operation.fail(`Could not create remote ${item}`, message);
+    operation.fail(t('sftp_ops.create_failed', { item }), message);
     showToast(t('toast.sftp_error', { error: message }), 'error');
     return false;
   }
@@ -1363,9 +1355,9 @@ async function _runSftpCreate(request) {
       path: request.remotePath,
       ...(request.kind === 'file' ? { content: '', overwrite: request.overwrite } : {}),
     });
-    if (!result?.success) throw new Error(result?.message || result?.error || `Remote ${item} creation failed`);
+    if (!result?.success) throw new Error(result?.message || result?.error || t('sftp_ops.create_request_failed', { item }));
     if (state.activeSftp.connectionId === request.connId) await _refreshCurrentDir(request.connId);
-    operation.finish(`Created ${request.remotePath}`);
+    operation.finish(t('sftp_ops.created_path', { path: request.remotePath }));
     if (request.kind === 'folder') {
       showToast(t('toast.sftp_mkdir_success', { name: request.remotePath.split('/').pop() }), 'success');
     } else {
@@ -1375,7 +1367,7 @@ async function _runSftpCreate(request) {
     return true;
   } catch (error) {
     const message = error?.message || String(error);
-    operation.fail(`Could not create remote ${item}`, message);
+    operation.fail(t('sftp_ops.create_failed', { item }), message);
     showToast(t(request.kind === 'folder' ? 'toast.sftp_mkdir_fail' : 'toast.sftp_create_fail', { error: message }), 'error');
     return false;
   }
@@ -1456,9 +1448,9 @@ async function _duplicateItem(connId, remotePath, isFolder) {
 
 function _sftpMutationLabel(request) {
   const item = request.isFolder ? 'folder' : 'file';
-  if (request.kind === 'rename') return `Rename remote ${item}`;
-  if (request.kind === 'move') return `Move remote ${item}`;
-  return `Duplicate remote ${item}`;
+  if (request.kind === 'rename') return t('sftp_ops.rename_label', { item });
+  if (request.kind === 'move') return t('sftp_ops.move_label', { item });
+  return t('sftp_ops.duplicate_label', { item });
 }
 
 async function _browseSftpMutation(connId, destination) {
@@ -1475,9 +1467,9 @@ async function _openSftpFolder(connId, remotePath) {
 
 async function _confirmSftpMutationRetry(request) {
   const confirmed = await showConfirmDialog({
-    title: `Retry ${_sftpMutationLabel(request).toLowerCase()}?`,
-    message: `Retry ${request.source} to ${request.destination} on SFTP ${request.connectionName}? If the destination now exists, it will be replaced.`,
-    confirmText: 'Retry',
+    title: t('sftp_ops.retry_mutation_title', { action: _sftpMutationLabel(request).toLowerCase() }),
+    message: t('sftp_ops.retry_mutation_message', { source: request.source, destination: request.destination, connection: request.connectionName }),
+    confirmText: t('sftp_ops.retry'),
     cancelText: t('modal.cancel_button'),
     isDanger: true,
   });
@@ -1489,18 +1481,18 @@ async function _runSftpMutation(request) {
   const operation = startOperationFeedback({
     label,
     icon: request.kind === 'duplicate' ? 'content_copy' : 'drive_file_move',
-    scope: `SFTP ${request.connectionName}`,
+    scope: t('sftp_ops.scope', { connection: request.connectionName }),
     target: `${request.source} -> ${request.destination}`,
-    message: `${label.replace(/^./, character => character.toLowerCase())}...`,
+    message: t('sftp_ops.mutation_running', { action: label.replace(/^./, character => character.toLowerCase()) }),
     retry: () => _confirmSftpMutationRetry(request),
     open: () => _browseSftpMutation(request.connId, request.destination),
-    openLabel: 'Browse',
+    openLabel: t('sftp_ops.browse'),
     openIcon: 'folder_open',
   });
   const conn = findConnection(request.connId);
   if (!conn) {
     const message = 'The saved SFTP connection is no longer available.';
-    operation.fail(`${label} failed`, message);
+    operation.fail(t('sftp_ops.mutation_failed', { action: label }), message);
     showToast(t('toast.sftp_error', { error: message }), 'error');
     return false;
   }
@@ -1513,7 +1505,7 @@ async function _runSftpMutation(request) {
     });
     if (!result.success) {
       const message = result.message || `${label} failed`;
-      operation.fail(`${label} failed`, message);
+      operation.fail(t('sftp_ops.mutation_failed', { action: label }), message);
       const toastKey = request.kind === 'rename'
         ? 'toast.sftp_rename_fail'
         : request.kind === 'move'
@@ -1531,7 +1523,7 @@ async function _runSftpMutation(request) {
       }
     }
     if (state.activeSftp.connectionId === request.connId) await _refreshCurrentDir(request.connId);
-    operation.finish(`${label} complete`, { detail: `${request.source} -> ${request.destination}` });
+    operation.finish(t('sftp_ops.mutation_complete', { action: label }), { detail: t('sftp_ops.mutation_detail', { source: request.source, destination: request.destination }) });
     if (request.kind === 'rename') {
       showToast(t('toast.sftp_rename_success', { name: request.destination.split('/').pop() }), 'success');
     } else if (request.kind === 'move') {
@@ -1542,7 +1534,7 @@ async function _runSftpMutation(request) {
     return true;
   } catch (error) {
     const message = error?.message || String(error);
-    operation.fail(`${label} failed`, message);
+    operation.fail(t('sftp_ops.mutation_failed', { action: label }), message);
     showToast(t('toast.sftp_error', { error: message }), 'error');
     return false;
   }
@@ -1565,9 +1557,9 @@ async function _promptDelete(connId, remotePath, isFolder) {
 async function _confirmSftpDeleteRetry(request) {
   const item = request.isFolder ? 'folder' : 'file';
   const confirmed = await showConfirmDialog({
-    title: `Retry deleting remote ${item}?`,
-    message: `Permanently delete ${request.remotePath} from SFTP ${request.connectionName}? A previous recursive attempt may already have removed some contents. This cannot be undone.`,
-    confirmText: 'Retry Delete',
+    title: t('sftp_ops.retry_delete_title', { item }),
+    message: t('sftp_ops.retry_delete_message', { path: request.remotePath, connection: request.connectionName }),
+    confirmText: t('sftp_ops.retry_delete_confirm'),
     cancelText: t('modal.cancel_button'),
     isDanger: true,
   });
@@ -1578,27 +1570,27 @@ async function _confirmSftpDeleteRetry(request) {
 async function _runSftpDelete(request) {
   const item = request.isFolder ? 'folder' : 'file';
   const operation = startOperationFeedback({
-    label: `Delete remote ${item}`,
+    label: t('sftp_ops.delete_label', { item }),
     icon: 'delete',
-    scope: `SFTP ${request.connectionName}`,
+    scope: t('sftp_ops.scope', { connection: request.connectionName }),
     target: request.remotePath,
-    message: `Deleting ${request.remotePath}...`,
+    message: t('sftp_ops.deleting_path', { path: request.remotePath }),
     retry: () => _confirmSftpDeleteRetry(request),
     open: () => _browseSftpMutation(request.connId, request.remotePath),
-    openLabel: 'Browse',
+    openLabel: t('sftp_ops.browse'),
     openIcon: 'folder_open',
   });
   const conn = findConnection(request.connId);
   if (!conn) {
     const message = 'The saved SFTP connection is no longer available.';
-    operation.fail(`Could not delete ${request.remotePath}`, message);
+    operation.fail(t('sftp_ops.delete_failed', { path: request.remotePath }), message);
     showToast(t('toast.sftp_error', { error: message }), 'error');
     return false;
   }
 
   try {
     const result = await callSftpApi('sftp_delete', conn, { path: request.remotePath });
-    if (!result.success) throw new Error(result.message || result.error || 'Remote deletion request failed');
+    if (!result.success) throw new Error(result.message || result.error || t('sftp_ops.delete_request_failed'));
     showToast(t("toast.sftp_delete_success", { name: request.remotePath.split('/').pop() }), 'success');
     const virtualPath = buildSftpPath(request.connId, request.remotePath);
 
@@ -1621,14 +1613,14 @@ async function _runSftpDelete(request) {
     }
 
     if (state.activeSftp.connectionId === request.connId) await _refreshCurrentDir(request.connId);
-    operation.finish(`Deleted ${request.remotePath}`, { detail: 'Remote deletion is permanent and was not moved to a recovery location.' });
+    operation.finish(t('sftp_ops.deleted_path', { path: request.remotePath }), { detail: t('sftp_ops.delete_permanent_detail') });
     return true;
   } catch (error) {
     const message = error?.message || String(error);
     if (state.activeSftp.connectionId === request.connId) {
       try { await _refreshCurrentDir(request.connId); } catch (_) { /* Preserve the deletion failure as the primary diagnostic. */ }
     }
-    operation.fail(`Could not delete ${request.remotePath}`, `${message}\n\nSome contents may already be deleted. No changes were rolled back.`);
+    operation.fail(t('sftp_ops.delete_failed', { path: request.remotePath }), `${message}\n\n${t('sftp_ops.delete_partial_detail')}`);
     showToast(t('toast.sftp_delete_fail', { error: message }), 'error');
     return false;
   }
@@ -1677,33 +1669,33 @@ function _openSftpConnectionSettings(connId = null) {
 async function _testAndSaveSftpConnection(conn, editingConnId = null) {
   const target = `${conn.username}@${conn.host}:${conn.port || 22}`;
   const operation = startOperationFeedback({
-    label: 'Test SFTP connection',
+    label: t('sftp_ops.test_label'),
     icon: 'lan',
-    scope: `SFTP ${conn.name || 'connection'}`,
+    scope: t('sftp_ops.scope', { connection: conn.name || t('sftp_ops.connection') }),
     target,
-    message: 'Testing authentication and remote access...',
-    openLabel: 'Connection settings',
+    message: t('sftp_ops.testing'),
+    openLabel: t('sftp_ops.connection_settings'),
     openIcon: 'settings',
     open: () => _openSftpConnectionSettings(editingConnId),
   });
   try {
     const result = await callSftpApi('sftp_test', conn);
-    if (!result?.success) throw new Error(result?.message || result?.error || 'SFTP connection test failed');
-    operation.finish('SFTP connection verified', {
-      detail: 'Credentials are stored only after this successful test.',
+    if (!result?.success) throw new Error(result?.message || result?.error || t('sftp_ops.test_failed'));
+    operation.finish(t('sftp_ops.test_verified'), {
+      detail: t('sftp_ops.test_credentials_detail'),
     });
     showToast(t("toast.sftp_conn_success", { error: result.message }), 'success');
     return result;
   } catch (error) {
     const message = error?.message || String(error);
-    operation.fail('SFTP connection test failed', `${message}\n\nCredentials are not stored in operation history. Correct them in Connection settings.`);
+    operation.fail(t('sftp_ops.test_failed'), `${message}\n\n${t('sftp_ops.test_retry_detail')}`);
     showToast(t("toast.sftp_conn_fail", { error: message }), 'error');
     return { success: false, message };
   }
 }
 
 async function _downloadFile(connId, remotePath) {
-  const { downloadFileByPath } = await import('./downloads-uploads.js?v=2.5.188');
+  const { downloadFileByPath } = await import('./downloads-uploads.js?v=2.5.270');
   await downloadFileByPath(buildSftpPath(connId, remotePath));
 }
 
@@ -1813,25 +1805,25 @@ export async function refreshSftp(options = {}) {
   if (!conn) return false;
   const path = state.activeSftp.currentPath || '/';
   const operation = options.silentOperation ? null : startOperationFeedback({
-    label: 'Refresh SFTP workspace',
+    label: t('sftp_ops.refresh_label'),
     icon: 'refresh',
-    scope: `SFTP ${conn.name || connId}`,
+    scope: t('sftp_ops.scope', { connection: conn.name || connId }),
     target: path,
-    message: `Refreshing ${path}...`,
+    message: t('sftp_ops.refreshing_path', { path }),
     retry: () => refreshSftp(),
-    openLabel: 'Open SFTP',
+    openLabel: t('sftp_ops.open_sftp'),
     openIcon: 'cloud',
     open: () => eventBus.emit('ui:switch-sidebar-view', 'sftp'),
   });
   const result = await _refreshCurrentDir(connId);
   if (result?.success) {
-    operation?.finish(`Refreshed ${path}`, {
-      detail: `${result.folders} folders · ${result.files} files`,
+    operation?.finish(t('sftp_ops.refreshed_path', { path }), {
+      detail: t('sftp_ops.directory_contents', { folders: result.folders, files: result.files }),
     });
     return true;
   }
-  const message = result?.message || 'SFTP refresh failed';
-  operation?.fail(`Could not refresh ${path}`, message);
+  const message = result?.message || t('sftp_ops.refresh_failed');
+  operation?.fail(t('sftp_ops.refresh_path_failed', { path }), message);
   showToast(t('toast.sftp_error', { error: message }), 'error');
   return false;
 }

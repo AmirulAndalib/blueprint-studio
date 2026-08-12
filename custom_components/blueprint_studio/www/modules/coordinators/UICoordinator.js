@@ -7,10 +7,10 @@
 import { state, elements } from '../state.js';
 import { eventBus } from '../event-bus.js';
 import { fetchWithAuth } from '../api.js';
-import { API_BASE } from '../constants.js';
+import { API_BASE } from '../constants.js?v=2.5.270';
 import { triggerUpload, triggerFolderUpload, downloadFolder, downloadFileByPath, handleFileUpload, handleFolderUpload } from '../downloads-uploads.js';
 import { setThemePreset } from '../ui.js';
-import { saveSettings, updateShowHiddenButton } from '../settings.js?v=2.5.188';
+import { saveSettings, updateShowHiddenButton } from '../settings.js?v=2.5.270';
 import { renderFileTree, debouncedRenderFileTree, cancelPendingSearch, updateExplorerSearchUI, updateExplorerFilterIcon } from '../file-tree.js';
 import { updateSearchHighlights, updateMatchStatus, doReplace, doReplaceAll, doFind, openSearchWidget } from '../search.js';
 import { downloadCurrentFile } from '../downloads-uploads.js';
@@ -18,18 +18,18 @@ import { setToolbarControlLabel, updateToolbarState } from '../toolbar.js';
 import { copyToClipboard as copyToClipboardUtil, getTruePath as getTruePath, enableLongPressContextMenu } from '../utils.js';
 
 import { validateByFileType } from '../file-operations.js';
-import { t } from '../translations.js';
-import { initProblems, publishValidationResult, setValidationRunning } from '../problems.js?v=2.5.188';
-import { startOperationFeedback, updateOperationFeedback } from '../feedback-service.js?v=2.5.188';
+import { t } from '../translations.js?v=2.5.270';
+import { initProblems, publishValidationResult, setValidationRunning } from '../problems.js?v=2.5.270';
+import { startOperationFeedback, updateOperationFeedback } from '../feedback-service.js?v=2.5.270';
 
 import { performGlobalSearch, performGlobalReplace, triggerGlobalSearch, initGlobalSearchWindowFunctions } from '../global-search.js';
 import { toggleMarkdownPreview, renderAssetPreview, cleanupMarkdownPreview, handleMarkdownChange } from '../asset-preview.js';
-import { toggleTerminal } from '../terminal.js?v=2.5.188';
-import { toggleAISidebar, sendAIChatMessage, updateAIVisibility } from '../ai-ui.js?v=2.5.188';
+import { toggleTerminal } from '../terminal.js?v=2.5.270';
+import { toggleAISidebar, sendAIChatMessage, updateAIVisibility } from '../ai-ui.js?v=2.5.270';
 
 import { updateBreadcrumb, expandFolderInTree } from '../breadcrumb.js';
-import { showUserGuide } from '../user-guide.js';
-import { closeDialog, openDialog } from '../dialog-manager.js';
+import { showUserGuide } from '../user-guide.js?v=2.5.270';
+import { closeDialog, openDialog } from '../dialog-manager.js?v=2.5.270';
 // Removed redundant import: import { renderAssetPreview } from '../asset-preview.js';
 
 async function runGithubSupportAction({ action, label, target, successToast, fallbackUrl }) {
@@ -568,10 +568,7 @@ export function initUICoordinator(callbacks) {
         };
         elements.themeToggle.addEventListener("click", toggleThemeMenu);
         elements.themeToggle.addEventListener("keydown", (event) => {
-            if (event.key === "Enter" || event.key === " ") {
-                event.preventDefault();
-                toggleThemeMenu(event, "active");
-            } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+            if (event.key === "ArrowDown" || event.key === "ArrowUp") {
                 event.preventDefault();
                 event.stopPropagation();
                 openThemeMenu(event.key === "ArrowUp" ? "last" : "active");
@@ -633,12 +630,6 @@ export function initUICoordinator(callbacks) {
             if (functions.hideSidebar) functions.hideSidebar();
         };
         elements.btnCloseSidebar.addEventListener("click", hideSidebar);
-        elements.btnCloseSidebar.addEventListener("keydown", (event) => {
-            if (event.key === "Enter" || event.key === " ") {
-                event.preventDefault();
-                hideSidebar();
-            }
-        });
     }
 
     if (elements.sidebarOverlay) {
@@ -669,12 +660,6 @@ export function initUICoordinator(callbacks) {
             if (functions.switchSidebarView) functions.switchSidebarView(viewName);
         };
         element.addEventListener("click", activate);
-        element.addEventListener("keydown", (event) => {
-            if (event.key === "Enter" || event.key === " ") {
-                event.preventDefault();
-                activate();
-            }
-        });
     };
     bindActivity(elements.activityExplorer, "explorer");
     bindActivity(elements.activitySearch, "search");
@@ -825,7 +810,7 @@ export function initUICoordinator(callbacks) {
 
                 const copied = await copyToClipboardUtil(value);
                 if (copied) {
-                    if (functions.showToast) functions.showToast("Donation address copied", "success", 1800);
+                    if (functions.showToast) functions.showToast(t('toast.donation_address_copied'), "success", 1800);
                     const icon = button.querySelector(".material-icons");
                     if (icon) {
                         icon.textContent = "check";
@@ -834,7 +819,7 @@ export function initUICoordinator(callbacks) {
                         }, 1600);
                     }
                 } else if (functions.showToast) {
-                    functions.showToast("Could not copy donation address", "error");
+                    functions.showToast(t('toast.donation_address_copy_failed'), "error");
                 }
             });
         });
@@ -843,13 +828,7 @@ export function initUICoordinator(callbacks) {
     // Support Modal
     if (elements.btnSupport) {
         elements.btnSupport.addEventListener("click", () => {
-            if (elements.modalSupportOverlay) {
-                openDialog(elements.modalSupportOverlay, {
-                    initialFocus: '#btn-close-support',
-                    returnFocus: elements.btnSupport,
-                    onRequestClose: () => closeDialog(elements.modalSupportOverlay),
-                });
-            }
+            showUserGuide({ returnFocus: elements.btnSupport });
         });
     }
 
@@ -864,7 +843,7 @@ export function initUICoordinator(callbacks) {
             const returnFocus = elements.modalSupportOverlay
                 ? closeDialog(elements.modalSupportOverlay, { restoreFocus: false })
                 : null;
-            showUserGuide({ returnFocus });
+            showUserGuide({ returnFocus, section: 'getting-started' });
         });
     }
 
@@ -873,7 +852,7 @@ export function initUICoordinator(callbacks) {
             const returnFocus = elements.modalSupportOverlay
                 ? closeDialog(elements.modalSupportOverlay, { restoreFocus: false })
                 : null;
-            eventBus.emit('ui:show-shortcuts', { returnFocus });
+            showUserGuide({ returnFocus, section: 'shortcuts' });
         });
     }
 
@@ -1087,12 +1066,6 @@ export function initUICoordinator(callbacks) {
             functions.openSearchWidget(isReplace);
         };
         toggle.addEventListener("click", activate);
-        toggle.addEventListener("keydown", (event) => {
-            if (event.key === "Enter" || event.key === " ") {
-                event.preventDefault();
-                activate();
-            }
-        });
     };
     bindSearchReplaceDisclosure(elements.searchToggle, elements.searchWidget);
     bindSearchReplaceDisclosure(elements.secondarySearchToggle, elements.secondarySearchWidget);
@@ -1168,12 +1141,6 @@ function bindDisclosureControl(control, container, onToggle) {
     };
 
     control.addEventListener("click", toggle);
-    control.addEventListener("keydown", (event) => {
-        if (event.key === "Enter" || event.key === " ") {
-            event.preventDefault();
-            toggle();
-        }
-    });
 }
 
 bindDisclosureControl(
@@ -1219,7 +1186,7 @@ if (btnCollapseSearch) {
 }
 
 // Search Mode Tabs
-const searchModeTabs = Array.from(document.querySelectorAll('.search-mode-tab'));
+const searchModeTabs = Array.from(document.getElementById('view-search')?.querySelectorAll('.search-mode-tab') || []);
 const updateGlobalSearchScopeUI = (mode) => {
     if (!elements.globalSearchInput) return;
     elements.globalSearchInput.placeholder = t(`search.placeholder_${mode}`);
@@ -1320,7 +1287,7 @@ if (elements.breadcrumbCopy) {
                             } else {
                                 state.currentNavigationPath = targetPath;
                             }
-                            document.querySelectorAll(".tree-item.active").forEach(el => el.classList.remove("active"));
+                            document.getElementById("file-tree")?.querySelectorAll(".tree-item.active").forEach(el => el.classList.remove("active"));
                             eventBus.emit('file:new', { path: targetPath });
                         }
                         break;
@@ -1333,7 +1300,7 @@ if (elements.breadcrumbCopy) {
                             } else {
                                 state.currentNavigationPath = targetPath;
                             }
-                            document.querySelectorAll(".tree-item.active").forEach(el => el.classList.remove("active"));
+                            document.getElementById("file-tree")?.querySelectorAll(".tree-item.active").forEach(el => el.classList.remove("active"));
                             eventBus.emit('folder:new', { path: targetPath });
                         }
                         break;
@@ -1346,7 +1313,7 @@ if (elements.breadcrumbCopy) {
                             } else {
                                 state.currentNavigationPath = targetPath;
                             }
-                            document.querySelectorAll(".tree-item.active").forEach(el => el.classList.remove("active"));
+                            document.getElementById("file-tree")?.querySelectorAll(".tree-item.active").forEach(el => el.classList.remove("active"));
                             eventBus.emit('blueprint:new', { path: targetPath });
                         }
                         break;
@@ -1463,7 +1430,7 @@ if (elements.breadcrumbCopy) {
                         break;
                     case "copy_path":
                         navigator.clipboard.writeText(tab.path);
-                        if (functions.showToast) functions.showToast("Path copied to clipboard", "success", 1500);
+                        if (functions.showToast) functions.showToast(t('toast.path_copied'), "success", 1500);
                         break;
                     case "move_to_left":
                         if (typeof state.tabContextMenuTargetIndex === 'number') {
@@ -1532,7 +1499,7 @@ if (elements.breadcrumbCopy) {
             // Only if clicking the background (not a tree item)
             if (e.target === elements.fileTree) {
                 state.currentFolderPath = null;
-                document.querySelectorAll(".tree-item.active").forEach(el => el.classList.remove("active"));
+                document.getElementById("file-tree")?.querySelectorAll(".tree-item.active").forEach(el => el.classList.remove("active"));
             }
         });
 

@@ -3,6 +3,7 @@ import { state, elements } from './state.js';
 import { showToast } from './ui.js';
 import { getFileIcon, isMobile } from './utils.js';
 import { eventBus } from './event-bus.js';
+import { t } from './translations.js?v=2.5.270';
 
 /**
  * Check if a file path is favorited
@@ -20,10 +21,10 @@ export function isFavorite(path) {
 export function toggleFavorite(path) {
   if (isFavorite(path)) {
     state.favoriteFiles = state.favoriteFiles.filter(p => p !== path);
-    showToast(`Removed ${path.split("/").pop()} from favorites`, "success");
+    showToast(t('toast.favorite_removed', { file: path.split("/").pop() }), "success");
   } else {
     state.favoriteFiles.push(path);
-    showToast(`Added ${path.split("/").pop()} to favorites`, "success");
+    showToast(t('toast.favorite_added', { file: path.split("/").pop() }), "success");
   }
 
   eventBus.emit('settings:save');
@@ -72,7 +73,7 @@ export function renderFavoritesPanel() {
       </div>
       <span class="tree-name">${fileName}</span>
       <div class="tree-item-actions">
-        <button class="tree-action-btn" title="Unpin from favorites">
+        <button class="tree-action-btn" title="${t('favorites.unpin')}" aria-label="${t('favorites.unpin')}">
           <span class="ui-icon material-icons favorite-unpin-icon">push_pin</span>
         </button>
       </div>
@@ -85,6 +86,9 @@ export function renderFavoritesPanel() {
     const tab = state.openTabs.find((t) => t.path === filePath);
     if (tab && tab.modified) {
       item.classList.add("modified");
+      item.setAttribute("aria-label", `${filePath}, ${t('sidebar.unsaved')}`);
+    } else {
+      item.setAttribute("aria-label", filePath);
     }
 
     item.addEventListener("click", (e) => {

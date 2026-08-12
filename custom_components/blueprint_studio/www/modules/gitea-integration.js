@@ -3,7 +3,7 @@
 import { state, elements, giteaState } from './state.js';
 import { fetchWithAuth } from './api.js';
 import { eventBus } from './event-bus.js';
-import { API_BASE } from './constants.js';
+import { API_BASE } from './constants.js?v=2.5.270';
 import {
   activateSharedModal,
   deactivateSharedModal,
@@ -13,7 +13,7 @@ import {
   showModal
 } from './ui.js';
 import { formatBytes } from './utils.js';
-import { t } from './translations.js';
+import { t, tp } from './translations.js?v=2.5.270';
 import {
   gitStatus,
   gitInit,
@@ -22,7 +22,7 @@ import {
   gitGetRemotes,
   gitCleanLocks,
   gitGetConflictFiles
-} from './git-operations.js';
+} from './git-operations.js?v=2.5.270';
 import {
   updateGiteaPanel as updateGiteaPanelUI,
   renderGiteaFiles as renderGiteaFilesImpl,
@@ -30,25 +30,25 @@ import {
   stageSelectedGiteaFiles as stageSelectedGiteaFilesImpl,
   stageAllGiteaFiles as stageAllGiteaFilesImpl,
   unstageAllGiteaFiles as unstageAllGiteaFilesImpl
-} from './gitea-ui.js?v=2.5.188';
+} from './gitea-ui.js?v=2.5.270';
 import {
   clearCommitMessage,
   getCommitMessage,
   updateCommitComposer,
-} from './source-control-view.js?v=2.5.188';
+} from './source-control-view.js?v=2.5.270';
 import { setButtonLoading } from './ui.js';
-import { getGitActionConfirmation } from './git-action-confirmation.js?v=2.5.188';
-import { startOperationFeedback } from './feedback-service.js?v=2.5.188';
+import { getGitActionConfirmation } from './git-action-confirmation.js?v=2.5.270';
+import { startOperationFeedback } from './feedback-service.js?v=2.5.270';
 
-function startGiteaOperation(label, icon, message, retry, target = giteaState.currentBranch || 'Current branch') {
+function startGiteaOperation(label, icon, message, retry, target = giteaState.currentBranch || t('provider_ops.current_branch')) {
   return startOperationFeedback({
     label,
     icon,
     message,
-    scope: 'Gitea repository',
+    scope: t('gitea_ops.repository'),
     target,
     retry,
-    openLabel: 'Source Control',
+    openLabel: t('sidebar.source_control'),
     openIcon: 'account_tree',
     open: () => eventBus.emit('ui:switch-sidebar-view', 'source-control'),
   });
@@ -61,6 +61,12 @@ function giteaEndpointLabel(url) {
   } catch (_error) {
     return 'Gitea endpoint';
   }
+}
+
+function escapeMarkup(value = '') {
+  const container = document.createElement('div');
+  container.textContent = String(value ?? '');
+  return container.innerHTML;
 }
 
 // ============================================
@@ -83,7 +89,7 @@ export async function giteaInit(skipConfirm = false) {
 export async function giteaPush() {
   let operation;
   try {
-    operation = startGiteaOperation('Push to Gitea', 'cloud_upload', 'Uploading local commits...', giteaPush);
+    operation = startGiteaOperation(t('gitea_ops.push_label'), 'cloud_upload', t('gitea_ops.commits_uploading'), giteaPush);
     setButtonLoading(elements.btnGiteaPush, true);
     showToast(t("toast.git_push_started"), "info");
 
@@ -96,7 +102,7 @@ export async function giteaPush() {
     if (pushData.success) {
       setButtonLoading(elements.btnGiteaPush, false);
       showToast(t("toast.git_push_success"), "success");
-      operation.finish('Push complete');
+      operation.finish(t('gitea_ops.push_complete'));
       await giteaStatus(false, true);
       return true;
     }
@@ -113,7 +119,7 @@ export async function giteaPush() {
       });
 
       if (!commitMessage) {
-        operation.cancel('Push cancelled before commit');
+        operation.cancel(t('gitea_ops.push_cancelled_before_commit'));
         return false;
       }
 
@@ -132,30 +138,30 @@ export async function giteaPush() {
       setButtonLoading(elements.btnGiteaPush, false);
 
       if (data.success) {
-        operation.finish('Commit and push complete');
+        operation.finish(t('gitea_ops.commit_push_complete'));
         showToast(t("toast.git_push_success"), "success");
         await giteaStatus(false, true);
         return true;
       } else {
         const message = data.message || data.error || 'Push failed';
-        operation.fail('Push failed', message);
+        operation.fail(t('gitea_ops.push_failed'), message);
         showToast(t("toast.gitea_push_failed", { error: message }), "error");
       }
     } else if (errorMessage.includes("No commits to push")) {
       setButtonLoading(elements.btnGiteaPush, false);
       showToast(t("toast.gitea_no_commits"), "warning");
-      operation.finish('No commits to push', { icon: 'info' });
+      operation.finish(t('gitea_ops.no_commits'), { icon: 'info' });
       return true;
     } else {
       setButtonLoading(elements.btnGiteaPush, false);
       showToast(t("toast.gitea_push_failed", { error: errorMessage }), "error");
-      operation.fail('Push failed', errorMessage);
+      operation.fail(t('gitea_ops.push_failed'), errorMessage);
     }
     return false;
   } catch (error) {
     setButtonLoading(elements.btnGiteaPush, false);
     showToast(t("toast.gitea_push_failed", { error: error.message }), "error");
-    operation?.fail('Push failed', error.message);
+    operation?.fail(t('gitea_ops.push_failed'), error.message);
     return false;
   }
 }
@@ -174,7 +180,7 @@ export async function giteaPull() {
 
   if (!confirmed) return;
 
-  const operation = startGiteaOperation('Pull from Gitea', 'cloud_download', 'Downloading remote changes...', giteaPull);
+  const operation = startGiteaOperation(t('gitea_ops.pull_label'), 'cloud_download', t('gitea_ops.changes_downloading'), giteaPull);
 
   try {
     setButtonLoading(elements.btnGiteaPull, true);
@@ -189,7 +195,7 @@ export async function giteaPull() {
     setButtonLoading(elements.btnGiteaPull, false);
 
     if (data.success) {
-      operation.finish('Pull complete');
+      operation.finish(t('gitea_ops.pull_complete'));
       showToast(t("toast.git_pull_success"), "success");
       eventBus.emit('ui:reload-files');
       await giteaStatus(false, true);
@@ -199,13 +205,13 @@ export async function giteaPull() {
       return true;
     }
     const message = data.message || data.error || 'Pull failed';
-    operation.fail('Pull failed', message);
+    operation.fail(t('gitea_ops.pull_failed'), message);
     showToast(t("toast.gitea_pull_failed", { error: message }), "error");
     return false;
   } catch (error) {
     setButtonLoading(elements.btnGiteaPull, false);
     showToast(t("toast.gitea_pull_failed", { error: error.message }), "error");
-    operation.fail('Pull failed', error.message);
+    operation.fail(t('gitea_ops.pull_failed'), error.message);
     return false;
   }
 }
@@ -221,7 +227,7 @@ export async function giteaCommit() {
   const commitMessage = getCommitMessage('gitea');
   if (!commitMessage) return;
 
-  const operation = startGiteaOperation('Commit staged changes', 'commit', 'Creating local commit...', giteaCommit);
+  const operation = startGiteaOperation(t('gitea_ops.commit_label'), 'commit', t('gitea_ops.commit_creating'), giteaCommit);
 
   try {
     showToast(t("toast.git_commit_started"), "info");
@@ -232,7 +238,7 @@ export async function giteaCommit() {
     });
 
     if (data.success) {
-      operation.finish('Commit created');
+      operation.finish(t('gitea_ops.commit_created'));
       showToast(t("toast.git_commit_success"), "success");
       clearCommitMessage('gitea');
       await giteaStatus(false, true);
@@ -240,11 +246,11 @@ export async function giteaCommit() {
       return true;
     }
     const message = data.message || data.error || 'Commit failed';
-    operation.fail('Commit failed', message);
+    operation.fail(t('gitea_ops.commit_failed'), message);
     return false;
   } catch (error) {
     showToast(t("toast.gitea_commit_failed", { error: error.message }), "error");
-    operation.fail('Commit failed', error.message);
+    operation.fail(t('gitea_ops.commit_failed'), error.message);
     return false;
   }
 }
@@ -289,7 +295,7 @@ export async function unstageAllGiteaFiles() {
 // ============================================
 
 export async function giteaAbort() {
-  const branch = giteaState.currentBranch || 'Current branch';
+  const branch = giteaState.currentBranch || t('provider_ops.current_branch');
   const confirmed = await showConfirmDialog({
     title: t("gitea.abort_title"),
     message: t("gitea.abort_message"),
@@ -301,9 +307,9 @@ export async function giteaAbort() {
   if (!confirmed) return false;
 
   const operation = startGiteaOperation(
-    'Abort Gitea Git operation',
+    t('gitea_ops.abort_label'),
     'cancel',
-    'Aborting merge or rebase...',
+    t('gitea_ops.abort_running'),
     giteaAbort,
     branch,
   );
@@ -315,16 +321,16 @@ export async function giteaAbort() {
     });
     if (!data.success) {
       const message = data.message || data.error || 'Unknown abort error';
-      operation.fail('Could not abort Gitea Git operation', message);
+      operation.fail(t('gitea_ops.abort_failed'), message);
       showToast(t("toast.gitea_abort_failed", { error: message }), "error");
       return false;
     }
-    operation.finish('Merge or rebase aborted');
+    operation.finish(t('gitea_ops.abort_complete'));
     showToast(t("toast.gitea_abort_success"), "success");
     await giteaStatus(false, true);
     return true;
   } catch (error) {
-    operation.fail('Could not abort Gitea Git operation', error.message);
+    operation.fail(t('gitea_ops.abort_failed'), error.message);
     showToast(t("toast.gitea_abort_failed", { error: error.message }), "error");
     return false;
   }
@@ -335,7 +341,7 @@ export async function giteaAbort() {
 // ============================================
 
 export async function giteaForcePush() {
-  const branch = giteaState.currentBranch || 'Current branch';
+  const branch = giteaState.currentBranch || t('provider_ops.current_branch');
   const confirmed = await showConfirmDialog(getGitActionConfirmation('force-push', {
     provider: 'Gitea',
     currentBranch: branch,
@@ -344,9 +350,9 @@ export async function giteaForcePush() {
   if (!confirmed) return false;
 
   const operation = startGiteaOperation(
-    'Force push to Gitea',
+    t('gitea_ops.force_push_label'),
     'cloud_upload',
-    'Replacing the remote branch...',
+    t('gitea_ops.remote_branch_replacing'),
     giteaForcePush,
     `${branch} -> gitea/${branch}`,
   );
@@ -358,16 +364,16 @@ export async function giteaForcePush() {
     });
     if (!data.success) {
       const message = data.message || data.error || 'Unknown force-push error';
-      operation.fail('Force push to Gitea failed', message);
+      operation.fail(t('gitea_ops.force_push_failed'), message);
       showToast(t("toast.gitea_push_failed", { error: message }), "error");
       return false;
     }
-    operation.finish('Gitea branch replaced');
+    operation.finish(t('gitea_ops.branch_replaced'));
     showToast(t("toast.git_push_success"), "success");
     await giteaStatus(false, true);
     return true;
   } catch (error) {
-    operation.fail('Force push to Gitea failed', error.message);
+    operation.fail(t('gitea_ops.force_push_failed'), error.message);
     showToast(t("toast.gitea_push_failed", { error: error.message }), "error");
     return false;
   }
@@ -378,7 +384,7 @@ export async function giteaForcePush() {
 // ============================================
 
 export async function giteaHardReset() {
-  const branch = giteaState.currentBranch || 'Current branch';
+  const branch = giteaState.currentBranch || t('provider_ops.current_branch');
   const confirmed = await showConfirmDialog(getGitActionConfirmation('hard-reset', {
     provider: 'Gitea',
     currentBranch: branch,
@@ -387,9 +393,9 @@ export async function giteaHardReset() {
   if (!confirmed) return false;
 
   const operation = startGiteaOperation(
-    'Reset from Gitea',
+    t('gitea_ops.reset_label'),
     'restore',
-    'Replacing local files from the remote branch...',
+    t('gitea_ops.local_files_replacing'),
     giteaHardReset,
     `gitea/${branch} -> ${branch}`,
   );
@@ -401,17 +407,17 @@ export async function giteaHardReset() {
     });
     if (!data.success) {
       const message = data.message || data.error || 'Unknown hard-reset error';
-      operation.fail('Reset from Gitea failed', message);
+      operation.fail(t('gitea_ops.reset_failed'), message);
       showToast(t("toast.gitea_error", { error: message }), "error");
       return false;
     }
-    operation.finish('Local branch reset from Gitea');
+    operation.finish(t('gitea_ops.reset_complete'));
     showToast(t("toast.git_reset_success"), "success");
     eventBus.emit('ui:reload-files');
     await giteaStatus(false, true);
     return true;
   } catch (error) {
-    operation.fail('Reset from Gitea failed', error.message);
+    operation.fail(t('gitea_ops.reset_failed'), error.message);
     showToast(t("toast.gitea_error", { error: error.message }), "error");
     return false;
   }
@@ -424,13 +430,13 @@ export async function giteaHardReset() {
 export async function giteaAddRemote(url) {
   const remoteUrl = String(url || '');
   const operation = startOperationFeedback({
-    label: 'Configure Gitea remote',
+    label: t('gitea_ops.configure_remote'),
     icon: 'cloud_sync',
-    message: 'Saving Gitea remote...',
-    scope: 'Local Git repository',
+    message: t('gitea_ops.remote_saving'),
+    scope: t('provider_ops.local_git_repository'),
     target: `gitea -> ${giteaEndpointLabel(remoteUrl)}`,
     retry: () => giteaAddRemote(remoteUrl),
-    openLabel: 'Source Control',
+    openLabel: t('sidebar.source_control'),
     openIcon: 'account_tree',
     open: () => eventBus.emit('ui:switch-sidebar-view', 'source-control'),
   });
@@ -441,7 +447,7 @@ export async function giteaAddRemote(url) {
       body: JSON.stringify({ action: 'gitea_add_remote', url: remoteUrl }),
     });
     if (!data.success) throw new Error(data.message || data.error || 'Gitea remote configuration failed');
-    operation.finish('Gitea remote configured');
+    operation.finish(t('gitea_ops.remote_configured'));
     try {
       const parsed = new URL(remoteUrl);
       localStorage.setItem('giteaServerUrl', `${parsed.protocol}//${parsed.host}`);
@@ -450,7 +456,7 @@ export async function giteaAddRemote(url) {
     await giteaStatus(false, true);
     return true;
   } catch (error) {
-    operation.fail('Could not configure Gitea remote', error.message);
+    operation.fail(t('gitea_ops.remote_configure_failed'), error.message);
     showToast(t("toast.gitea_error", { error: error.message }), 'error');
     return false;
   }
@@ -467,13 +473,13 @@ export async function giteaRemoveRemote(name) {
   });
   if (!confirmed) return false;
   const operation = startOperationFeedback({
-    label: `Remove ${remoteName} remote`,
+    label: t('provider_ops.remove_remote', { remote: remoteName }),
     icon: 'link_off',
-    message: 'Removing local remote...',
-    scope: 'Local Git repository',
+    message: t('provider_ops.remote_removing'),
+    scope: t('provider_ops.local_git_repository'),
     target: remoteName,
     retry: () => giteaRemoveRemote(remoteName),
-    openLabel: 'Source Control',
+    openLabel: t('sidebar.source_control'),
     openIcon: 'account_tree',
     open: () => eventBus.emit('ui:switch-sidebar-view', 'source-control'),
   });
@@ -484,27 +490,27 @@ export async function giteaRemoveRemote(name) {
       body: JSON.stringify({ action: 'git_remove_remote', name: remoteName }),
     });
     if (!data.success) throw new Error(data.message || data.error || 'Remote removal failed');
-    operation.finish(`${remoteName} remote removed`);
+    operation.finish(t('gitea_ops.remote_removed', { remote: remoteName }));
     showToast(data.message, 'success');
     await giteaStatus(false, true);
     return true;
   } catch (error) {
-    operation.fail(`Could not remove ${remoteName} remote`, error.message);
+    operation.fail(t('gitea_ops.remote_remove_failed', { remote: remoteName }), error.message);
     showToast(t("gitea.remove_remote_error", { error: error.message }), 'error');
     return false;
   }
 }
 
 export async function giteaSaveCredentials(username, token, rememberMe = true) {
-  const account = String(username || '').trim() || 'Gitea account';
+  const account = String(username || '').trim() || t('gitea_ops.account');
   const server = giteaEndpointLabel(localStorage.getItem('giteaServerUrl') || '');
   const operation = startOperationFeedback({
-    label: 'Save Gitea credentials',
+    label: t('gitea_ops.credentials_save_label'),
     icon: 'key',
-    message: 'Saving Gitea credentials...',
-    scope: 'Gitea authentication',
+    message: t('gitea_ops.credentials_saving'),
+    scope: t('gitea_ops.authentication'),
     target: `${account} -> ${server}`,
-    openLabel: 'Gitea Settings',
+    openLabel: t('gitea_ops.settings'),
     openIcon: 'settings',
     open: () => eventBus.emit('git:show-gitea-settings'),
   });
@@ -515,14 +521,14 @@ export async function giteaSaveCredentials(username, token, rememberMe = true) {
       body: JSON.stringify({ action: 'gitea_set_credentials', username: account, token, remember_me: rememberMe }),
     });
     if (!data.success) throw new Error(data.message || data.error || 'Credential save was rejected');
-    operation.finish('Gitea credentials saved', {
-      detail: rememberMe ? 'Credentials saved for future sessions' : 'Credentials available for this session',
+    operation.finish(t('gitea_ops.credentials_saved'), {
+      detail: rememberMe ? t('gitea_ops.credentials_persisted') : t('gitea_ops.credentials_session'),
     });
     showToast(t("toast.git_creds_saved"), 'success');
     return true;
   } catch (error) {
-    operation.fail('Could not save Gitea credentials', error.message, {
-      detail: 'The token was not retained for Retry. Reopen Gitea Settings to try again.',
+    operation.fail(t('gitea_ops.credentials_save_failed'), error.message, {
+      detail: t('gitea_ops.credentials_retry_detail'),
     });
     showToast(t("toast.gitea_error", { error: error.message }), 'error');
     return false;
@@ -539,13 +545,13 @@ export async function giteaClearCredentials() {
   });
   if (!confirmed) return false;
   const operation = startOperationFeedback({
-    label: 'Sign out from Gitea',
+    label: t('gitea_ops.signout_label'),
     icon: 'logout',
-    message: 'Removing saved Gitea credentials...',
-    scope: 'Gitea authentication',
+    message: t('gitea_ops.credentials_removing'),
+    scope: t('gitea_ops.authentication'),
     target: giteaEndpointLabel(localStorage.getItem('giteaServerUrl') || ''),
     retry: giteaClearCredentials,
-    openLabel: 'Gitea Settings',
+    openLabel: t('gitea_ops.settings'),
     openIcon: 'settings',
     open: () => eventBus.emit('git:show-gitea-settings'),
   });
@@ -556,11 +562,11 @@ export async function giteaClearCredentials() {
       body: JSON.stringify({ action: 'gitea_clear_credentials' }),
     });
     if (!data.success) throw new Error(data.message || data.error || 'Credential removal was rejected');
-    operation.finish('Signed out from Gitea');
+    operation.finish(t('gitea_ops.signed_out'));
     showToast(t("toast.git_signout"), 'success');
     return true;
   } catch (error) {
-    operation.fail('Could not sign out from Gitea', error.message);
+    operation.fail(t('gitea_ops.signout_failed'), error.message);
     showToast(t("toast.gitea_error", { error: error.message }), 'error');
     return false;
   }
@@ -568,13 +574,13 @@ export async function giteaClearCredentials() {
 
 export async function giteaTestConnection() {
   const operation = startOperationFeedback({
-    label: 'Test Gitea connection',
+    label: t('gitea_ops.test_connection'),
     icon: 'network_check',
-    message: 'Contacting Gitea remote...',
-    scope: 'Gitea remote',
+    message: t('gitea_ops.remote_contacting'),
+    scope: t('gitea_ops.remote'),
     target: `gitea -> ${giteaEndpointLabel(localStorage.getItem('giteaServerUrl') || '')}`,
     retry: giteaTestConnection,
-    openLabel: 'Gitea Settings',
+    openLabel: t('gitea_ops.settings'),
     openIcon: 'settings',
     open: () => eventBus.emit('git:show-gitea-settings'),
   });
@@ -585,11 +591,11 @@ export async function giteaTestConnection() {
       body: JSON.stringify({ action: 'gitea_test_connection' }),
     });
     if (!data.success) throw new Error(data.message || data.error || 'Connection test was rejected');
-    operation.finish('Gitea connection verified');
+    operation.finish(t('gitea_ops.connection_verified'));
     showToast(t("toast.git_conn_success"), 'success');
     return true;
   } catch (error) {
-    operation.fail('Gitea connection failed', error.message);
+    operation.fail(t('gitea_ops.connection_failed'), error.message);
     showToast(t("toast.git_conn_failed") + ': ' + error.message, 'error');
     return false;
   }
@@ -607,7 +613,7 @@ export async function showGiteaSettings() {
     body: JSON.stringify({ action: "gitea_get_credentials" }),
   });
 
-  const savedUsername = credentialsData.has_credentials ? credentialsData.username : "";
+  const savedUsername = credentialsData.has_credentials ? escapeMarkup(credentialsData.username) : "";
   const hasCredentials = credentialsData.has_credentials;
 
   // Get saved Gitea server URL from localStorage
@@ -628,8 +634,8 @@ export async function showGiteaSettings() {
       remotesHtml += `
         <div class="git-remote-item">
           <div style="flex: 1; min-width: 0;">
-              <span class="git-remote-name">${name}</span>
-              <span class="git-remote-url">${url}</span>
+              <span class="git-remote-name">${escapeMarkup(name)}</span>
+              <span class="git-remote-url">${escapeMarkup(url)}</span>
           </div>
           <button class="btn-icon-only remove-remote-btn" data-remote-name="${name}" title="${t("gitea.remove_remote_title")}" style="background: transparent; border: none; cursor: pointer; color: var(--text-secondary); padding: 4px;">
               <span class="ui-icon ui-icon--size-action material-icons">delete</span>
@@ -643,11 +649,11 @@ export async function showGiteaSettings() {
   let credentialsStatusHtml = "";
   if (hasCredentials) {
     credentialsStatusHtml = `
-      <div class="git-settings-info" style="color: #4caf50; margin-bottom: 12px;">
+      <div class="git-settings-info git-auth-status" data-status="connected">
         <span class="ui-icon material-icons">check_circle</span>
         <span>${t("gitea.logged_in_as", { username: savedUsername })}</span>
       </div>
-      <button id="btn-gitea-signout" style="width: 100%; padding: 10px; display: flex; align-items: center; justify-content: center; gap: 8px; background: #f44336; color: white; border: none; border-radius: 4px; font-size: 14px; cursor: pointer; transition: background 0.15s;">
+      <button class="btn-secondary git-signout-button" id="btn-gitea-signout" type="button">
         <span class="ui-icon material-icons">logout</span>
         <span>${t("toast.git_signout")}</span>
       </button>
@@ -659,17 +665,6 @@ export async function showGiteaSettings() {
       ${remotesHtml}
 
       <div class="git-settings-section">
-        <div class="git-settings-label">${t("gitea.repo_url")}</div>
-        <input type="text" class="git-settings-input" id="gitea-repo-url"
-               placeholder="https://gitea.example.com/user/repo.git"
-               value="${giteaRemote}"
-               autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
-        <div class="git-settings-buttons">
-          <button class="btn-primary" id="btn-save-gitea-remote" style="width: 100%;">${t("modal.confirm_button")}</button>
-        </div>
-      </div>
-
-      <div class="git-settings-section">
         <div class="git-settings-label">
           <span class="ui-icon ui-icon--tone-gitea ui-icon--align-middle ui-icon--space-after-8 material-icons">emoji_food_beverage</span>
           ${t("gitea.auth_title")}
@@ -677,53 +672,81 @@ export async function showGiteaSettings() {
 
         ${credentialsStatusHtml}
 
+        <input type="url" class="git-settings-input" id="gitea-server-url"
+               aria-label="${t("gitea.server_url")}"
+               placeholder="${t("gitea.server_url")}"
+               value="${escapeMarkup(savedGiteaUrl)}"
+               autocomplete="url" autocorrect="off" autocapitalize="off" spellcheck="false" />
         <input type="text" class="git-settings-input" id="gitea-username"
+               aria-label="${t("gitea.username")}"
                placeholder="${t("gitea.username")}"
                value="${savedUsername}"
                autocomplete="username" autocorrect="off" autocapitalize="off" spellcheck="false"
                style="margin-bottom: 8px;" />
         <input type="password" class="git-settings-input" id="gitea-token"
+               aria-label="${hasCredentials ? t("gitea.token_update") : t("gitea.token_placeholder")}"
                placeholder="${hasCredentials ? t("gitea.token_update") : t("gitea.token_placeholder")}"
                autocomplete="off"
                style="margin-bottom: 12px;" />
 
         <div class="git-settings-buttons">
-          <button class="btn-secondary" id="btn-test-gitea-connection">${t("modal.confirm")}</button>
-          <button class="btn-primary" id="btn-save-gitea-credentials">${t("modal.confirm_button")}</button>
+          <button class="btn-secondary" id="btn-test-gitea-connection">${t("gitea_ops.test_connection")}</button>
+          <button class="btn-primary" id="btn-save-gitea-credentials">${t("gitea_ops.credentials_save_label")}</button>
         </div>
       </div>
 
-      <div class="git-settings-section">
-        <div class="git-settings-label">
-          <span class="ui-icon ui-icon--tone-gitea ui-icon--align-middle ui-icon--space-after-8 material-icons">add_box</span>
-          ${t("modal.new_folder_title")}
+      ${hasCredentials ? `
+      <div class="git-settings-section git-settings-quick-start">
+        <div class="git-settings-label git-settings-quick-start__label">
+          <span class="ui-icon ui-icon--align-middle ui-icon--space-after-4 material-icons">rocket_launch</span>
+          ${t("gitea_ops.create_repository")}
+        </div>
+        <div class="git-settings-info git-settings-quick-start__copy">
+          <span class="ui-icon material-icons">info</span>
+          <span>${t("provider_ops.repository_creating")}</span>
         </div>
         <input type="text" class="git-settings-input" id="gitea-new-repo-name"
-               placeholder="${t("sidebar.explorer")}"
-               autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
-               style="margin-bottom: 8px;" />
+               aria-label="${t("gitea.repository_name")}"
+               placeholder="${t("gitea.repository_name")}"
+               autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
         <input type="text" class="git-settings-input" id="gitea-new-repo-description"
-               placeholder="${t("sidebar.search")}"
-               autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
-               style="margin-bottom: 8px;" />
-        <input type="text" class="git-settings-input" id="gitea-server-url"
-               placeholder="${t("gitea.server_url")}"
-               value="${savedGiteaUrl}"
-               autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
-               style="margin-bottom: 8px;" />
-        <div class="git-settings-checkbox" style="margin-bottom: 12px;">
+               aria-label="${t("gitea.repository_description")}"
+               placeholder="${t("gitea.repository_description")}"
+               autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+        <label class="git-settings-checkbox" for="gitea-repo-private">
           <input type="checkbox" id="gitea-repo-private" checked>
-          <label for="gitea-repo-private">${t("gitea.private_repo")}</label>
-        </div>
-        <button class="btn-primary" id="btn-create-gitea-repo" style="width: 100%;">
+          <span>${t("gitea.private_repo")}</span>
+        </label>
+        <button class="btn-primary git-settings-primary-action" id="btn-create-gitea-repo">
           <span class="ui-icon ui-icon--align-middle ui-icon--space-after-8 material-icons">add</span>
-          ${t("modal.confirm_button")}
+          ${t("gitea_ops.create_repository")}
+        </button>
+      </div>
+
+      <div class="git-settings-divider" role="separator">
+        <span>${t("gitea.repo_url")}</span>
+      </div>
+      ` : ''}
+
+      <div class="git-settings-section">
+        <div class="git-settings-label">${t("gitea.repo_url")}</div>
+        <input type="url" class="git-settings-input" id="gitea-repo-url"
+               aria-label="${t("gitea.repo_url")}"
+               placeholder="https://gitea.example.com/user/repo.git"
+               value="${escapeMarkup(giteaRemote)}"
+               autocomplete="url" autocorrect="off" autocapitalize="off" spellcheck="false" />
+        <button class="btn-primary git-settings-primary-action" id="btn-save-gitea-remote">
+          ${t("gitea_ops.configure_remote")}
         </button>
       </div>
 
       <div class="git-settings-section">
-        <div class="git-settings-label">${t("settings.advanced.experimental")}</div>
-        <button class="btn-secondary" id="btn-clean-git-locks" style="width: 100%;">
+        <div class="git-settings-label">${t("help.troubleshooting")}</div>
+        <div class="git-settings-info">
+          <span class="ui-icon material-icons">build</span>
+          <span>${t("gitea.clean_locks")}</span>
+        </div>
+        <button class="btn-secondary git-settings-primary-action" id="btn-clean-git-locks">
           <span class="ui-icon ui-icon--align-middle ui-icon--space-after-8 material-icons">delete_sweep</span>
           ${t("gitea.clean_locks")}
         </button>
@@ -731,7 +754,10 @@ export async function showGiteaSettings() {
     </div>
   `;
 
-  activateSharedModal({ initialFocus: () => modalBody.querySelector('input, select, button') });
+  activateSharedModal({
+    initialFocus: () => modalBody.querySelector('.git-settings-input')
+      || modalBody.querySelector('button'),
+  });
 
   // Set wider modal for Gitea Settings (responsive on mobile via CSS)
   modal.style.maxWidth = "650px";
@@ -775,11 +801,14 @@ export async function showGiteaSettings() {
   });
 
   document.getElementById("btn-save-gitea-credentials")?.addEventListener("click", async () => {
+    const giteaUrl = document.getElementById("gitea-server-url").value.trim();
     const username = document.getElementById("gitea-username").value;
     const token = document.getElementById("gitea-token").value;
+    if (!giteaUrl) return showToast(t("toast.gitea_url_required"), "error");
     if (!username) return showToast(t("gitea.username") + " " + t("toast.validation_error"), "error");
     if (!token && !hasCredentials) return showToast(t("gitea.token_placeholder") + " " + t("toast.validation_error"), "error");
 
+    localStorage.setItem("giteaServerUrl", giteaUrl);
     const saved = await giteaSaveCredentials(username, token);
     if (saved) closeGiteaSettings();
   });
@@ -790,6 +819,9 @@ export async function showGiteaSettings() {
   });
 
   document.getElementById("btn-test-gitea-connection")?.addEventListener("click", async () => {
+    const giteaUrl = document.getElementById("gitea-server-url").value.trim();
+    if (!giteaUrl) return showToast(t("toast.gitea_url_required"), "error");
+    localStorage.setItem("giteaServerUrl", giteaUrl);
     await giteaTestConnection();
   });
 
@@ -843,17 +875,17 @@ export async function giteaCreateRepo(repoName, description, isPrivate, giteaUrl
     isPrivate: Boolean(isPrivate),
     giteaUrl: String(giteaUrl || '').trim(),
   });
-  let serverLabel = 'Gitea server';
+  let serverLabel = t('gitea_ops.server');
   try {
     serverLabel = `Gitea ${new URL(request.giteaUrl).host}`;
   } catch (_error) {
     // The backend owns URL validation; keep invalid input out of the visible scope.
   }
-  const visibility = request.isPrivate ? 'Private' : 'Public';
+  const visibility = request.isPrivate ? t('provider_ops.private') : t('provider_ops.public');
   const operation = startOperationFeedback({
-    label: 'Create Gitea repository',
+    label: t('gitea_ops.create_repository'),
     icon: 'add_circle',
-    message: 'Creating remote repository...',
+    message: t('provider_ops.repository_creating'),
     scope: serverLabel,
     target: `${request.repoName} (${visibility})`,
     retry: () => giteaCreateRepo(
@@ -862,14 +894,14 @@ export async function giteaCreateRepo(repoName, description, isPrivate, giteaUrl
       request.isPrivate,
       request.giteaUrl,
     ),
-    openLabel: 'Source Control',
+    openLabel: t('sidebar.source_control'),
     openIcon: 'account_tree',
     open: () => eventBus.emit('ui:switch-sidebar-view', 'source-control'),
   });
 
   try {
     if (!request.giteaUrl) {
-      operation.fail('Repository creation failed', 'A Gitea server URL is required.');
+      operation.fail(t('gitea_ops.repository_create_failed'), t('gitea_ops.server_required'));
       showToast(t("toast.gitea_url_required"), "error");
       return null;
     }
@@ -888,7 +920,7 @@ export async function giteaCreateRepo(repoName, description, isPrivate, giteaUrl
     });
 
     if (data.success) {
-      operation.finish('Repository created');
+      operation.finish(t('gitea_ops.repository_created'));
       showToast(data.message, "success");
 
       // Show link to new repo
@@ -905,12 +937,12 @@ export async function giteaCreateRepo(repoName, description, isPrivate, giteaUrl
       return data;
     } else {
       const message = data.message || data.error || "Unknown error";
-      operation.fail('Repository creation failed', message);
+      operation.fail(t('gitea_ops.repository_create_failed'), message);
       showToast(t("toast.gitea_create_repo_failed", { error: message }), "error");
       return null;
     }
   } catch (error) {
-    operation.fail('Repository creation failed', error.message);
+    operation.fail(t('gitea_ops.repository_create_failed'), error.message);
     showToast(t("toast.gitea_create_repo_failed", { error: error.message }), "error");
     return null;
   }
@@ -924,13 +956,13 @@ export async function giteaStatus(shouldFetch = false, silent = false) {
   if (!state.giteaIntegrationEnabled) return false;
 
   const operation = silent ? null : startOperationFeedback({
-    label: shouldFetch ? 'Fetch Gitea status' : 'Refresh Gitea status',
+    label: shouldFetch ? t('gitea_ops.status_fetch_label') : t('gitea_ops.status_refresh_label'),
     icon: 'sync',
-    scope: 'Gitea repository',
-    target: giteaState.currentBranch || 'Workspace',
-    message: shouldFetch ? 'Fetching remote references and workspace status...' : 'Reading workspace status...',
+    scope: t('gitea_ops.repository'),
+    target: giteaState.currentBranch || t('provider_ops.workspace'),
+    message: shouldFetch ? t('gitea_ops.status_fetching') : t('gitea_ops.status_reading'),
     retry: () => giteaStatus(shouldFetch),
-    openLabel: 'Source Control',
+    openLabel: t('sidebar.source_control'),
     openIcon: 'account_tree',
     open: () => eventBus.emit('ui:switch-sidebar-view', 'source-control'),
   });
@@ -1006,22 +1038,24 @@ export async function giteaStatus(shouldFetch = false, silent = false) {
         }
       }
       operation?.finish(data.has_changes
-        ? `${giteaState.totalChanges} workspace ${giteaState.totalChanges === 1 ? 'change' : 'changes'}`
-        : 'Workspace is clean', {
-        detail: `Branch: ${giteaState.currentBranch}${shouldFetch ? '\nRemote references fetched.' : ''}`,
+        ? tp('gitea_ops.workspace_changes', giteaState.totalChanges)
+        : t('gitea_ops.workspace_clean'), {
+        detail: shouldFetch
+          ? t('gitea_ops.branch_status_fetched', { branch: giteaState.currentBranch })
+          : t('gitea_ops.branch_status', { branch: giteaState.currentBranch }),
       });
       return true;
     } else {
       giteaState.lastError = data.message || data.error || "Gitea status failed";
       eventBus.emit('git:refresh');
-      operation?.fail('Could not refresh Gitea status', giteaState.lastError);
+      operation?.fail(t('gitea_ops.status_failed'), giteaState.lastError);
       if (!silent) showToast(t("toast.gitea_error", { error: giteaState.lastError }), "error");
       return false;
     }
   } catch (error) {
     giteaState.lastError = error.message || "Gitea status failed";
     eventBus.emit('git:refresh');
-    operation?.fail('Could not refresh Gitea status', giteaState.lastError);
+    operation?.fail(t('gitea_ops.status_failed'), giteaState.lastError);
     if (!silent) {
       showToast(t("toast.gitea_error", { error: error.message }), "error");
     }

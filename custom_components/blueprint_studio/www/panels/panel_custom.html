@@ -57,15 +57,8 @@
   <script src="/local/blueprint_studio/vendor/codemirror/js/anyword-hint.min.js?v={{VERSION}}"></script>
   <script src="/local/blueprint_studio/vendor/codemirror/js/overlay.min.js?v={{VERSION}}"></script>
 
-  <!-- Marked.js for GitHub Flavored Markdown (local) -->
-  <script src="/local/blueprint_studio/vendor/marked/marked.min.js?v={{VERSION}}"></script>
-  <script src="/local/blueprint_studio/vendor/marked/marked-gfm-heading-id.umd.js?v={{VERSION}}"></script>
-  <script src="/local/blueprint_studio/vendor/marked/marked-mangle.umd.js?v={{VERSION}}"></script>
-  <script src="/local/blueprint_studio/vendor/marked/marked-highlight.umd.js?v={{VERSION}}"></script>
-
   <!-- Highlight.js for Markdown Code Blocks (local) -->
   <link rel="stylesheet" href="/local/blueprint_studio/vendor/highlight/github-dark.min.css?v={{VERSION}}">
-  <script src="/local/blueprint_studio/vendor/highlight/highlight.min.js?v={{VERSION}}"></script>
 
   <!-- Blueprint Studio Styles (modular) -->
   <link rel="stylesheet" href="/local/blueprint_studio/styles/modules/base.css?v={{VERSION}}">
@@ -83,12 +76,13 @@
   <link rel="stylesheet" href="/local/blueprint_studio/styles/modules/themes.css?v={{VERSION}}">
   <link rel="stylesheet" href="/local/blueprint_studio/styles/modules/responsive.css?v={{VERSION}}">
   <link rel="stylesheet" href="/local/blueprint_studio/styles/modules/user-guide.css?v={{VERSION}}">
+  <link rel="stylesheet" href="/local/blueprint_studio/styles/modules/accessibility.css?v={{VERSION}}">
 </head>
 <body>
   <!-- ... existing body ... -->
   <div class="toolbar" role="toolbar" aria-label="Blueprint Studio commands">
     <div class="toolbar-group toolbar-group--navigation" role="group" aria-label="Navigation" data-toolbar-priority="0">
-      <button class="ui-button ui-icon-button toolbar-btn" id="btn-menu" title="Toggle Files">
+      <button class="ui-button ui-icon-button toolbar-btn" id="btn-menu" title="Toggle Files" aria-label="Toggle Files">
         <span class="ui-icon material-icons">menu</span>
       </button>
     </div>
@@ -97,106 +91,106 @@
       <button class="ui-button ui-icon-button ui-tooltip toolbar-btn primary" id="btn-save" aria-label="Save" data-tooltip="Save (Ctrl+S)" disabled>
         <span class="ui-icon material-icons">save</span>
       </button>
-      <button class="ui-button ui-icon-button toolbar-btn" id="btn-save-all" title="Save All (Ctrl+Shift+S)" disabled>
+      <button class="ui-button ui-icon-button toolbar-btn" id="btn-save-all" title="Save All (Ctrl+Shift+S)" aria-label="Save all" disabled>
         <span class="ui-icon material-icons">save_alt</span>
       </button>
     </div>
 
     <div class="toolbar-group toolbar-group--edit" role="group" aria-label="Edit commands" data-toolbar-priority="1">
-      <button class="ui-button ui-icon-button toolbar-btn" id="btn-undo" title="Undo (Ctrl+Z)" disabled>
+      <button class="ui-button ui-icon-button toolbar-btn" id="btn-undo" title="Undo (Ctrl+Z)" aria-label="Undo" disabled>
         <span class="ui-icon material-icons">undo</span>
       </button>
-      <button class="ui-button ui-icon-button toolbar-btn" id="btn-redo" title="Redo (Ctrl+Y)" disabled>
+      <button class="ui-button ui-icon-button toolbar-btn" id="btn-redo" title="Redo (Ctrl+Y)" aria-label="Redo" disabled>
         <span class="ui-icon material-icons">redo</span>
       </button>
-      <button class="ui-button ui-icon-button toolbar-btn" id="btn-format" title="Format Code (Shift+Alt+F)">
+      <button class="ui-button ui-icon-button toolbar-btn" id="btn-format" title="Format Code (Shift+Alt+F)" aria-label="Format code">
         <span class="ui-icon material-icons">format_align_left</span>
       </button>
     </div>
 
     <div class="toolbar-group toolbar-group--search" role="group" aria-label="Search commands" data-toolbar-priority="0">
-      <button class="ui-button ui-icon-button toolbar-btn" id="btn-search" title="Search (Ctrl+F)">
+      <button class="ui-button ui-icon-button toolbar-btn" id="btn-search" title="Search (Ctrl+F)" aria-label="Search">
         <span class="ui-icon material-icons">search</span>
       </button>
     </div>
 
     <div class="toolbar-group toolbar-group--layout" id="group-split-view" role="group" aria-label="Editor layout" data-toolbar-priority="2">
-      <button class="ui-button ui-icon-button toolbar-btn" id="btn-split-vertical" title="Split Editor (Cmd+\)">
+      <button class="ui-button ui-icon-button toolbar-btn" id="btn-split-vertical" title="Split Editor (Cmd+\)" aria-label="Split editor">
         <span class="ui-icon material-icons">vertical_split</span>
       </button>
-      <button class="ui-button ui-icon-button toolbar-btn workspace-initially-hidden" id="btn-split-close" title="Close Split View">
+      <button class="ui-button ui-icon-button toolbar-btn workspace-initially-hidden" id="btn-split-close" title="Close Split View" aria-label="Close split view">
         <span class="ui-icon material-icons">close_fullscreen</span>
       </button>
     </div>
 
     <div class="toolbar-group toolbar-group--create" role="group" aria-label="Create files and folders" data-toolbar-priority="1">
-      <button class="ui-button ui-icon-button toolbar-btn" id="btn-new-file" title="New File">
+      <button class="ui-button ui-icon-button toolbar-btn" id="btn-new-file" title="New File" aria-label="New file">
         <span class="ui-icon material-icons">note_add</span>
       </button>
-      <button class="ui-button ui-icon-button toolbar-btn" id="btn-new-folder" title="New Folder">
+      <button class="ui-button ui-icon-button toolbar-btn" id="btn-new-folder" title="New Folder" aria-label="New folder">
         <span class="ui-icon material-icons">create_new_folder</span>
       </button>
     </div>
 
     <div class="toolbar-group toolbar-group--explorer" role="group" aria-label="Explorer options" data-toolbar-priority="4">
-      <button class="ui-button ui-icon-button toolbar-btn" id="btn-show-hidden" title="Show hidden folders">
+      <button class="ui-button ui-icon-button toolbar-btn" id="btn-show-hidden" title="Show hidden folders" aria-label="Show hidden folders">
         <span class="ui-icon material-icons">visibility_off</span>
       </button>
       <button class="ui-button ui-icon-button toolbar-btn" id="btn-toggle-select" title="Select Files" aria-label="Select files" aria-pressed="false" aria-controls="selection-toolbar">
         <span class="ui-icon material-icons">checklist</span>
       </button>
-      <button class="ui-button ui-icon-button toolbar-btn" id="btn-collapse-all-folders" title="Collapse All Folders">
+      <button class="ui-button ui-icon-button toolbar-btn" id="btn-collapse-all-folders" title="Collapse All Folders" aria-label="Collapse all folders">
         <span class="ui-icon material-icons">unfold_less</span>
       </button>
-      <button class="ui-button ui-icon-button toolbar-btn" id="btn-one-tab-mode" title="One Tab Mode: Only keep last opened file (auto-saves others)">
+      <button class="ui-button ui-icon-button toolbar-btn" id="btn-one-tab-mode" title="One Tab Mode: Only keep last opened file (auto-saves others)" aria-label="Toggle one tab mode">
         <span class="ui-icon material-icons">tab</span>
       </button>
     </div>
 
     <div class="toolbar-group toolbar-group--transfer" role="group" aria-label="File transfers" data-toolbar-priority="4">
-      <button class="ui-button ui-icon-button toolbar-btn" id="btn-upload" title="Upload File">
+      <button class="ui-button ui-icon-button toolbar-btn" id="btn-upload" title="Upload File" aria-label="Upload file">
         <span class="ui-icon material-icons">upload_file</span>
       </button>
-      <button class="ui-button ui-icon-button toolbar-btn" id="btn-download" title="Download File" disabled>
+      <button class="ui-button ui-icon-button toolbar-btn" id="btn-download" title="Download File" aria-label="Download file" disabled>
         <span class="ui-icon material-icons">download</span>
       </button>
-      <button class="ui-button ui-icon-button toolbar-btn" id="btn-upload-folder" title="Upload Folder">
+      <button class="ui-button ui-icon-button toolbar-btn" id="btn-upload-folder" title="Upload Folder" aria-label="Upload folder">
         <span class="ui-icon material-icons">drive_folder_upload</span>
       </button>
-      <button class="ui-button ui-icon-button toolbar-btn" id="btn-download-folder" title="Download Folder (ZIP)">
+      <button class="ui-button ui-icon-button toolbar-btn" id="btn-download-folder" title="Download Folder (ZIP)" aria-label="Download folder as ZIP">
         <span class="ui-icon material-icons">folder_zip</span>
       </button>
     </div>
 
     <div class="toolbar-group toolbar-group--validation" role="group" aria-label="Validation and Blueprint commands" data-toolbar-priority="1">
-      <button class="ui-button ui-icon-button toolbar-btn" id="btn-validate" title="Validate YAML">
+      <button class="ui-button ui-icon-button toolbar-btn" id="btn-validate" title="Validate YAML" aria-label="Validate YAML">
         <span class="ui-icon material-icons">check_circle</span>
       </button>
       <button class="ui-button ui-icon-button toolbar-btn" id="btn-problems" title="Show Problems" aria-label="Problems" aria-controls="problems-panel" aria-expanded="false">
         <span class="ui-icon material-icons">rule</span>
       </button>
-      <button class="ui-button ui-icon-button toolbar-btn hidden" id="btn-use-blueprint" title="Use Blueprint">
+      <button class="ui-button ui-icon-button toolbar-btn hidden" id="btn-use-blueprint" title="Use Blueprint" aria-label="Use blueprint">
         <span class="ui-icon material-icons">architecture</span>
       </button>
     </div>
 
     <div class="toolbar-group toolbar-group--source-control git-toolbar-group" id="git-toolbar-group" role="group" aria-label="GitHub source control" data-toolbar-priority="3">
-      <button class="toolbar-btn" id="btn-git-pull" title="Git Pull: Download latest from GitHub">
+      <button class="toolbar-btn" id="btn-git-pull" title="Git Pull: Download latest from GitHub" aria-label="Git pull">
         <svg class="octicon" viewBox="0 0 16 16" width="20" height="20">
           <path d="M5 3.25a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0zm0 2.122a2.25 2.25 0 1 0-1.5 0v.878A2.25 2.25 0 0 0 5.75 8.5h1.5v2.128a2.251 2.251 0 1 0 1.5 0V8.5h1.5a2.25 2.25 0 0 0 2.25-2.25v-.878a2.25 2.25 0 1 0-1.5 0v.878a.75.75 0 0 1-.75.75h-4.5A.75.75 0 0 1 5 6.25v-.878zm3.75 7.378a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0zm3-8.75a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0z"></path>
         </svg>
       </button>
-      <button class="toolbar-btn" id="btn-git-push" title="Git Push: Upload your changes to GitHub">
+      <button class="toolbar-btn" id="btn-git-push" title="Git Push: Upload your changes to GitHub" aria-label="Git push">
         <svg class="octicon" viewBox="0 0 16 16" width="20" height="20">
           <path d="M1 2.5A2.5 2.5 0 0 1 3.5 0h8.75a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0V1.5h-8a1 1 0 0 0-1 1v6.708A2.492 2.492 0 0 1 3.5 9h3.25a.75.75 0 0 1 0 1.5H3.5a1 1 0 0 0 0 2h5.75a.75.75 0 0 1 0 1.5H3.5A2.5 2.5 0 0 1 1 11.5v-9zm13.23 7.79h-.001l-1.224-1.224v6.184a.75.75 0 0 1-1.5 0V9.066L10.28 10.29a.75.75 0 0 1-1.06-1.061l2.505-2.504a.75.75 0 0 1 1.06 0L15.29 9.23a.751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018z"></path>
         </svg>
       </button>
-      <button class="toolbar-btn" id="btn-git-status" title="Git Status: Refresh current changes">
+      <button class="toolbar-btn" id="btn-git-status" title="Git Status: Refresh current changes" aria-label="Refresh Git status">
         <svg class="octicon" viewBox="0 0 16 16" width="20" height="20">
           <path d="M8.75 1a.75.75 0 0 0-1.5 0v.5h-.984c-.305 0-.604.08-.869.23l-1.288.737A.25.25 0 0 0 4 2.75v1.5a.25.25 0 0 0 .109.207l1.288.738c.265.15.564.229.869.229h.984v2.759a.75.75 0 0 1-.182.485l-2.006 2.34a.25.25 0 0 0-.061.159v1.583a.25.25 0 0 0 .369.221l2.006-1.032a.75.75 0 0 1 .682 0l2.006 1.032a.25.25 0 0 0 .369-.221v-1.583a.25.25 0 0 0-.061-.159l-2.006-2.34a.75.75 0 0 1-.182-.485V5.5h.984c.305 0 .604-.08.869-.23l1.289-.737A.25.25 0 0 0 12 4.25v-1.5a.25.25 0 0 0-.109-.207l-1.289-.738a1.75 1.75 0 0 0-.869-.229H8.75V1z"></path>
         </svg>
       </button>
-      <button class="toolbar-btn" id="btn-git-settings" title="Git Settings: Manage repo and authentication">
+      <button class="toolbar-btn" id="btn-git-settings" title="Git Settings: Manage repo and authentication" aria-label="Git Settings: Manage repo and authentication">
         <svg class="octicon" viewBox="0 0 16 16" width="20" height="20">
           <path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"></path>
         </svg>
@@ -204,29 +198,29 @@
     </div>
 
     <div class="toolbar-group toolbar-group--source-control gitea-toolbar-group workspace-initially-hidden" id="gitea-toolbar-group" role="group" aria-label="Gitea source control" data-toolbar-priority="3">
-      <button class="toolbar-btn" id="btn-gitea-pull" title="Gitea Pull">
+      <button class="toolbar-btn" id="btn-gitea-pull" title="Gitea Pull" aria-label="Gitea pull">
         <svg class="octicon gitea-toolbar-icon" viewBox="0 0 16 16" width="20" height="20">
           <path d="M5 3.25a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0zm0 2.122a2.25 2.25 0 1 0-1.5 0v.878A2.25 2.25 0 0 0 5.75 8.5h1.5v2.128a2.251 2.251 0 1 0 1.5 0V8.5h1.5a2.25 2.25 0 0 0 2.25-2.25v-.878a2.25 2.25 0 1 0-1.5 0v.878a.75.75 0 0 1-.75.75h-4.5A.75.75 0 0 1 5 6.25v-.878zm3.75 7.378a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0zm3-8.75a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0z"></path>
         </svg>
       </button>
-      <button class="toolbar-btn" id="btn-gitea-push" title="Gitea Push">
+      <button class="toolbar-btn" id="btn-gitea-push" title="Gitea Push" aria-label="Gitea push">
       <svg class="octicon gitea-toolbar-icon" viewBox="0 0 16 16" width="20" height="20">
           <path d="M1 2.5A2.5 2.5 0 0 1 3.5 0h8.75a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0V1.5h-8a1 1 0 0 0-1 1v6.708A2.492 2.492 0 0 1 3.5 9h3.25a.75.75 0 0 1 0 1.5H3.5a1 1 0 0 0 0 2h5.75a.75.75 0 0 1 0 1.5H3.5A2.5 2.5 0 0 1 1 11.5v-9zm13.23 7.79h-.001l-1.224-1.224v6.184a.75.75 0 0 1-1.5 0V9.066L10.28 10.29a.75.75 0 0 1-1.06-1.061l2.505-2.504a.75.75 0 0 1 1.06 0L15.29 9.23a.751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018z"></path>
         </svg>
       </button>
-      <button class="toolbar-btn" id="btn-gitea-status" title="Gitea Status">
+      <button class="toolbar-btn" id="btn-gitea-status" title="Gitea Status" aria-label="Refresh Gitea status">
         <svg class="octicon gitea-toolbar-icon" viewBox="0 0 16 16" width="20" height="20">
           <path d="M8.75 1a.75.75 0 0 0-1.5 0v.5h-.984c-.305 0-.604.08-.869.23l-1.288.737A.25.25 0 0 0 4 2.75v1.5a.25.25 0 0 0 .109.207l1.288.738c.265.15.564.229.869.229h.984v2.759a.75.75 0 0 1-.182.485l-2.006 2.34a.25.25 0 0 0-.061.159v1.583a.25.25 0 0 0 .369.221l2.006-1.032a.75.75 0 0 1 .682 0l2.006 1.032a.25.25 0 0 0 .369-.221v-1.583a.25.25 0 0 0-.061-.159l-2.006-2.34a.75.75 0 0 1-.182-.485V5.5h.984c.305 0 .604-.08.869-.23l1.289-.737A.25.25 0 0 0 12 4.25v-1.5a.25.25 0 0 0-.109-.207l-1.289-.738a1.75 1.75 0 0 0-.869-.229H8.75V1z"></path>
         </svg>
       </button>
-      <button class="ui-button ui-icon-button toolbar-btn" id="btn-gitea-settings" title="Gitea Settings">
+      <button class="ui-button ui-icon-button toolbar-btn" id="btn-gitea-settings" title="Gitea Settings" aria-label="Gitea Settings">
         <span class="ui-icon material-icons" data-tone="gitea">emoji_food_beverage</span>
       </button>
     </div>
 
     <div class="breadcrumb-container" id="breadcrumb-container">
       <div class="breadcrumb" id="toolbar-breadcrumb"></div>
-      <button class="ui-button ui-icon-button breadcrumb-copy-btn" id="breadcrumb-copy" title="Copy full path">
+      <button class="ui-button ui-icon-button breadcrumb-copy-btn" id="breadcrumb-copy" title="Copy full path" aria-label="Copy full path">
         <span class="ui-icon material-icons">content_copy</span>
       </button>
     </div>
@@ -240,7 +234,7 @@
     </div>
 
     <div class="toolbar-group toolbar-group--preview workspace-initially-hidden" id="group-markdown" role="group" aria-label="Document preview" data-toolbar-priority="4">
-      <button class="ui-button ui-icon-button toolbar-btn" id="btn-markdown-preview" title="Toggle Markdown Preview">
+      <button class="ui-button ui-icon-button toolbar-btn" id="btn-markdown-preview" title="Toggle Markdown Preview" aria-label="Toggle Markdown preview">
         <span class="ui-icon material-icons">visibility</span>
       </button>
     </div>
@@ -249,40 +243,40 @@
       <button class="toolbar-btn toolbar-btn-donate" id="btn-donate" title="Support Development" aria-label="Support Development">
         <span class="ui-icon material-icons">volunteer_activism</span>
       </button>
-      <button class="toolbar-btn" id="btn-support" title="Help & Support">
+      <button class="toolbar-btn" id="btn-support" title="Help & Support" aria-label="Help & Support">
         <span class="ui-icon material-icons">help_outline</span>
       </button>
     </div>
 
     <div class="toolbar-group toolbar-group--workspace-tools" role="group" aria-label="Workspace tools" data-toolbar-priority="2">
-      <button class="toolbar-btn workspace-initially-hidden" id="btn-terminal" title="Terminal">
+      <button class="toolbar-btn workspace-initially-hidden" id="btn-terminal" title="Terminal" aria-label="Open terminal">
         <span class="ui-icon material-icons">terminal</span>
       </button>
-      <button class="toolbar-btn hidden" id="btn-ai-studio" title="AI Studio Copilot" aria-controls="ai-sidebar" aria-expanded="false">
+      <button class="toolbar-btn hidden" id="btn-ai-studio" title="AI Studio Copilot" aria-label="Open AI Studio Copilot" aria-controls="ai-sidebar" aria-expanded="false">
         <span class="ui-icon material-icons" data-tone="ai">psychology</span>
       </button>
     </div>
 
     <div class="toolbar-group toolbar-group--instance" role="group" aria-label="Home Assistant instance controls" data-toolbar-priority="1">
-      <button class="toolbar-btn danger" id="btn-restart-ha" title="Restart Home Assistant">
+      <button class="toolbar-btn danger" id="btn-restart-ha" title="Restart Home Assistant" aria-label="Restart Home Assistant">
         <span class="ui-icon material-icons" data-tone="warning">restart_alt</span>
       </button>
-      <button class="toolbar-btn" id="btn-dev-tools" title="Developer Tools">
+      <button class="toolbar-btn" id="btn-dev-tools" title="Developer Tools" aria-label="Open Developer Tools">
         <span class="ui-icon material-icons" data-tone="info">construction</span>
       </button>
     </div>
 
     <div class="toolbar-group toolbar-group--application" role="group" aria-label="Application controls" data-toolbar-priority="0">
-      <button class="ui-button ui-icon-button toolbar-btn" id="btn-app-settings" title="Settings">
+      <button class="ui-button ui-icon-button toolbar-btn" id="btn-app-settings" title="Settings" aria-label="Settings">
         <span class="ui-icon material-icons">settings</span>
       </button>
-      <button class="toolbar-btn" id="btn-refresh" title="Refresh">
+      <button class="toolbar-btn" id="btn-refresh" title="Refresh" aria-label="Refresh">
         <span class="ui-icon material-icons">refresh</span>
       </button>
     </div>
 
     <div class="toolbar-group toolbar-group--overflow" role="group" aria-label="More commands">
-      <button class="ui-button ui-icon-button toolbar-btn" id="btn-toolbar-overflow" title="More commands" aria-haspopup="menu" aria-controls="toolbar-overflow-menu" aria-expanded="false">
+      <button class="ui-button ui-icon-button toolbar-btn" id="btn-toolbar-overflow" title="More commands" aria-label="More commands" aria-haspopup="menu" aria-controls="toolbar-overflow-menu" aria-expanded="false">
         <span class="ui-icon material-icons">more_horiz</span>
       </button>
     </div>
@@ -304,24 +298,24 @@
     <!-- Sidebar -->
     <div class="sidebar" id="sidebar" role="complementary" aria-label="Blueprint Studio navigation">
       <!-- Activity Bar -->
-      <div class="activity-bar">
-          <div class="activity-item active" id="activity-explorer" title="Explorer" role="button" tabindex="0" aria-label="Explorer" aria-pressed="true">
-              <span class="ui-icon material-icons">folder_open</span>
-          </div>
-          <div class="activity-item" id="activity-search" title="Search" role="button" tabindex="0" aria-label="Search" aria-pressed="false">
-              <span class="ui-icon material-icons">search</span>
-          </div>
-          <div class="activity-item" id="activity-source-control" title="Source Control" role="button" tabindex="0" aria-label="Source Control" aria-pressed="false" data-state="empty">
-              <span class="ui-icon material-icons">source</span>
+      <div class="activity-bar" role="toolbar" aria-label="Workspace views" aria-orientation="vertical">
+          <button class="activity-item active" id="activity-explorer" type="button" title="Explorer" tabindex="0" aria-label="Explorer" aria-pressed="true">
+              <span class="ui-icon material-icons" aria-hidden="true">folder_open</span>
+          </button>
+          <button class="activity-item" id="activity-search" type="button" title="Search" tabindex="-1" aria-label="Search" aria-pressed="false">
+              <span class="ui-icon material-icons" aria-hidden="true">search</span>
+          </button>
+          <button class="activity-item" id="activity-source-control" type="button" title="Source Control" tabindex="-1" aria-label="Source Control" aria-pressed="false" data-state="empty">
+              <span class="ui-icon material-icons" aria-hidden="true">source</span>
               <span class="activity-badge hidden" id="activity-source-control-badge" aria-hidden="true">0</span>
-          </div>
-          <div class="activity-item" id="activity-sftp" title="SFTP" role="button" tabindex="0" aria-label="SFTP" aria-pressed="false">
-              <span class="ui-icon material-icons">folder_shared</span>
-          </div>
+          </button>
+          <button class="activity-item" id="activity-sftp" type="button" title="SFTP" tabindex="-1" aria-label="SFTP" aria-pressed="false">
+              <span class="ui-icon material-icons" aria-hidden="true">folder_shared</span>
+          </button>
           <div class="activity-rail-spacer" aria-hidden="true"></div>
-          <div class="activity-item" id="btn-close-sidebar" title="Close Sidebar" role="button" tabindex="0" aria-label="Close Sidebar">
-            <span class="ui-icon material-icons">chevron_left</span>
-          </div>
+          <button class="activity-item" id="btn-close-sidebar" type="button" title="Close Sidebar" tabindex="-1" aria-label="Close Sidebar">
+            <span class="ui-icon material-icons" aria-hidden="true">chevron_left</span>
+          </button>
       </div>
 
       <div class="sidebar-content">
@@ -398,19 +392,19 @@
             <span class="git-panel-badge" id="git-changes-count">0</span>
           </div>
           <div class="git-panel-actions" id="git-panel-actions">
-            <button class="ui-button ui-icon-button git-panel-btn" id="btn-git-branches" title="Branch Manager: Create, switch, merge, and delete branches">
+            <button class="ui-button ui-icon-button git-panel-btn" id="btn-git-branches" title="Branch Manager: Create, switch, merge, and delete branches" aria-label="Branch Manager: Create, switch, merge, and delete branches">
               <span class="ui-icon material-icons">account_tree</span>
             </button>
-            <button class="ui-button ui-icon-button git-panel-btn" id="btn-git-help" title="Git Help: Learn how to use these features">
+            <button class="ui-button ui-icon-button git-panel-btn" id="btn-git-help" title="Git Help: Learn how to use these features" aria-label="Git Help: Learn how to use these features">
               <span class="ui-icon material-icons">help_outline</span>
             </button>
-            <button class="ui-button ui-icon-button git-panel-btn" id="btn-git-history" title="Git History: View recent commits">
+            <button class="ui-button ui-icon-button git-panel-btn" id="btn-git-history" title="Git History: View recent commits" aria-label="Git History: View recent commits">
               <span class="ui-icon material-icons">history</span>
             </button>
-            <button class="ui-button ui-icon-button git-panel-btn" id="btn-git-refresh" title="Refresh Git Status">
+            <button class="ui-button ui-icon-button git-panel-btn" id="btn-git-refresh" title="Refresh Git Status" aria-label="Refresh Git Status">
               <span class="ui-icon material-icons">refresh</span>
             </button>
-            <button class="ui-button ui-icon-button git-panel-btn" id="btn-git-collapse" title="Collapse Git Panel">
+            <button class="ui-button ui-icon-button git-panel-btn" id="btn-git-collapse" title="Collapse Git Panel" aria-label="Collapse Git Panel">
               <span class="ui-icon material-icons git-panel-collapse-icon">expand_less</span>
             </button>
           </div>
@@ -448,19 +442,19 @@
             <span class="git-panel-badge gitea-panel-badge" id="gitea-changes-count">0</span>
           </div>
           <div class="git-panel-actions" id="gitea-panel-actions">
-            <button class="ui-button ui-icon-button git-panel-btn" id="btn-gitea-branches" title="Branch Manager: Create, switch, merge, and delete branches">
+            <button class="ui-button ui-icon-button git-panel-btn" id="btn-gitea-branches" title="Branch Manager: Create, switch, merge, and delete branches" aria-label="Branch Manager: Create, switch, merge, and delete branches">
               <span class="ui-icon material-icons">account_tree</span>
             </button>
-            <button class="ui-button ui-icon-button git-panel-btn" id="btn-gitea-help" title="Gitea Integration Help">
+            <button class="ui-button ui-icon-button git-panel-btn" id="btn-gitea-help" title="Gitea Integration Help" aria-label="Gitea Integration Help">
               <span class="ui-icon material-icons">help_outline</span>
             </button>
-            <button class="ui-button ui-icon-button git-panel-btn" id="btn-gitea-history" title="Gitea History: View recent commits">
+            <button class="ui-button ui-icon-button git-panel-btn" id="btn-gitea-history" title="Gitea History: View recent commits" aria-label="Gitea History: View recent commits">
               <span class="ui-icon material-icons">history</span>
             </button>
-            <button class="ui-button ui-icon-button git-panel-btn" id="btn-gitea-refresh" title="Refresh Gitea Status">
+            <button class="ui-button ui-icon-button git-panel-btn" id="btn-gitea-refresh" title="Refresh Gitea Status" aria-label="Refresh Gitea Status">
               <span class="ui-icon material-icons">refresh</span>
             </button>
-            <button class="ui-button ui-icon-button git-panel-btn" id="btn-gitea-collapse" title="Collapse Gitea Panel">
+            <button class="ui-button ui-icon-button git-panel-btn" id="btn-gitea-collapse" title="Collapse Gitea Panel" aria-label="Collapse Gitea Panel">
               <span class="ui-icon material-icons git-panel-collapse-icon">expand_less</span>
             </button>
           </div>
@@ -501,14 +495,14 @@
 
       <!-- Folder Navigation Bar -->
       <div class="folder-navigation" id="folder-navigation">
-        <button class="nav-back-btn" id="btn-nav-back" title="Go back (Alt+Left)" disabled>
+        <button class="nav-back-btn" id="btn-nav-back" title="Go back (Alt+Left)" aria-label="Go back (Alt+Left)" disabled>
           <span class="ui-icon material-icons">arrow_back</span>
         </button>
         <div class="breadcrumb" id="explorer-breadcrumb">
-          <span class="breadcrumb-item breadcrumb-home" data-path="" role="button" tabindex="0" aria-label="Home">
+          <button type="button" class="breadcrumb-item breadcrumb-home" data-path="" aria-label="Home">
             <span class="ui-icon material-icons">home</span>
             <span class="breadcrumb-text">Home</span>
-          </span>
+          </button>
         </div>
         <button class="nav-back-btn file-tree-collapse-control" id="btn-file-tree-collapse" title="Collapse file tree" aria-label="Collapse file tree" aria-controls="file-tree" aria-expanded="true">
           <span class="ui-icon material-icons">expand_less</span>
@@ -526,10 +520,10 @@
                 <span data-overflow-tooltip>SFTP</span>
              </div>
              <div class="sidebar-header-actions">
-                 <button class="sidebar-header-btn" id="btn-sftp-add" title="Add SFTP Connection">
+                 <button class="sidebar-header-btn" id="btn-sftp-add" title="Add SFTP Connection" aria-label="Add SFTP Connection">
                      <span class="ui-icon material-icons">add</span>
                  </button>
-                 <button class="sidebar-header-btn" id="btn-sftp-refresh" title="Refresh SFTP">
+                 <button class="sidebar-header-btn" id="btn-sftp-refresh" title="Refresh SFTP" aria-label="Refresh SFTP">
                      <span class="ui-icon material-icons">refresh</span>
                  </button>
              </div>
@@ -549,10 +543,10 @@
           <div class="sidebar-header">
             <span data-overflow-tooltip>Search</span>
             <div class="sidebar-header-actions">
-                <button class="sidebar-header-btn" id="btn-refresh-search" title="Refresh">
+                <button class="sidebar-header-btn" id="btn-refresh-search" title="Refresh" aria-label="Refresh">
                     <span class="ui-icon material-icons">refresh</span>
                 </button>
-                <button class="sidebar-header-btn" id="btn-collapse-search" title="Collapse All">
+                <button class="sidebar-header-btn" id="btn-collapse-search" title="Collapse All" aria-label="Collapse All">
                     <span class="ui-icon material-icons">unfold_less</span>
                 </button>
             </div>
@@ -560,14 +554,14 @@
           <div class="search-container global-search-container">
               <!-- Search Mode Tabs -->
               <div class="ui-tabs search-mode-tabs" role="tablist" aria-label="Search scope">
-                  <div class="ui-tab search-mode-tab active" data-mode="all" role="tab" tabindex="0" aria-selected="true" aria-controls="global-search-results">Workspace</div>
-                  <div class="ui-tab search-mode-tab" data-mode="files" role="tab" tabindex="-1" aria-selected="false" aria-controls="global-search-results">File content</div>
-                  <div class="ui-tab search-mode-tab" data-mode="entities" role="tab" tabindex="-1" aria-selected="false" aria-controls="global-search-results">Entities</div>
+                  <button type="button" class="ui-tab search-mode-tab active" data-mode="all" role="tab" tabindex="0" aria-selected="true" aria-controls="global-search-results">Workspace</button>
+                  <button type="button" class="ui-tab search-mode-tab" data-mode="files" role="tab" tabindex="-1" aria-selected="false" aria-controls="global-search-results">File content</button>
+                  <button type="button" class="ui-tab search-mode-tab" data-mode="entities" role="tab" tabindex="-1" aria-selected="false" aria-controls="global-search-results">Entities</button>
               </div>
 
               <!-- Search Row -->
               <div class="global-search-query-row">
-                  <span class="ui-icon material-icons global-replace-toggle" id="btn-toggle-replace-all" role="button" tabindex="0" aria-label="Replace options" aria-controls="global-replace-container" aria-expanded="false">chevron_right</span>
+                  <button type="button" class="ui-icon material-icons global-replace-toggle" id="btn-toggle-replace-all" aria-label="Replace options" aria-controls="global-replace-container" aria-expanded="false">chevron_right</button>
                   <div class="global-search-input-wrap">
                       <input type="text" class="search-input global-search-query-input" id="global-search-input" placeholder="Search workspace" aria-label="Search workspace content and entities" autocomplete="off">
                       <span id="global-search-loading" class="ui-icon material-icons global-search-loading-icon spinning-centered" aria-hidden="true">sync</span>
@@ -582,14 +576,14 @@
               <!-- Replace Row (Initially Hidden) -->
               <div id="global-replace-container" class="global-search-disclosure-panel global-search-replace-row">
                   <input type="text" class="search-input global-search-replace-input" id="global-replace-input" placeholder="Replace" autocomplete="off">
-                  <button class="toolbar-btn global-search-replace-action" id="btn-global-replace-all" title="Replace All">
+                  <button class="toolbar-btn global-search-replace-action" id="btn-global-replace-all" title="Replace All" aria-label="Replace all">
                       <span class="ui-icon material-icons">find_replace</span>
                   </button>
               </div>
 
               <!-- Patterns Row Toggle -->
               <div class="global-search-pattern-toggle-row">
-                  <span id="btn-toggle-patterns" class="global-search-pattern-toggle" role="button" tabindex="0" aria-label="Files to include or exclude" aria-controls="global-patterns-container" aria-expanded="false">Files to include / exclude</span>
+                  <button type="button" id="btn-toggle-patterns" class="global-search-pattern-toggle" aria-label="Files to include or exclude" aria-controls="global-patterns-container" aria-expanded="false">Files to include / exclude</button>
               </div>
 
               <!-- Patterns Container (Initially Hidden) -->
@@ -643,7 +637,7 @@
             <div class="asset-preview" id="asset-preview"></div>
             <div class="search-widget" id="search-widget">
                 <div class="search-row">
-                    <span class="ui-icon material-icons search-toggle-icon" id="search-toggle-replace" title="Toggle Replace" role="button" tabindex="0" aria-label="Replace options" aria-controls="search-replace-row" aria-expanded="false">expand_more</span>
+                    <button type="button" class="ui-icon material-icons search-toggle-icon" id="search-toggle-replace" title="Toggle Replace" aria-label="Replace options" aria-controls="search-replace-row" aria-expanded="false">expand_more</button>
                     <div class="search-input-wrapper">
                         <input type="text" id="search-find-input" placeholder="Find">
                         <span id="search-results-count" class="search-count"></span>
@@ -652,9 +646,9 @@
                     <button class="search-case-btn" id="search-whole-word" title="Match Whole Word" aria-label="Match whole word" aria-pressed="false">ab|</button>
                     <button class="search-case-btn" id="search-use-regex" title="Use Regular Expression" aria-label="Use regular expression" aria-pressed="false">.*</button>
                     <div class="search-actions">
-                        <button id="search-prev" title="Previous Match (Shift+Enter)"><span class="ui-icon material-icons search-navigation-icon">arrow_upward</span></button>
-                        <button id="search-next" title="Next Match (Enter)"><span class="ui-icon material-icons search-navigation-icon">arrow_downward</span></button>
-                        <button id="search-close" title="Close (Esc)"><span class="ui-icon material-icons search-navigation-icon">close</span></button>
+                        <button id="search-prev" title="Previous Match (Shift+Enter)" aria-label="Previous Match (Shift+Enter)"><span class="ui-icon material-icons search-navigation-icon">arrow_upward</span></button>
+                        <button id="search-next" title="Next Match (Enter)" aria-label="Next Match (Enter)"><span class="ui-icon material-icons search-navigation-icon">arrow_downward</span></button>
+                        <button id="search-close" title="Close (Esc)" aria-label="Close (Esc)"><span class="ui-icon material-icons search-navigation-icon">close</span></button>
                     </div>
                 </div>
                 <div class="search-row replace-row workspace-initially-hidden" id="search-replace-row">
@@ -663,10 +657,10 @@
                         <input type="text" id="search-replace-input" placeholder="Replace">
                     </div>
                     <div class="search-actions">
-                        <button id="search-replace" title="Replace">
+                        <button id="search-replace" title="Replace" aria-label="Replace">
                             <span class="ui-icon material-icons search-replace-action-icon">find_replace</span>
                         </button>
-                        <button id="search-replace-all" title="Replace All">
+                        <button id="search-replace-all" title="Replace All" aria-label="Replace all">
                             <span class="ui-icon material-icons search-replace-action-icon">done_all</span>
                         </button>
                     </div>
@@ -678,15 +672,15 @@
               <h2>Blueprint Studio</h2>
                     <p>Get started by opening an existing file, or:</p>
                     <div class="welcome-actions">
-                        <button class="btn-secondary" id="btn-welcome-open-files">
+                        <button class="btn-secondary" id="btn-welcome-open-files" aria-label="Open files">
                             <span class="ui-icon material-icons welcome-action-icon">folder_open</span>
                             Open Files
                         </button>
-                        <button class="btn-primary" id="btn-welcome-new-file">
+                        <button class="btn-primary" id="btn-welcome-new-file" aria-label="Create new file">
                             <span class="ui-icon material-icons welcome-action-icon">add_circle_outline</span>
                             Create New File
                         </button>
-                        <button class="btn-secondary" id="btn-welcome-upload-file">
+                        <button class="btn-secondary" id="btn-welcome-upload-file" aria-label="Upload file">
                             <span class="ui-icon material-icons welcome-action-icon">upload_file</span>
                             Upload File
                         </button>
@@ -698,7 +692,7 @@
                       </section>
                       <section class="welcome-recovery" id="welcome-connection-recovery" aria-labelledby="welcome-recovery-title">
                         <h3 id="welcome-recovery-title">Remote workspace</h3>
-                        <button class="welcome-recovery-action" id="btn-welcome-recover-connection" type="button">
+                        <button class="welcome-recovery-action" id="btn-welcome-recover-connection" type="button" aria-label="Browse SFTP">
                           <span class="ui-icon material-icons" aria-hidden="true">cloud_sync</span>
                           <span class="welcome-recovery-copy"><strong>Browse SFTP</strong><small>Open remote connections</small></span>
                         </button>
@@ -728,7 +722,7 @@
             <div class="asset-preview" id="secondary-asset-preview"></div>
             <div class="search-widget" id="secondary-search-widget">
                 <div class="search-row">
-                    <span class="ui-icon material-icons search-toggle-icon" id="secondary-search-toggle-replace" title="Toggle Replace" role="button" tabindex="0" aria-label="Replace options" aria-controls="secondary-search-replace-row" aria-expanded="false">expand_more</span>
+                    <button type="button" class="ui-icon material-icons search-toggle-icon" id="secondary-search-toggle-replace" title="Toggle Replace" aria-label="Replace options" aria-controls="secondary-search-replace-row" aria-expanded="false">expand_more</button>
                     <div class="search-input-wrapper">
                         <input type="text" id="secondary-search-find-input" placeholder="Find">
                         <span id="secondary-search-results-count" class="search-count"></span>
@@ -737,9 +731,9 @@
                     <button class="search-case-btn" id="secondary-search-whole-word" title="Match Whole Word" aria-label="Match whole word" aria-pressed="false">ab|</button>
                     <button class="search-case-btn" id="secondary-search-use-regex" title="Use Regular Expression" aria-label="Use regular expression" aria-pressed="false">.*</button>
                     <div class="search-actions">
-                        <button id="secondary-search-prev" title="Previous Match (Shift+Enter)"><span class="ui-icon material-icons search-navigation-icon">arrow_upward</span></button>
-                        <button id="secondary-search-next" title="Next Match (Enter)"><span class="ui-icon material-icons search-navigation-icon">arrow_downward</span></button>
-                        <button id="secondary-search-close" title="Close (Esc)"><span class="ui-icon material-icons search-navigation-icon">close</span></button>
+                        <button id="secondary-search-prev" title="Previous Match (Shift+Enter)" aria-label="Previous Match (Shift+Enter)"><span class="ui-icon material-icons search-navigation-icon">arrow_upward</span></button>
+                        <button id="secondary-search-next" title="Next Match (Enter)" aria-label="Next Match (Enter)"><span class="ui-icon material-icons search-navigation-icon">arrow_downward</span></button>
+                        <button id="secondary-search-close" title="Close (Esc)" aria-label="Close (Esc)"><span class="ui-icon material-icons search-navigation-icon">close</span></button>
                     </div>
                 </div>
                 <div class="search-row replace-row workspace-initially-hidden" id="secondary-search-replace-row">
@@ -748,10 +742,10 @@
                         <input type="text" id="secondary-search-replace-input" placeholder="Replace">
                     </div>
                     <div class="search-actions">
-                        <button id="secondary-search-replace" title="Replace">
+                        <button id="secondary-search-replace" title="Replace" aria-label="Replace">
                             <span class="ui-icon material-icons search-replace-action-icon">find_replace</span>
                         </button>
-                        <button id="secondary-search-replace-all" title="Replace All">
+                        <button id="secondary-search-replace-all" title="Replace All" aria-label="Replace all">
                             <span class="ui-icon material-icons search-replace-action-icon">done_all</span>
                         </button>
                     </div>
@@ -820,8 +814,8 @@
 
   <!-- Status bar -->
   <div class="status-bar">
-    <div class="status-item" id="status-connection">
-      <span class="ui-icon material-icons status-connection-icon">cloud_done</span>
+    <div class="status-item" id="status-connection" role="status" aria-live="polite" aria-atomic="true">
+      <span class="ui-icon material-icons status-connection-icon" aria-hidden="true">cloud_done</span>
       <span>Connected</span>
     </div>
     <div class="status-item hidden" id="status-repository"></div>
@@ -838,9 +832,11 @@
     <div class="status-item" id="status-language">
       <span>-</span>
     </div>
-    <div class="status-item theme-dropdown" id="theme-toggle" role="button" tabindex="0" aria-label="Theme" aria-haspopup="menu" aria-controls="theme-menu" aria-expanded="false">
-      <span class="ui-icon material-icons theme-trigger-icon" id="theme-icon">laptop_mac</span>
-      <span id="theme-label">Native</span>
+    <div class="status-item theme-dropdown">
+      <button type="button" class="theme-trigger" id="theme-toggle" aria-label="Theme" aria-haspopup="menu" aria-controls="theme-menu" aria-expanded="false">
+        <span class="ui-icon material-icons theme-trigger-icon" id="theme-icon">laptop_mac</span>
+        <span id="theme-label">Native</span>
+      </button>
       <div class="ui-menu theme-menu" id="theme-menu" role="menu" aria-label="Theme presets">
         <div class="ui-menu__item theme-menu-item" data-theme="native">
           <span class="ui-icon material-icons theme-menu-icon">laptop_mac</span>
@@ -1116,7 +1112,7 @@
       <div class="modal-body">
         <div class="support-options">
 
-          <button class="support-btn support-option" id="btn-support-guide">
+          <button class="support-btn support-option" id="btn-support-guide" aria-label="Open user guide">
             <div class="support-icon support-icon-guide">
               <span class="ui-icon material-icons support-option-icon support-option-icon-guide">auto_stories</span>
             </div>
@@ -1126,7 +1122,7 @@
             </div>
           </button>
 
-          <button class="support-btn support-option" id="btn-support-shortcuts">            <div class="support-icon support-icon-shortcuts">
+          <button class="support-btn support-option" id="btn-support-shortcuts" aria-label="Open keyboard shortcuts">            <div class="support-icon support-icon-shortcuts">
               <span class="ui-icon material-icons support-option-icon support-option-icon-shortcuts">keyboard</span>
             </div>
             <div class="support-text">
@@ -1135,7 +1131,7 @@
             </div>
           </button>
 
-          <button class="support-btn support-option" id="btn-support-feature">
+          <button class="support-btn support-option" id="btn-support-feature" aria-label="Request a feature">
             <div class="support-icon support-icon-feature">
               <span class="ui-icon material-icons support-option-icon support-option-icon-feature">lightbulb</span>
             </div>
@@ -1145,7 +1141,7 @@
             </div>
           </button>
 
-          <button class="support-btn support-option" id="btn-support-issue">
+          <button class="support-btn support-option" id="btn-support-issue" aria-label="Report an issue">
             <div class="support-icon support-icon-issue">
               <span class="ui-icon material-icons support-option-icon support-option-icon-issue">bug_report</span>
             </div>

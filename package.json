@@ -1,0 +1,13 @@
+{
+  "name": "blueprint-studio-frontend-quality",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test:frontend:playwright": "node scripts/audit_frontend_playwright.mjs",
+    "test:frontend:ai-modes": "node scripts/audit_frontend_ai_modes.mjs",
+    "test:frontend:ai-mode-wiring": "node tests/js/ai_modes.mjs"
+  },
+  "devDependencies": {
+    "playwright-core": "1.62.1"
+  }
+}

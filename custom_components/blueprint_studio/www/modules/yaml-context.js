@@ -1,5 +1,5 @@
 /** YAML-CONTEXT.JS | Structural Home Assistant YAML context for editor features. */
-import { isMap, isScalar, isSeq, parseDocument } from '../vendor/yaml/yaml.js?v=2.5.188';
+import { isMap, isScalar, isSeq, parseDocument } from '../vendor/yaml/yaml.js?v=2.5.270';
 
 export const YAML_CONTEXT_PARSER = Object.freeze({ name: 'yaml', version: '2.9.0' });
 export const YAML_CONTEXT_LATENCY_BUDGET_MS = 75;

@@ -1,12 +1,12 @@
 /** GIT-UI.JS | Purpose: * Handles all UI rendering and user interactions for the Git integration panel. */
 import { state, elements, gitState, giteaState } from './state.js';
 import { isTextFile } from './utils.js';
-import { t } from './translations.js';
+import { t } from './translations.js?v=2.5.270';
 import { eventBus } from './event-bus.js';
-import { saveSettings } from './settings.js?v=2.5.188';
+import { saveSettings } from './settings.js?v=2.5.270';
 import { refreshActivityRail } from './activity-rail.js';
-import { renderRepositoryContext } from './context-indicators.js?v=2.5.188';
-import { bindSourceControlRecovery, renderSourceControlRecovery } from './source-control-recovery.js?v=2.5.188';
+import { renderRepositoryContext } from './context-indicators.js?v=2.5.270';
+import { bindSourceControlRecovery, renderSourceControlRecovery } from './source-control-recovery.js?v=2.5.270';
 import {
   clearCommitMessage,
   captureSourceControlView,
@@ -15,7 +15,7 @@ import {
   renderSourceControlFiles,
   scheduleSourceControlViewRestore,
   updateCommitComposer,
-} from './source-control-view.js?v=2.5.188';
+} from './source-control-view.js?v=2.5.270';
 import {
   showToast,
   showConfirmDialog,
@@ -34,7 +34,7 @@ import {
   forcePush,
   hardReset,
   gitRepairIndex
-} from './git-operations.js';
+} from './git-operations.js?v=2.5.270';
 
 /**
  * Updates the Git panel UI with current status
@@ -64,7 +64,7 @@ export function updateGitPanel() {
   refreshActivityRail();
 
   renderRepositoryContext(panel, 'GitHub', gitState, () => {
-    import('./git-operations.js').then(module => module.showBranchManager());
+    import('./git-operations.js?v=2.5.270').then(module => module.showBranchManager());
   });
 
   // Remove any existing sync indicators to prevent duplicates
@@ -78,6 +78,7 @@ export function updateGitPanel() {
       pushBtn.className = "git-panel-btn git-sync-indicator";
       pushBtn.id = "btn-git-push-sync";
       pushBtn.title = t("sidebar.ahead_push", {count: gitState.ahead});
+      pushBtn.setAttribute("aria-label", pushBtn.title);
       pushBtn.innerHTML = `
         <span class="ui-icon material-icons git-sync-icon git-sync-icon-ahead">arrow_upward</span>
         <span style="font-size: 10px; margin-left: -2px; font-weight: bold; color: var(--success-color);">${gitState.ahead}</span>
@@ -89,6 +90,7 @@ export function updateGitPanel() {
       pullBtn.className = "git-panel-btn git-sync-indicator";
       pullBtn.id = "btn-git-pull-sync";
       pullBtn.title = t("sidebar.behind_pull", {count: gitState.behind});
+      pullBtn.setAttribute("aria-label", pullBtn.title);
       pullBtn.innerHTML = `
         <span class="ui-icon material-icons git-sync-icon git-sync-icon-behind">arrow_downward</span>
         <span style="font-size: 10px; margin-left: -2px; font-weight: bold; color: var(--warning-color);">${gitState.behind}</span>

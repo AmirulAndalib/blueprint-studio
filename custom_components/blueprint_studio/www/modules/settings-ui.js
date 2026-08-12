@@ -1,9 +1,9 @@
 /** SETTINGS-UI.JS | Purpose: * Provides the settings panel UI for configuring all Blueprint Studio options. */
 import { state, elements } from './state.js';
-import { saveSettings } from './settings.js?v=2.5.188';
+import { saveSettings } from './settings.js?v=2.5.270';
 import { fetchWithAuth } from './api.js';
 import { eventBus } from './event-bus.js';
-import { API_BASE, THEME_PRESETS, ACCENT_COLORS, SYNTAX_THEMES } from './constants.js';
+import { API_BASE, THEME_PRESETS, ACCENT_COLORS, SYNTAX_THEMES } from './constants.js?v=2.5.270';
 import {
   activateSharedModal,
   deactivateSharedModal,
@@ -12,11 +12,71 @@ import {
   setButtonLoading
 } from './ui.js';
 import { updateStatusBar } from './status-bar.js';
-import { t, initTranslations } from './translations.js';
-import { showAddConnectionDialog, showEditConnectionDialog, deleteConnection } from './sftp.js?v=2.5.188';
-import { startOperationFeedback } from './feedback-service.js?v=2.5.188';
+import { t, tp, initTranslations } from './translations.js?v=2.5.270';
+import { showAddConnectionDialog, showEditConnectionDialog, deleteConnection } from './sftp.js?v=2.5.270';
+import { startOperationFeedback, syncOperationCenterVisibility } from './feedback-service.js?v=2.5.270';
 
 const CUSTOM_MODEL_OPTION_VALUE = "__custom__";
+
+const SETTINGS_SECTIONS = Object.freeze([
+  { id: 'workspace', labelKey: 'settings.sections.workspace', icon: 'workspaces', panel: 'general', target: '#language-select', keywords: 'files folders recent hidden language notifications pwa' },
+  { id: 'editor', labelKey: 'settings.sections.editor', icon: 'edit_note', panel: 'editor', target: '#font-size-slider', keywords: 'font indentation tabs wrap line numbers whitespace minimap autocomplete syntax' },
+  { id: 'appearance', labelKey: 'settings.sections.appearance', icon: 'palette', panel: 'appearance', target: '#theme-preset-select', keywords: 'theme color accent file tree icons compact' },
+  { id: 'features', labelKey: 'settings.sections.features', icon: 'tune', panel: 'editor', target: '#split-view-toggle', keywords: 'split view autosave one tab experimental workflow' },
+  { id: 'connections', labelKey: 'settings.sections.connections', icon: 'lan', panel: 'integrations', target: '#sftp-integration-toggle', keywords: 'sftp ssh terminal hosts remote server connection' },
+  { id: 'source-control', labelKey: 'settings.sections.source_control', icon: 'account_tree', panel: 'integrations', target: '#git-integration-toggle', keywords: 'git github gitea repository version control exclusions ignore' },
+  { id: 'ai-privacy', labelKey: 'settings.sections.ai_privacy', icon: 'psychology', panel: 'integrations', target: '#ai-integration-toggle', keywords: 'ai privacy model provider api key gemini openai claude ollama agent credentials' },
+  { id: 'advanced', labelKey: 'settings.sections.advanced', icon: 'settings_suggest', panel: 'advanced', target: '#advanced-git-polling-section', keywords: 'performance polling cache reset pwa experimental reload' },
+]);
+
+const SETTINGS_CONTROL_METADATA = Object.freeze({
+  'language-select': { defaultValue: 'en' },
+  'remember-workspace-toggle': { defaultValue: true, apply: 'reload' },
+  'auto-hide-sidebar-toggle': { defaultValue: true, apply: 'reload' },
+  'recent-files-toggle': { defaultValue: true },
+  'recent-files-limit': { defaultValue: '10' },
+  'show-hidden-toggle': { defaultValue: false },
+  'show-toasts-toggle': { defaultValue: true },
+  'show-operation-center-toggle': { defaultValue: true },
+  'theme-preset-select': { defaultValue: 'native' },
+  'file-tree-compact-toggle': { defaultValue: false },
+  'file-tree-icons-toggle': { defaultValue: true },
+  'tree-collapsable-mode-toggle': { defaultValue: false },
+  'font-size-slider': { defaultValue: '13', suffix: 'px' },
+  'font-family-select': { defaultValue: "'SF Mono', 'Menlo', 'Monaco', 'Consolas', monospace" },
+  'tab-size-select': { defaultValue: '2' },
+  'indent-with-tabs-toggle': { defaultValue: false },
+  'word-wrap-toggle': { defaultValue: true },
+  'line-numbers-toggle': { defaultValue: true },
+  'whitespace-toggle': { defaultValue: false },
+  'minimap-toggle': { defaultValue: false },
+  'autocomplete-toggle': { defaultValue: true },
+  'split-view-toggle': { defaultValue: false },
+  'auto-save-toggle': { defaultValue: false },
+  'auto-save-delay-input': { defaultValue: '1000', suffix: ' ms', dependsOn: ['auto-save-toggle'], reasonKey: 'settings.dependencies.autosave' },
+  'one-tab-mode-toggle': { defaultValue: false },
+  'git-integration-toggle': { defaultValue: true },
+  'gitea-integration-toggle': { defaultValue: false },
+  'sftp-integration-toggle': { defaultValue: true },
+  'terminal-integration-toggle': { defaultValue: true },
+  'default-ssh-host-select': { defaultValue: 'local', dependsOn: ['terminal-integration-toggle'], reasonKey: 'settings.dependencies.terminal' },
+  'ai-integration-toggle': { defaultValue: false },
+  'polling-interval-slider': { defaultValue: '10000', suffix: ' ms', dependsOn: ['git-integration-toggle', 'gitea-integration-toggle'], dependencyMode: 'any', reasonKey: 'settings.dependencies.source_control' },
+  'remote-fetch-interval-slider': { defaultValue: '30000', suffix: ' ms', dependsOn: ['git-integration-toggle', 'gitea-integration-toggle'], dependencyMode: 'any', reasonKey: 'settings.dependencies.source_control' },
+  'file-cache-size-slider': { defaultValue: '10' },
+  'virtual-scroll-toggle': { defaultValue: false },
+});
+
+const SETTINGS_DEPENDENCY_GROUPS = Object.freeze([
+  { selector: '#terminal-config-section', dependsOn: ['terminal-integration-toggle'], reasonKey: 'settings.dependencies.terminal' },
+  { selector: '#ai-config-section', dependsOn: ['ai-integration-toggle'], reasonKey: 'settings.dependencies.ai' },
+]);
+
+function normalizeSettingsSection(section = 'workspace') {
+  const aliases = { general: 'workspace', integrations: 'connections' };
+  const normalized = aliases[section] || section;
+  return SETTINGS_SECTIONS.some((item) => item.id === normalized) ? normalized : 'workspace';
+}
 
 export async function resetApplicationData(options = {}, startStep = 0, skipConfirm = false) {
   const request = Object.freeze({
@@ -24,17 +84,17 @@ export async function resetApplicationData(options = {}, startStep = 0, skipConf
     deleteRepository: Boolean(options.deleteRepository),
   });
   const selected = [
-    'browser settings and preferences',
-    request.clearCredentials ? 'GitHub and Gitea credentials' : '',
-    request.deleteRepository ? 'local .git repository metadata' : '',
+    t('settings_ops.browser_preferences'),
+    request.clearCredentials ? t('settings_ops.provider_credentials') : '',
+    request.deleteRepository ? t('settings_ops.local_git_metadata') : '',
   ].filter(Boolean);
 
   if (!skipConfirm) {
     const confirmed = await showConfirmDialog({
-      title: startStep > 0 ? 'Resume Application Reset?' : 'Reset Application?',
-      message: `<p>This will reset ${selected.join(', ')}.</p><p>Configuration files remain unchanged. Completed reset steps cannot be rolled back.</p>`,
-      confirmText: startStep > 0 ? 'Resume Reset' : 'Reset Application',
-      cancelText: 'Cancel',
+      title: t(startStep > 0 ? 'settings_ops.reset_resume_title' : 'settings_ops.reset_title'),
+      message: `<p>${t('settings_ops.reset_selection', { selection: selected.join(', ') })}</p><p>${t('settings_ops.reset_consequence')}</p>`,
+      confirmText: t(startStep > 0 ? 'settings_ops.reset_resume' : 'settings_ops.reset_confirm'),
+      cancelText: t('common.cancel'),
       isDanger: true,
     });
     if (!confirmed) return false;
@@ -42,29 +102,29 @@ export async function resetApplicationData(options = {}, startStep = 0, skipConf
 
   const steps = [
     ...(request.clearCredentials ? [
-      { action: 'git_clear_credentials', running: 'Removing GitHub credentials...', complete: 'GitHub credentials removed' },
-      { action: 'gitea_clear_credentials', running: 'Removing Gitea credentials...', complete: 'Gitea credentials removed' },
+      { action: 'git_clear_credentials', running: t('settings_ops.github_credentials_removing'), complete: t('settings_ops.github_credentials_removed') },
+      { action: 'gitea_clear_credentials', running: t('settings_ops.gitea_credentials_removing'), complete: t('settings_ops.gitea_credentials_removed') },
     ] : []),
     ...(request.deleteRepository ? [
-      { action: 'git_delete_repo', running: 'Deleting local Git repository metadata...', complete: 'Local Git repository metadata deleted' },
+      { action: 'git_delete_repo', running: t('settings_ops.git_metadata_deleting'), complete: t('settings_ops.git_metadata_deleted') },
     ] : []),
     {
       action: 'save_settings',
       request: { settings: { onboardingCompleted: false } },
-      running: 'Resetting server settings...',
-      complete: 'Server settings reset',
+      running: t('settings_ops.server_settings_resetting'),
+      complete: t('settings_ops.server_settings_reset'),
     },
   ];
   let resumeStep = Math.min(Math.max(0, startStep), steps.length - 1);
   const completedSteps = [];
   const operation = startOperationFeedback({
-    label: 'Reset Blueprint Studio',
+    label: t('settings_ops.reset_label'),
     icon: 'restart_alt',
-    message: steps[resumeStep]?.running || 'Preparing application reset...',
-    scope: 'Blueprint Studio application data',
+    message: steps[resumeStep]?.running || t('settings_ops.reset_preparing'),
+    scope: t('settings_ops.application_data'),
     target: selected.join('; '),
     retry: () => resetApplicationData(request, resumeStep),
-    openLabel: 'Application Settings',
+    openLabel: t('settings_ops.application_settings'),
     openIcon: 'settings',
     open: () => eventBus.emit('ui:show-settings', { tab: 'general' }),
   });
@@ -75,7 +135,7 @@ export async function resetApplicationData(options = {}, startStep = 0, skipConf
       resumeStep = index;
       operation.update({
         message: step.running,
-        detail: `Step ${index + 1} of ${steps.length}`,
+        detail: t('settings_ops.step_progress', { current: index + 1, count: steps.length }),
         percent: Math.round((index / steps.length) * 100),
       });
       const data = await fetchWithAuth(API_BASE, {
@@ -83,13 +143,13 @@ export async function resetApplicationData(options = {}, startStep = 0, skipConf
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: step.action, ...(step.request || {}) }),
       });
-      if (!data.success) throw new Error(data.message || data.error || `${step.complete} was rejected`);
+      if (!data.success) throw new Error(data.message || data.error || t('settings_ops.step_rejected', { step: step.complete }));
       completedSteps.push(step.complete);
       resumeStep = index + 1;
     }
 
-    operation.finish('Application reset complete; reloading...', {
-      detail: 'Configuration files were not changed',
+    operation.finish(t('settings_ops.reset_complete'), {
+      detail: t('settings_ops.configuration_unchanged'),
       percent: 100,
     });
     localStorage.clear();
@@ -98,16 +158,16 @@ export async function resetApplicationData(options = {}, startStep = 0, skipConf
   } catch (error) {
     const failedStep = steps[resumeStep];
     const completed = completedSteps.length
-      ? `Completed during this attempt:\n- ${completedSteps.join('\n- ')}\n\nCompleted steps remain applied.`
+      ? `${t('settings_ops.completed_this_attempt')}\n- ${completedSteps.join('\n- ')}\n\n${t('settings_ops.completed_remain_applied')}`
       : startStep > 0
-        ? 'Steps completed before this Retry remain applied.'
-        : 'No reset steps completed during this attempt.';
+        ? t('settings_ops.previous_steps_remain_applied')
+        : t('settings_ops.no_steps_completed');
     operation.fail(
-      failedStep ? `Reset stopped at step ${resumeStep + 1} of ${steps.length}` : 'Application reset incomplete',
+      failedStep ? t('settings_ops.reset_stopped', { current: resumeStep + 1, count: steps.length }) : t('settings_ops.reset_incomplete'),
       `${error.message}\n\n${completed}`,
-      { detail: 'Browser settings were not cleared and the page was not reloaded.' },
+      { detail: t('settings_ops.browser_not_cleared') },
     );
-    showToast(`Application reset failed: ${error.message}`, 'error');
+    showToast(t('toast.application_reset_failed', { error: error.message }), 'error');
     return false;
   }
 }
@@ -130,9 +190,9 @@ const AI_MODEL_PICKERS = {
     buttonId: "btn-fetch-gemini-models",
     statusId: "gemini-model-fetch-status",
     fetchSupported: true,
-    inputLabel: "Custom Model Name",
+    inputLabelKey: 'settings.ai.custom_model_name',
     inputPlaceholder: "gemini-2.5-pro",
-    helpText: "Choose a built-in Gemini model or type any Gemini model name manually.",
+    helpTextKey: 'settings.ai.gemini_model_hint',
   },
   "cloud:openai": {
     sourceKey: "cloud:openai",
@@ -142,9 +202,9 @@ const AI_MODEL_PICKERS = {
     buttonId: "btn-fetch-openai-models",
     statusId: "openai-model-fetch-status",
     fetchSupported: true,
-    inputLabel: "Custom Model Name",
+    inputLabelKey: 'settings.ai.custom_model_name',
     inputPlaceholder: "gpt-4.1 or deepseek-chat",
-    helpText: "Use the dropdown for known models, or type any OpenAI-compatible model name from your relay.",
+    helpTextKey: 'settings.ai.openai_model_hint',
   },
   "cloud:claude": {
     sourceKey: "cloud:claude",
@@ -154,9 +214,9 @@ const AI_MODEL_PICKERS = {
     buttonId: "btn-fetch-claude-models",
     statusId: "claude-model-fetch-status",
     fetchSupported: true,
-    inputLabel: "Custom Model Name",
+    inputLabelKey: 'settings.ai.custom_model_name',
     inputPlaceholder: "claude-sonnet-4-5-20250929",
-    helpText: "Models are fetched from Anthropic automatically; you can also type a model name manually.",
+    helpTextKey: 'settings.ai.claude_model_hint',
   },
   "local:ollama": {
     sourceKey: "local:ollama",
@@ -166,9 +226,9 @@ const AI_MODEL_PICKERS = {
     buttonId: "btn-fetch-ollama-models",
     statusId: "ollama-model-fetch-status",
     fetchSupported: true,
-    inputLabel: "Model Name",
+    inputLabelKey: 'settings.ai.model_name',
     inputPlaceholder: "Choose an installed model",
-    helpText: "Fetch installed Ollama models, or type a tag manually.",
+    helpTextKey: 'settings.ai.ollama_model_hint',
   },
   "local:lm-studio": {
     sourceKey: "local:lm-studio",
@@ -178,9 +238,9 @@ const AI_MODEL_PICKERS = {
     buttonId: "btn-fetch-lm-studio-models",
     statusId: "lm-studio-model-fetch-status",
     fetchSupported: true,
-    inputLabel: "Model Name (optional)",
+    inputLabelKey: 'settings.ai.model_name_optional',
     inputPlaceholder: "Leave blank to use loaded model",
-    helpText: "Fetch models from the LM Studio OpenAI-compatible server, or type a model name manually.",
+    helpTextKey: 'settings.ai.lm_studio_model_hint',
   },
   "local:custom": {
     sourceKey: "local:custom",
@@ -190,9 +250,9 @@ const AI_MODEL_PICKERS = {
     buttonId: "btn-fetch-custom-models",
     statusId: "custom-ai-model-fetch-status",
     fetchSupported: true,
-    inputLabel: "Model Name",
+    inputLabelKey: 'settings.ai.model_name',
     inputPlaceholder: "model-name",
-    helpText: "Fetch models from your custom OpenAI-compatible endpoint, or type a model name manually.",
+    helpTextKey: 'settings.ai.custom_model_hint',
   },
 };
 
@@ -203,6 +263,30 @@ function escapeHtml(value = "") {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+function renderCredentialField({ id, stateKey, label, keyUrl }) {
+  const saved = Boolean(state[stateKey]);
+  return `
+    <div class="settings-credential-field" data-credential-field="${stateKey}">
+      <div class="settings-credential-header">
+        <label for="${id}">${label}</label>
+        <a href="${keyUrl}" target="_blank" rel="noopener noreferrer">
+          ${t('settings.credentials.get_key')} <span class="ui-icon material-icons settings-external-link-icon" aria-hidden="true">open_in_new</span>
+        </a>
+      </div>
+      <div class="settings-credential-input-row">
+        <input type="password" id="${id}" class="git-settings-input" value="" autocomplete="new-password" data-secret-key="${stateKey}" placeholder="${t(saved ? 'settings.credentials.replace_placeholder' : 'settings.credentials.enter_placeholder')}">
+        <button type="button" class="ui-button ui-icon-button settings-credential-clear" data-clear-secret="${stateKey}" title="${t('settings.credentials.clear')}" aria-label="${t('settings.credentials.clear')}" ${saved ? '' : 'disabled'}>
+          <span class="ui-icon material-icons" aria-hidden="true">delete</span>
+        </button>
+      </div>
+      <div class="settings-credential-status ${saved ? 'is-saved' : ''}" data-secret-status="${stateKey}">
+        <span class="ui-icon material-icons" aria-hidden="true">${saved ? 'lock' : 'lock_open'}</span>
+        <span>${t(saved ? 'settings.credentials.saved_hidden' : 'settings.credentials.not_saved')}</span>
+      </div>
+    </div>
+  `;
 }
 
 function uniqueModels(values = []) {
@@ -314,7 +398,7 @@ function renderModelPicker(sourceKey, currentValue = "") {
       </button>
     </div>
     <div id="${config.statusId}" style="font-size: 11px; color: var(--text-secondary); margin-bottom: 8px;">${escapeHtml(getFetchStatusText(sourceKey))}</div>
-    <div style="font-size: 12px; margin-bottom: 4px;">${config.inputLabel}</div>
+    <div style="font-size: 12px; margin-bottom: 4px;">${t(config.inputLabelKey)}</div>
     <input
       type="text"
       id="${config.inputId}"
@@ -324,7 +408,7 @@ function renderModelPicker(sourceKey, currentValue = "") {
       placeholder="${escapeHtml(config.inputPlaceholder)}"
     >
     <div style="font-size: 11px; color: var(--text-secondary); padding: 8px; background: var(--bg-secondary); border-radius: 4px;">
-      ${config.helpText}
+      ${t(config.helpTextKey)}
     </div>
   `;
 }
@@ -542,7 +626,7 @@ function updateModelPickerUi(sourceKey) {
   if (button) {
     setButtonLoading(button, !!meta.loading);
     button.disabled = !config.fetchSupported || !!meta.loading;
-    button.textContent = meta.loading ? "Fetching..." : "Fetch Models";
+    button.textContent = meta.loading ? t('settings.ai.fetching_models') : t('settings.ai.fetch_models');
     button.style.cursor = button.disabled ? "not-allowed" : "pointer";
     button.style.opacity = button.disabled ? "0.7" : "1";
   }
@@ -593,15 +677,15 @@ export async function refreshModelList(sourceKey, { silent = false } = {}) {
   };
   updateModelPickerUi(sourceKey);
   const operation = silent ? null : startOperationFeedback({
-    label: `Discover ${aiDiscoveryTarget(sourceKey).split(' -> ')[0]} models`,
+    label: t('settings_ops.discover_models', { provider: aiDiscoveryTarget(sourceKey).split(' -> ')[0] }),
     icon: 'travel_explore',
-    message: 'Fetching available models...',
-    scope: 'AI provider model discovery',
+    message: t('settings_ops.models_fetching'),
+    scope: t('settings_ops.model_discovery'),
     target: aiDiscoveryTarget(sourceKey),
     retry: () => refreshModelList(sourceKey),
-    openLabel: 'AI Settings',
+    openLabel: t('settings_ops.ai_settings'),
     openIcon: 'settings',
-    open: () => eventBus.emit('ui:show-settings', { tab: 'integrations' }),
+    open: () => eventBus.emit('ui:show-settings', { tab: 'ai-privacy' }),
   });
 
   try {
@@ -620,56 +704,56 @@ export async function refreshModelList(sourceKey, { silent = false } = {}) {
       count: unique.length,
     };
     updateModelPickerUi(sourceKey);
-    operation?.finish(`${unique.length} model${unique.length === 1 ? '' : 's'} discovered`, {
-      detail: unique.length ? unique.join('\n') : 'Provider returned no models',
+    operation?.finish(tp('settings_ops.models_discovered', unique.length), {
+      detail: unique.length ? unique.join('\n') : t('settings_ops.no_models'),
     });
     if (!silent) {
-      showToast(`Fetched ${unique.length} model${unique.length === 1 ? "" : "s"}.`, "success");
+      showToast(t('toast.models_fetched', { count: unique.length }), "success");
     }
   } catch (error) {
     state.aiModelFetchMeta[sourceKey] = {
       ...state.aiModelFetchMeta[sourceKey],
       loading: false,
-      error: error.message || "Failed to fetch models.",
+      error: error.message || t('settings_ops.models_fetch_failed_detail'),
     };
     updateModelPickerUi(sourceKey);
-    operation?.fail('Model discovery failed', error.message || 'Failed to fetch models.');
+    operation?.fail(t('settings_ops.model_discovery_failed'), error.message || t('settings_ops.models_fetch_failed_detail'));
     if (!silent) {
-      showToast(error.message || "Failed to fetch models.", "error");
+      showToast(t('toast.models_fetch_failed', { error: error.message || t('common.unknown') }), "error");
     }
   }
 }
 
 export async function refreshHassAgents({ silent = false } = {}) {
   const operation = silent ? null : startOperationFeedback({
-    label: 'Discover Home Assistant agents',
+    label: t('settings_ops.discover_agents'),
     icon: 'forum',
-    message: 'Loading conversation agents...',
-    scope: 'Local Home Assistant instance',
-    target: 'Conversation agents',
+    message: t('settings_ops.agents_loading'),
+    scope: t('settings_ops.local_ha_instance'),
+    target: t('settings_ops.conversation_agents'),
     retry: refreshHassAgents,
-    openLabel: 'AI Settings',
+    openLabel: t('settings_ops.ai_settings'),
     openIcon: 'settings',
-    open: () => eventBus.emit('ui:show-settings', { tab: 'integrations' }),
+    open: () => eventBus.emit('ui:show-settings', { tab: 'ai-privacy' }),
   });
   try {
     const data = await fetchWithAuth(`${API_BASE}?action=list_hass_agents`);
     if (!Array.isArray(data?.agents)) {
-      throw new Error(data?.message || data?.error || 'Conversation-agent discovery was rejected');
+      throw new Error(data?.message || data?.error || t('settings_ops.agent_discovery_rejected'));
     }
     state.hassAgents = data.agents;
     const select = document.getElementById('hass-agent-select');
     if (select) {
-      select.innerHTML = '<option value="">Auto-detect</option>' + data.agents.map(agent =>
+      select.innerHTML = `<option value="">${t('settings.ai.auto_detect')}</option>` + data.agents.map(agent =>
         `<option value="${escapeHtml(agent.id)}" ${state.hassAgentId === agent.id ? 'selected' : ''}>${escapeHtml(agent.name)} (${escapeHtml(agent.platform)})</option>`
       ).join('');
     }
-    operation?.finish(`${data.agents.length} conversation agent${data.agents.length === 1 ? '' : 's'} discovered`);
-    if (!silent) showToast(`Found ${data.agents.length} conversation agent(s)`, 'success');
+    operation?.finish(tp('settings_ops.agents_discovered', data.agents.length));
+    if (!silent) showToast(t('toast.agents_found', { count: data.agents.length }), 'success');
     return data.agents;
   } catch (error) {
-    operation?.fail('Conversation-agent discovery failed', error.message);
-    if (!silent) showToast(`Failed to fetch agents: ${error.message}`, 'error');
+    operation?.fail(t('settings_ops.agent_discovery_failed'), error.message);
+    if (!silent) showToast(t('toast.agents_fetch_failed', { error: error.message }), 'error');
     return [];
   }
 }
@@ -677,7 +761,7 @@ export async function refreshHassAgents({ silent = false } = {}) {
 /**
  * Show the application settings modal
  */
-export async function showAppSettings() {
+export async function showAppSettings({ section = 'workspace', returnFocus = null } = {}) {
     const modalOverlay = document.getElementById("modal-overlay");
     const modal = document.getElementById("modal");
     const modalTitle = document.getElementById("modal-title");
@@ -726,15 +810,39 @@ export async function showAppSettings() {
     const claudeModelPicker = renderModelPicker("cloud:claude", state.cloudProvider === 'claude' ? state.aiModel || "" : "");
 
     modalBody.innerHTML = `
-      <div class="settings-tabs" style="display: flex; border-bottom: 1px solid var(--border-color); margin-bottom: 16px;">
-        <button class="settings-tab active" data-tab="general" style="padding: 10px 16px; background: transparent; border: none; color: var(--text-primary); cursor: pointer; border-bottom: 2px solid var(--accent-color); font-size: 13px;">${t("settings.tabs.general")}</button>
-        <button class="settings-tab" data-tab="appearance" style="padding: 10px 16px; background: transparent; border: none; color: var(--text-secondary); cursor: pointer; border-bottom: 2px solid transparent; font-size: 13px;">${t("settings.tabs.appearance")}</button>
-        <button class="settings-tab" data-tab="editor" style="padding: 10px 16px; background: transparent; border: none; color: var(--text-secondary); cursor: pointer; border-bottom: 2px solid transparent; font-size: 13px;">${t("settings.tabs.editor")}</button>
-        <button class="settings-tab" data-tab="integrations" style="padding: 10px 16px; background: transparent; border: none; color: var(--text-secondary); cursor: pointer; border-bottom: 2px solid transparent; font-size: 13px;">${t("settings.tabs.integrations")}</button>
-        <button class="settings-tab" data-tab="advanced" style="padding: 10px 16px; background: transparent; border: none; color: var(--text-secondary); cursor: pointer; border-bottom: 2px solid transparent; font-size: 13px;">${t("settings.tabs.advanced")}</button>
-      </div>
-
-      <div class="settings-content">
+      <div class="settings-workbench">
+        <nav class="settings-tabs" aria-label="${t('settings.navigation_label')}">
+          <div class="settings-nav-header">
+            <strong>${t('settings.navigation_label')}</strong>
+            <button id="settings-nav-search" type="button" class="ui-button ui-icon-button" aria-label="${t('settings.search_placeholder')}" title="${t('settings.search_placeholder')}">
+              <span class="ui-icon material-icons" aria-hidden="true">search</span>
+            </button>
+          </div>
+          ${SETTINGS_SECTIONS.map((item) => `
+            <button class="settings-tab" type="button" data-section="${item.id}" data-tab="${item.panel}">
+              <span class="ui-icon material-icons" aria-hidden="true">${item.icon}</span>
+              <span>${t(item.labelKey)}</span>
+              <span class="settings-tab-chevron ui-icon material-icons" aria-hidden="true">chevron_right</span>
+            </button>
+          `).join('')}
+        </nav>
+        <main class="settings-main">
+          <div class="settings-drilldown-header">
+            <button id="settings-drilldown-back" type="button" class="ui-button ui-button--ghost">
+              <span class="ui-icon material-icons" aria-hidden="true">arrow_back</span>
+              <span>${t('settings.navigation_back')}</span>
+            </button>
+            <strong id="settings-drilldown-title"></strong>
+          </div>
+          <label class="settings-search" for="settings-search-input">
+            <span class="ui-icon material-icons" aria-hidden="true">search</span>
+            <input id="settings-search-input" type="search" autocomplete="off" placeholder="${t('settings.search_placeholder')}" aria-label="${t('settings.search_placeholder')}">
+            <button id="settings-search-clear" type="button" class="ui-button ui-icon-button" aria-label="${t('settings.search_clear')}" title="${t('settings.search_clear')}" hidden>
+              <span class="ui-icon material-icons" aria-hidden="true">close</span>
+            </button>
+          </label>
+          <div id="settings-search-results" class="settings-search-results" role="status" aria-live="polite" hidden></div>
+          <div class="settings-content">
         <!-- General Tab -->
         <div id="settings-tab-general" class="settings-panel active">
           <div class="git-settings-section">
@@ -823,14 +931,25 @@ export async function showAppSettings() {
               </label>
             </div>
 
+            <div style="display: flex; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--divider-color);">
+              <div style="flex: 1;">
+                <div style="font-weight: 500; margin-bottom: 4px;">${t("settings.general.show_operation_center")}</div>
+                <div style="font-size: 12px; color: var(--text-secondary);">${t("settings.general.show_operation_center_hint")}</div>
+              </div>
+              <label class="toggle-switch" style="margin-left: 16px;">
+                <input type="checkbox" id="show-operation-center-toggle" ${state.showOperationCenter !== false ? 'checked' : ''}>
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+
             <div class="git-settings-label" style="margin-top: 20px;">PWA</div>
 
             <div style="display: flex; align-items: center; padding: 12px 0;">
               <div style="flex: 1;">
-                <div style="font-weight: 500; margin-bottom: 4px;">Install as App</div>
-                <div style="font-size: 12px; color: var(--text-secondary);">Open in a new window to install Blueprint Studio as a PWA on your device</div>
+                <div style="font-weight: 500; margin-bottom: 4px;">${t('settings.pwa.install')}</div>
+                <div style="font-size: 12px; color: var(--text-secondary);">${t('settings.pwa.hint')}</div>
               </div>
-              <button id="btn-pwa-install" style="padding: 8px 16px; background: var(--accent-color); color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 500; margin-left: 16px; display: flex; align-items: center; gap: 6px;" title="Open in new window">
+              <button id="btn-pwa-install" style="padding: 8px 16px; background: var(--accent-color); color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 500; margin-left: 16px; display: flex; align-items: center; gap: 6px;" title="${t('settings.pwa.open_window')}" aria-label="${t('settings.pwa.open_window')}">
                 <span class="ui-icon material-icons settings-pwa-icon">open_in_new</span>
               </button>
             </div>
@@ -856,7 +975,7 @@ export async function showAppSettings() {
                 ${ACCENT_COLORS.map(color => `
                   <button class="accent-color-btn" data-color="${color.value}" style="width: 32px; height: 32px; border-radius: 50%; border: 2px solid ${state.accentColor === color.value ? 'var(--text-primary)' : 'transparent'}; background: ${color.value}; cursor: pointer;" title="${color.name}"></button>
                 `).join('')}
-                <button class="accent-color-btn" data-color="" style="width: 32px; height: 32px; border-radius: 50%; border: 2px solid ${!state.accentColor ? 'var(--text-primary)' : 'transparent'}; background: var(--bg-tertiary); cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center; color: var(--text-secondary);" title="Use Theme Default">✕</button>
+                <button class="accent-color-btn" data-color="" style="width: 32px; height: 32px; border-radius: 50%; border: 2px solid ${!state.accentColor ? 'var(--text-primary)' : 'transparent'}; background: var(--bg-tertiary); cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center; color: var(--text-secondary);" title="${t('settings.appearance.theme_default')}" aria-label="${t('settings.appearance.theme_default')}">✕</button>
               </div>
             </div>
 
@@ -1032,7 +1151,7 @@ export async function showAppSettings() {
               </label>
             </div>
 
-            <div id="auto-save-delay-container" style="display: ${state.autoSave ? 'flex' : 'none'}; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--divider-color);">
+            <div id="auto-save-delay-container" style="display: flex; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--divider-color);">
               <div style="flex: 1;">
                 <div style="font-weight: 500; margin-bottom: 4px;">${t("settings.editor.autosave_delay")}</div>
                 <div style="font-size: 12px; color: var(--text-secondary);">${t("settings.editor.autosave_delay_hint")}</div>
@@ -1157,7 +1276,7 @@ export async function showAppSettings() {
               </label>
             </div>
 
-            <div id="terminal-config-section" style="display: ${state.terminalIntegrationEnabled ? 'block' : 'none'}; padding: 12px 0; border-bottom: 1px solid var(--divider-color);">
+            <div id="terminal-config-section" style="display: block; padding: 12px 0; border-bottom: 1px solid var(--divider-color);">
               <div style="font-weight: 500; margin-bottom: 8px; font-size: 13px;">${t("settings.integrations.terminal_config")}</div>
               
               <div style="display: flex; align-items: center; margin-bottom: 8px;">
@@ -1210,43 +1329,17 @@ export async function showAppSettings() {
               </label>
             </div>
 
-            <div id="ai-config-section" style="display: ${state.aiIntegrationEnabled ? 'block' : 'none'}; padding: 12px 0; border-bottom: 1px solid var(--divider-color);">
-              <div style="font-weight: 500; margin-bottom: 12px; font-size: 13px;">AI Type</div>
-
-              <!-- AI Type Radio Buttons -->
-              <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px;">
-                <label style="display: flex; align-items: center; padding: 8px; border-radius: 6px; cursor: pointer; background: ${state.aiType === 'rule-based' ? 'var(--bg-secondary)' : 'transparent'}; border: 1px solid ${state.aiType === 'rule-based' ? 'var(--accent-color)' : 'var(--border-color)'};">
-                  <input type="radio" name="ai-type" value="rule-based" ${state.aiType === 'rule-based' ? 'checked' : ''} style="margin-right: 8px;">
-                  <div>
-                    <div style="font-weight: 500; font-size: 13px;">Rule-based (Built-in)</div>
-                    <div style="font-size: 11px; color: var(--text-secondary);">Pattern matching for basic automation generation</div>
-                  </div>
-                </label>
-
-                <label style="display: flex; align-items: center; padding: 8px; border-radius: 6px; cursor: pointer; background: ${state.aiType === 'local-ai' ? 'var(--bg-secondary)' : 'transparent'}; border: 1px solid ${state.aiType === 'local-ai' ? 'var(--accent-color)' : 'var(--border-color)'};">
-                  <input type="radio" name="ai-type" value="local-ai" ${state.aiType === 'local-ai' ? 'checked' : ''} style="margin-right: 8px;">
-                  <div>
-                    <div style="font-weight: 500; font-size: 13px;">Local AI</div>
-                    <div style="font-size: 11px; color: var(--text-secondary);">Use local or self-hosted LLM servers such as Ollama, LM Studio, or your own LAN endpoint.</div>
-                  </div>
-                </label>
-
-                <label style="display: flex; align-items: center; padding: 8px; border-radius: 6px; cursor: pointer; background: ${state.aiType === 'cloud' ? 'var(--bg-secondary)' : 'transparent'}; border: 1px solid ${state.aiType === 'cloud' ? 'var(--accent-color)' : 'var(--border-color)'};">
-                  <input type="radio" name="ai-type" value="cloud" ${state.aiType === 'cloud' ? 'checked' : ''} style="margin-right: 8px;">
-                  <div>
-                    <div style="font-weight: 500; font-size: 13px;">Cloud AI</div>
-                    <div style="font-size: 11px; color: var(--text-secondary);">Use hosted providers such as Gemini, OpenAI, Claude, or an OpenAI-compatible relay.</div>
-                  </div>
-                </label>
-
-                <label style="display: flex; align-items: center; padding: 8px; border-radius: 6px; cursor: pointer; background: ${state.aiType === 'hass-agent' ? 'var(--bg-secondary)' : 'transparent'}; border: 1px solid ${state.aiType === 'hass-agent' ? 'var(--accent-color)' : 'var(--border-color)'};">
-                  <input type="radio" name="ai-type" value="hass-agent" ${state.aiType === 'hass-agent' ? 'checked' : ''} style="margin-right: 8px;">
-                  <div>
-                    <div style="font-weight: 500; font-size: 13px;">Home Assistant Agent</div>
-                    <div style="font-size: 11px; color: var(--text-secondary);">Route queries through a HA conversation agent (e.g. Claw Assistant). Supports file editing with diff view.</div>
-                  </div>
-                </label>
-              </div>
+            <div id="ai-config-section" style="display: block; padding: 12px 0; border-bottom: 1px solid var(--divider-color);">
+              <fieldset class="settings-mode-fieldset">
+                <legend>${t('settings.ai.type')}</legend>
+                <div class="settings-segmented" role="radiogroup" aria-label="${t('settings.ai.type')}">
+                  <label><input type="radio" name="ai-type" value="rule-based" ${state.aiType === 'rule-based' ? 'checked' : ''}><span>${t('settings.ai.rule_based')}</span></label>
+                  <label><input type="radio" name="ai-type" value="local-ai" ${state.aiType === 'local-ai' ? 'checked' : ''}><span>${t('settings.ai.local')}</span></label>
+                  <label><input type="radio" name="ai-type" value="cloud" ${state.aiType === 'cloud' ? 'checked' : ''}><span>${t('settings.ai.cloud')}</span></label>
+                  <label><input type="radio" name="ai-type" value="hass-agent" ${state.aiType === 'hass-agent' ? 'checked' : ''}><span>${t('settings.ai.ha_agent')}</span></label>
+                </div>
+                <p id="ai-type-description" class="settings-mode-description">${t(`settings.ai.${state.aiType.replace('-', '_')}_hint`)}</p>
+              </fieldset>
 
               <!-- Rule-based Info -->
               <div id="rule-based-info" style="display: ${state.aiType === 'rule-based' ? 'block' : 'none'}; padding: 12px; background: var(--bg-secondary); border-radius: 6px; font-size: 12px; color: var(--text-secondary);">
@@ -1325,39 +1418,28 @@ export async function showAppSettings() {
                   ${claudeModelPicker}
                 </div>
 
+                <section class="settings-credentials" aria-labelledby="settings-credentials-title">
+                  <div id="settings-credentials-title" class="settings-credentials-title">${t('settings.credentials.title')}</div>
+                  <div class="settings-credentials-note">
+                    <span class="ui-icon material-icons" aria-hidden="true">shield_lock</span>
+                    <span>${t('settings.credentials.private_hint')}</span>
+                  </div>
                 <!-- Cloud API Keys -->
                 <div id="gemini-api-section" style="display: ${state.cloudProvider === 'gemini' ? 'block' : 'none'};">
-                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                    <div style="font-size: 12px;">Gemini API Key</div>
-                    <a href="https://aistudio.google.com/app/apikey" target="_blank" style="font-size: 11px; color: var(--accent-color); text-decoration: none; display: flex; align-items: center;">
-                      Get Key <span class="ui-icon material-icons settings-external-link-icon">open_in_new</span>
-                    </a>
-                  </div>
-                  <input type="password" id="gemini-api-key" class="git-settings-input" style="width: 100%;" value="${state.geminiApiKey || ''}" placeholder="Enter Gemini API Key">
+                  ${renderCredentialField({ id: 'gemini-api-key', stateKey: 'geminiApiKey', label: 'Gemini API Key', keyUrl: 'https://aistudio.google.com/app/apikey' })}
                 </div>
 
                 <div id="openai-api-section" style="display: ${state.cloudProvider === 'openai' ? 'block' : 'none'};">
                   <div style="font-size: 12px; margin-bottom: 4px;">Base URL (optional)</div>
                   <input type="text" id="openai-base-url" class="git-settings-input" style="width: 100%; margin-bottom: 8px;" value="${state.openaiBaseUrl || ''}" placeholder="Leave blank for https://api.openai.com/v1">
 
-                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                    <div style="font-size: 12px;">OpenAI API Key</div>
-                    <a href="https://platform.openai.com/api-keys" target="_blank" style="font-size: 11px; color: var(--accent-color); text-decoration: none; display: flex; align-items: center;">
-                      Get Key <span class="ui-icon material-icons settings-external-link-icon">open_in_new</span>
-                    </a>
-                  </div>
-                  <input type="password" id="openai-api-key" class="git-settings-input" style="width: 100%;" value="${state.openaiApiKey || ''}" placeholder="Enter OpenAI API Key">
+                  ${renderCredentialField({ id: 'openai-api-key', stateKey: 'openaiApiKey', label: 'OpenAI API Key', keyUrl: 'https://platform.openai.com/api-keys' })}
                 </div>
 
                 <div id="claude-api-section" style="display: ${state.cloudProvider === 'claude' ? 'block' : 'none'};">
-                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                    <div style="font-size: 12px;">Claude API Key</div>
-                    <a href="https://console.anthropic.com/settings/keys" target="_blank" style="font-size: 11px; color: var(--accent-color); text-decoration: none; display: flex; align-items: center;">
-                      Get Key <span class="ui-icon material-icons settings-external-link-icon">open_in_new</span>
-                    </a>
-                  </div>
-                  <input type="password" id="claude-api-key" class="git-settings-input" style="width: 100%;" value="${state.claudeApiKey || ''}" placeholder="Enter Claude API Key">
+                  ${renderCredentialField({ id: 'claude-api-key', stateKey: 'claudeApiKey', label: 'Claude API Key', keyUrl: 'https://console.anthropic.com/settings/keys' })}
                 </div>
+                </section>
               </div>
 
               <!-- Home Assistant Agent Configuration -->
@@ -1393,7 +1475,7 @@ export async function showAppSettings() {
             <div id="advanced-git-polling-section" style="padding: 12px 0; border-bottom: 1px solid var(--divider-color);">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                 <div style="font-weight: 500;">${t("settings.advanced.git_polling")}</div>
-                <span id="polling-interval-value" style="font-family: monospace; color: var(--text-secondary);">${(state.pollingInterval / 1000).toFixed(0)}s</span>
+                <span id="polling-interval-value" style="font-family: monospace; color: var(--text-secondary);">${t('settings.units.seconds_short', { count: (state.pollingInterval / 1000).toFixed(0) })}</span>
               </div>
               <input type="range" id="polling-interval-slider" min="10000" max="60000" step="5000" value="${state.pollingInterval}" style="width: 100%;">
               <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">
@@ -1404,7 +1486,7 @@ export async function showAppSettings() {
             <div id="advanced-remote-fetch-section" style="padding: 12px 0; border-bottom: 1px solid var(--divider-color);">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                 <div style="font-weight: 500;">${t("settings.advanced.fetch_interval")}</div>
-                <span id="remote-fetch-interval-value" style="font-family: monospace; color: var(--text-secondary);">${(state.remoteFetchInterval / 1000).toFixed(0)}s</span>
+                <span id="remote-fetch-interval-value" style="font-family: monospace; color: var(--text-secondary);">${t('settings.units.seconds_short', { count: (state.remoteFetchInterval / 1000).toFixed(0) })}</span>
               </div>
               <input type="range" id="remote-fetch-interval-slider" min="15000" max="300000" step="15000" value="${state.remoteFetchInterval}" style="width: 100%;">
               <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">
@@ -1415,7 +1497,7 @@ export async function showAppSettings() {
             <div style="padding: 12px 0; border-bottom: 1px solid var(--divider-color);">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                 <div style="font-weight: 500;">${t("settings.advanced.cache_size")}</div>
-                <span id="file-cache-size-value" style="font-family: monospace; color: var(--text-secondary);">${state.fileCacheSize} files</span>
+                <span id="file-cache-size-value" style="font-family: monospace; color: var(--text-secondary);">${t('settings.units.files', { count: state.fileCacheSize })}</span>
               </div>
               <input type="range" id="file-cache-size-slider" min="5" max="20" step="1" value="${state.fileCacheSize}" style="width: 100%;">
               <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">
@@ -1438,6 +1520,25 @@ export async function showAppSettings() {
               <span class="ui-icon material-icons settings-info-icon">info</span>
               <span style="margin-left: 8px;">${t("settings.info_applied")}</span>
             </div>
+
+            <div class="git-settings-label" style="margin-top: 20px;">${t('settings.guidance.title')}</div>
+            <div class="settings-guidance-intro">${t('settings.guidance.hint')}</div>
+            <div class="settings-guidance-grid">
+              ${[
+                ['file', 'note_add'], ['git', 'account_tree'], ['sftp', 'lan'],
+                ['validation', 'fact_check'], ['terminal', 'terminal'], ['ai', 'psychology'],
+              ].map(([workflow, icon]) => `
+                <button type="button" class="settings-guidance-action" data-guidance-workflow="${workflow}">
+                  <span class="ui-icon material-icons" aria-hidden="true">${icon}</span>
+                  <span><strong>${t(`settings.guidance.${workflow}`)}</strong><small>${t(`settings.guidance.${workflow}_hint`)}</small></span>
+                  <span class="ui-icon material-icons" aria-hidden="true">chevron_right</span>
+                </button>
+              `).join('')}
+            </div>
+            <button type="button" class="ui-button ui-button--secondary settings-onboarding-resume" id="btn-resume-onboarding">
+              <span class="ui-icon material-icons" aria-hidden="true">school</span>
+              <span>${t('settings.guidance.resume')}</span>
+            </button>
 
             <div class="git-settings-label" style="margin-top: 20px;">${t("settings.advanced.experimental")}</div>
             <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 12px;">
@@ -1479,17 +1580,22 @@ export async function showAppSettings() {
             </div>
           </div>
         </div>
-      </div>
-
-      <div style="margin-top: 16px; padding: 12px; background: var(--bg-tertiary); border-radius: 8px; font-size: 13px;">
-        <span class="ui-icon material-icons settings-info-icon">info</span>
-        <span style="margin-left: 8px;">${t("settings.info_applied")}</span>
+          </div>
+          <div class="settings-apply-note">
+            <span class="ui-icon material-icons settings-info-icon">info</span>
+            <span>${t("settings.info_applied")}</span>
+          </div>
+        </main>
       </div>
     `;
 
-    activateSharedModal({ initialFocus: () => modalBody.querySelector('input, select, button') });
-    modal.classList.add("modal--full-workflow");
-    modal.style.maxWidth = "600px";
+    activateSharedModal({
+      returnFocus: returnFocus || document.getElementById('btn-app-settings'),
+      initialFocus: () => modalBody.querySelector('.settings-tab.active')
+        || modalBody.querySelector('input:not([type="hidden"]):not([disabled]), select:not([disabled]), button:not([disabled])'),
+    });
+    modal.classList.add("modal--full-workflow", "modal--settings-workbench");
+    modal.style.maxWidth = "880px";
     modal.style.maxHeight = "85vh";
 
     // Hide default modal buttons
@@ -1525,15 +1631,11 @@ export async function showAppSettings() {
         const anyGitEnabled = state.gitIntegrationEnabled || state.giteaIntegrationEnabled;
         
         if (gitPollingSection) {
-            gitPollingSection.style.opacity = anyGitEnabled ? "1" : "0.5";
-            gitPollingSection.style.pointerEvents = anyGitEnabled ? "auto" : "none";
             const slider = gitPollingSection.querySelector("input");
             if (slider) slider.disabled = !anyGitEnabled;
         }
         
         if (remoteFetchSection) {
-            remoteFetchSection.style.opacity = anyGitEnabled ? "1" : "0.5";
-            remoteFetchSection.style.pointerEvents = anyGitEnabled ? "auto" : "none";
             const slider = remoteFetchSection.querySelector("input");
             if (slider) slider.disabled = !anyGitEnabled;
         }
@@ -1542,36 +1644,176 @@ export async function showAppSettings() {
     // Initial state check
     updateAdvancedSettingsState();
 
-    // Handle Settings Tabs
+    // Handle settings navigation and purpose-based search.
     const tabButtons = modalBody.querySelectorAll('.settings-tab');
     const tabPanels = modalBody.querySelectorAll('.settings-panel');
+    const searchInput = modalBody.querySelector('#settings-search-input');
+    const searchClear = modalBody.querySelector('#settings-search-clear');
+    const searchResults = modalBody.querySelector('#settings-search-results');
+    const workbench = modalBody.querySelector('.settings-workbench');
+    const drilldownBack = modalBody.querySelector('#settings-drilldown-back');
+    const drilldownTitle = modalBody.querySelector('#settings-drilldown-title');
+    const navSearch = modalBody.querySelector('#settings-nav-search');
+    const narrowSettings = window.matchMedia('(max-width: 768px)');
+    let activeSection = normalizeSettingsSection(section);
 
-    tabButtons.forEach(button => {
-      button.addEventListener('click', () => {
-        const targetTab = button.dataset.tab;
+    const integrationGroups = modalBody.querySelector('#settings-tab-integrations .git-settings-section');
+    let integrationGroup = 'source-control';
+    [...(integrationGroups?.children || [])].forEach((child) => {
+      if (child.nextElementSibling?.querySelector('#ai-integration-toggle')) integrationGroup = 'ai-privacy';
+      if (child.querySelector('#sftp-integration-toggle')) integrationGroup = 'connections';
+      if (child.querySelector('#ai-integration-toggle')) integrationGroup = 'ai-privacy';
+      child.dataset.settingsGroup = integrationGroup;
+    });
 
-        // Update tab buttons
-        tabButtons.forEach(btn => {
-          if (btn.dataset.tab === targetTab) {
-            btn.classList.add('active');
-            btn.style.color = 'var(--text-primary)';
-            btn.style.borderBottomColor = 'var(--accent-color)';
-          } else {
-            btn.classList.remove('active');
-            btn.style.color = 'var(--text-secondary)';
-            btn.style.borderBottomColor = 'transparent';
-          }
-        });
+    const sectionForControl = (control, panelId) => {
+      if (panelId === 'general') return 'workspace';
+      if (panelId === 'appearance') return 'appearance';
+      if (panelId === 'advanced') return 'advanced';
+      if (panelId === 'editor') {
+        return ['split-view-toggle', 'auto-save-toggle', 'auto-save-delay-input', 'one-tab-mode-toggle'].includes(control.id)
+          ? 'features'
+          : 'editor';
+      }
+      if (control.closest('#ai-config-section') || control.id === 'ai-integration-toggle') return 'ai-privacy';
+      if (['git-integration-toggle', 'gitea-integration-toggle', 'btn-manage-exclusions'].includes(control.id)) return 'source-control';
+      return 'connections';
+    };
 
-        // Update tab panels
-        tabPanels.forEach(panel => {
-          if (panel.id === `settings-tab-${targetTab}`) {
-            panel.style.display = 'block';
-          } else {
-            panel.style.display = 'none';
-          }
+    const activateSettingsSection = (requestedSection, { focusTarget = false, openSection = true } = {}) => {
+      activeSection = normalizeSettingsSection(requestedSection);
+      const config = SETTINGS_SECTIONS.find((item) => item.id === activeSection);
+      workbench.classList.toggle('is-section-open', !narrowSettings.matches || openSection);
+      drilldownTitle.textContent = t(config.labelKey);
+      tabButtons.forEach((button) => {
+        const selected = button.dataset.section === activeSection;
+        button.classList.toggle('active', selected);
+        button.setAttribute('aria-current', selected ? 'page' : 'false');
+        if (selected && tabButtons[0]?.parentElement.scrollWidth > tabButtons[0]?.parentElement.clientWidth) {
+          tabButtons[0].parentElement.scrollTo({ left: Math.max(0, button.offsetLeft - 8) });
+        }
+      });
+      tabPanels.forEach((panel) => {
+        panel.style.display = panel.id === `settings-tab-${config.panel}` ? 'block' : 'none';
+      });
+      integrationGroups?.querySelectorAll(':scope > [data-settings-group]').forEach((item) => {
+        item.classList.toggle(
+          'settings-group-filtered',
+          config.panel === 'integrations' && item.dataset.settingsGroup !== activeSection,
+        );
+      });
+      requestAnimationFrame(() => {
+        const target = modalBody.querySelector(config.target);
+        const scrollTarget = target?.closest('.git-settings-section > div') || target;
+        scrollTarget?.scrollIntoView({ block: 'start' });
+        if (focusTarget) target?.focus({ preventScroll: true });
+      });
+    };
+
+    const searchableControls = [...modalBody.querySelectorAll('.settings-panel input, .settings-panel select, .settings-panel button')]
+      .filter((control) => control.id || control.name)
+      .map((control) => {
+        const panel = control.closest('.settings-panel');
+        const panelId = panel?.id.replace('settings-tab-', '') || 'general';
+        const container = control.closest('#ai-config-section, #terminal-config-section, .git-settings-section > div') || control.parentElement;
+        const labelSource = container?.querySelector('div[style*="font-weight: 500"], .git-settings-label, label')
+          ?.textContent || control.getAttribute('aria-label') || control.id;
+        const label = (container?.textContent || labelSource || control.id)
+          .replace(/\s+/g, ' ')
+          .trim();
+        const resultLabel = labelSource.replace(/\s+/g, ' ').trim().slice(0, 110) || control.id;
+        const itemSection = sectionForControl(control, panelId);
+        const config = SETTINGS_SECTIONS.find((item) => item.id === itemSection);
+        return {
+          control,
+          section: itemSection,
+          label: resultLabel,
+          haystack: `${label} ${control.id} ${control.name || ''} ${t(config.labelKey)} ${config.keywords}`.toLocaleLowerCase(state.language || 'en'),
+        };
+      });
+
+    const renderSettingsSearch = () => {
+      const query = searchInput.value.trim().toLocaleLowerCase(state.language || 'en');
+      searchClear.hidden = !query;
+      searchResults.hidden = !query;
+      modalBody.querySelector('.settings-content').hidden = Boolean(query);
+      if (!query) {
+        searchResults.replaceChildren();
+        activateSettingsSection(activeSection);
+        return;
+      }
+      const terms = query.split(/\s+/).filter(Boolean);
+      const matches = searchableControls
+        .filter((item) => terms.every((term) => item.haystack.includes(term)))
+        .filter((item, index, all) => all.findIndex((candidate) => candidate.label === item.label && candidate.section === item.section) === index)
+        .slice(0, 40);
+      searchResults.innerHTML = matches.length
+        ? `<div class="settings-search-summary">${t('settings.search_count', { count: matches.length })}</div>${matches.map((item, index) => `
+            <button type="button" class="settings-search-result" data-result-index="${index}">
+              <span class="settings-search-result-copy"><strong>${escapeHtml(item.label)}</strong><small>${t(SETTINGS_SECTIONS.find((entry) => entry.id === item.section).labelKey)}</small></span>
+              <span class="ui-icon material-icons" aria-hidden="true">chevron_right</span>
+            </button>
+          `).join('')}`
+        : `<div class="settings-search-empty"><span class="ui-icon material-icons" aria-hidden="true">search_off</span><span>${t('settings.search_empty')}</span></div>`;
+      searchResults.querySelectorAll('[data-result-index]').forEach((button) => {
+        button.addEventListener('click', () => {
+          const match = matches[Number(button.dataset.resultIndex)];
+          searchInput.value = '';
+          renderSettingsSearch();
+          activateSettingsSection(match.section);
+          requestAnimationFrame(() => {
+            match.control.scrollIntoView({ block: 'center' });
+            match.control.focus({ preventScroll: true });
+          });
         });
       });
+    };
+
+    tabButtons.forEach((button) => button.addEventListener('click', () => {
+      searchInput.value = '';
+      renderSettingsSearch();
+      activateSettingsSection(button.dataset.section, { focusTarget: narrowSettings.matches });
+    }));
+    drilldownBack.addEventListener('click', () => {
+      searchInput.value = '';
+      renderSettingsSearch();
+      workbench.classList.remove('is-section-open');
+      modalBody.querySelector(`.settings-tab[data-section="${activeSection}"]`)?.focus();
+    });
+    navSearch.addEventListener('click', () => {
+      workbench.classList.add('is-section-open');
+      drilldownTitle.textContent = t('settings.search_title');
+      requestAnimationFrame(() => searchInput.focus());
+    });
+    searchInput.addEventListener('input', renderSettingsSearch);
+    searchClear.addEventListener('click', () => {
+      searchInput.value = '';
+      renderSettingsSearch();
+      searchInput.focus();
+    });
+    activateSettingsSection(activeSection, { openSection: !narrowSettings.matches });
+
+    const guidanceActions = {
+      file: () => document.getElementById('btn-new-file')?.click(),
+      git: () => eventBus.emit('ui:switch-sidebar-view', 'source-control'),
+      sftp: () => eventBus.emit('ui:switch-sidebar-view', 'sftp'),
+      validation: () => document.getElementById('btn-validate')?.click(),
+      terminal: () => eventBus.emit('terminal:toggle', true),
+      ai: () => eventBus.emit('ui:toggle-ai-sidebar', true),
+    };
+    modalBody.querySelectorAll('[data-guidance-workflow]').forEach((button) => {
+      button.addEventListener('click', () => {
+        closeSettings();
+        guidanceActions[button.dataset.guidanceWorkflow]?.();
+      });
+    });
+    modalBody.querySelector('#btn-resume-onboarding')?.addEventListener('click', async () => {
+      state.onboardingCompleted = false;
+      state.onboardingPaused = false;
+      localStorage.removeItem('onboardingCompleted');
+      await saveSettingsImpl();
+      closeSettings();
+      eventBus.emit('onboarding:start', { force: true });
     });
 
     // Internal helper function for saving settings
@@ -1593,14 +1835,8 @@ export async function showAppSettings() {
         eventBus.emit('ui:refresh-strings');
         
         // Re-render the current settings panel to update all labels
-        const activeTab = modalBody.querySelector('.settings-tab.active')?.dataset.tab || 'general';
-        showAppSettings();
-        
-        // Restore the active tab after re-render
-        setTimeout(() => {
-            const newTabBtn = document.querySelector(`.settings-tab[data-tab="${activeTab}"]`);
-            if (newTabBtn) newTabBtn.click();
-        }, 50);
+        const selectedSection = modalBody.querySelector('.settings-tab.active')?.dataset.section || 'workspace';
+        showAppSettings({ section: selectedSection });
 
         showToast(t("toast.language_updated"), "success");
       });
@@ -1730,10 +1966,6 @@ export async function showAppSettings() {
     if (terminalToggle) {
       terminalToggle.addEventListener("change", async (e) => {
         state.terminalIntegrationEnabled = e.target.checked;
-        const terminalConfigSection = document.getElementById("terminal-config-section");
-        if (terminalConfigSection) {
-          terminalConfigSection.style.display = state.terminalIntegrationEnabled ? "block" : "none";
-        }
         await saveSettingsImpl();
         eventBus.emit('ui:refresh-visibility');
         showToast(state.terminalIntegrationEnabled ? t("toast.terminal_enabled") : t("toast.terminal_disabled"), "success");
@@ -1756,7 +1988,7 @@ export async function showAppSettings() {
         state.themePreset = e.target.value;
         await saveSettingsImpl();
         eventBus.emit('ui:refresh-theme');
-        showToast(`Theme changed to ${THEME_PRESETS[state.themePreset].name}`, "success");
+        showToast(t('toast.theme_changed', { theme: THEME_PRESETS[state.themePreset].name }), "success");
       });
     }
 
@@ -1859,7 +2091,7 @@ export async function showAppSettings() {
 
         await saveSettingsImpl();
         updateStatusBar();
-        showToast(`Indent with tabs: ${state.indentWithTabs ? 'ON' : 'OFF'}`, "success");
+        showToast(t(state.indentWithTabs ? 'toast.indent_tabs_enabled' : 'toast.indent_tabs_disabled'), "success");
       });
     }
     // Handle Word Wrap
@@ -1911,7 +2143,7 @@ export async function showAppSettings() {
         state.showMinimap = e.target.checked;
         eventBus.emit('ui:refresh-editor');
         await saveSettingsImpl();
-        showToast(state.showMinimap ? "Minimap enabled" : "Minimap disabled", "success");
+        showToast(t(state.showMinimap ? 'toast.minimap_enabled' : 'toast.minimap_disabled'), "success");
       });
     }
 
@@ -1921,7 +2153,7 @@ export async function showAppSettings() {
       autocompleteToggle.addEventListener("change", async (e) => {
         state.autocompleteEnabled = e.target.checked;
         await saveSettingsImpl();
-        showToast(state.autocompleteEnabled ? "Autocomplete enabled" : "Autocomplete disabled", "success");
+        showToast(t(state.autocompleteEnabled ? 'toast.autocomplete_enabled' : 'toast.autocomplete_disabled'), "success");
       });
     }
 
@@ -1931,9 +2163,6 @@ export async function showAppSettings() {
     if (autoSaveToggle) {
       autoSaveToggle.addEventListener("change", async (e) => {
         state.autoSave = e.target.checked;
-        if (autoSaveDelayContainer) {
-          autoSaveDelayContainer.style.display = state.autoSave ? 'flex' : 'none';
-        }
         await saveSettingsImpl();
         showToast(t(state.autoSave ? "toast.autosave_enabled" : "toast.autosave_disabled"), "success");
       });
@@ -2031,6 +2260,15 @@ export async function showAppSettings() {
         showToast(t(state.showToasts ? "toast.toasts_enabled" : "toast.toasts_disabled"), "success");
       });
     }
+    const showOperationCenterToggle = document.getElementById("show-operation-center-toggle");
+    if (showOperationCenterToggle) {
+      showOperationCenterToggle.addEventListener("change", async (e) => {
+        state.showOperationCenter = e.target.checked;
+        syncOperationCenterVisibility();
+        await saveSettingsImpl();
+        showToast(t(state.showOperationCenter ? "toast.operation_center_enabled" : "toast.operation_center_disabled"), "success");
+      });
+    }
 
     // Handle PWA Install button
     const btnPwaInstall = document.getElementById("btn-pwa-install");
@@ -2057,9 +2295,6 @@ export async function showAppSettings() {
     if (aiToggle) {
       aiToggle.addEventListener("change", (e) => {
         state.aiIntegrationEnabled = e.target.checked;
-        if (aiConfigSection) {
-          aiConfigSection.style.display = state.aiIntegrationEnabled ? 'block' : 'none';
-        }
         saveSettingsImpl();
         showToast(t(state.aiIntegrationEnabled ? "toast.ai_enabled" : "toast.ai_disabled"), "success");
         eventBus.emit('ui:refresh-visibility');
@@ -2072,6 +2307,7 @@ export async function showAppSettings() {
     const localAiConfig = document.getElementById("local-ai-config");
     const cloudAiConfig = document.getElementById("cloud-ai-config");
     const hassAgentConfigSection = document.getElementById("hass-agent-config");
+    const aiTypeDescription = document.getElementById("ai-type-description");
 
     aiTypeRadios.forEach(radio => {
       radio.addEventListener("change", async (e) => {
@@ -2085,22 +2321,12 @@ export async function showAppSettings() {
         if (hassAgentConfigSection) hassAgentConfigSection.style.display = aiType === 'hass-agent' ? 'block' : 'none';
         if (aiType === 'hass-agent') void refreshHassAgents({ silent: true });
 
-        // Update radio button styling
-        aiTypeRadios.forEach(r => {
-          const label = r.closest('label');
-          if (label) {
-            if (r.value === aiType) {
-              label.style.background = 'var(--bg-secondary)';
-              label.style.borderColor = 'var(--accent-color)';
-            } else {
-              label.style.background = 'transparent';
-              label.style.borderColor = 'var(--border-color)';
-            }
-          }
-        });
+        if (aiTypeDescription) {
+          aiTypeDescription.textContent = t(`settings.ai.${aiType.replace('-', '_')}_hint`);
+        }
 
         await saveSettingsImpl();
-        showToast(`AI Type set to ${aiType === 'rule-based' ? 'Rule-based' : aiType === 'local-ai' ? 'Local AI' : aiType === 'hass-agent' ? 'Home Assistant Agent' : 'Cloud AI'}`, "success");
+        showToast(t('toast.ai_type_set', { type: aiType === 'rule-based' ? t('settings.ai_type_rule') : aiType === 'local-ai' ? t('settings.ai_type_local') : aiType === 'hass-agent' ? t('settings.ai_type_hass') : t('settings.ai_type_cloud') }), "success");
       });
     });
 
@@ -2236,35 +2462,55 @@ export async function showAppSettings() {
       });
     }
 
-    // Handle API Key inputs
-    const geminiKeyInput = document.getElementById("gemini-api-key");
-    if (geminiKeyInput) {
-      geminiKeyInput.addEventListener("change", (e) => {
-        state.geminiApiKey = e.target.value;
-        saveSettingsImpl();
-      });
-    }
+    const updateCredentialUi = (stateKey) => {
+      const saved = Boolean(state[stateKey]);
+      const status = modalBody.querySelector(`[data-secret-status="${stateKey}"]`);
+      const clear = modalBody.querySelector(`[data-clear-secret="${stateKey}"]`);
+      if (status) {
+        status.classList.toggle('is-saved', saved);
+        status.innerHTML = `<span class="ui-icon material-icons" aria-hidden="true">${saved ? 'lock' : 'lock_open'}</span><span>${t(saved ? 'settings.credentials.saved_hidden' : 'settings.credentials.not_saved')}</span>`;
+      }
+      if (clear) clear.disabled = !saved;
+    };
 
-    const openaiKeyInput = document.getElementById("openai-api-key");
-    if (openaiKeyInput) {
-      openaiKeyInput.addEventListener("change", (e) => {
-        state.openaiApiKey = e.target.value;
-        saveSettingsImpl();
+    const bindCredentialInput = (inputId, stateKey) => {
+      const input = document.getElementById(inputId);
+      if (!input) return;
+      input.addEventListener('change', async () => {
+        const replacement = input.value.trim();
+        if (!replacement) return;
+        state[stateKey] = replacement;
+        input.value = '';
+        input.placeholder = t('settings.credentials.replace_placeholder');
+        await saveSettingsImpl();
+        updateCredentialUi(stateKey);
+        showToast(t('settings.credentials.saved'), 'success');
       });
-    }
+    };
+
+    bindCredentialInput('gemini-api-key', 'geminiApiKey');
+    bindCredentialInput('openai-api-key', 'openaiApiKey');
+    bindCredentialInput('claude-api-key', 'claudeApiKey');
+
+    modalBody.querySelectorAll('[data-clear-secret]').forEach((button) => {
+      button.addEventListener('click', async () => {
+        const stateKey = button.dataset.clearSecret;
+        state[stateKey] = '';
+        const input = modalBody.querySelector(`[data-secret-key="${stateKey}"]`);
+        if (input) {
+          input.value = '';
+          input.placeholder = t('settings.credentials.enter_placeholder');
+        }
+        await saveSettingsImpl();
+        updateCredentialUi(stateKey);
+        showToast(t('settings.credentials.cleared'), 'success');
+      });
+    });
 
     const openaiBaseUrlInput = document.getElementById("openai-base-url");
     if (openaiBaseUrlInput) {
       openaiBaseUrlInput.addEventListener("change", (e) => {
         state.openaiBaseUrl = e.target.value.trim();
-        saveSettingsImpl();
-      });
-    }
-
-    const claudeKeyInput = document.getElementById("claude-api-key");
-    if (claudeKeyInput) {
-      claudeKeyInput.addEventListener("change", (e) => {
-        state.claudeApiKey = e.target.value;
         saveSettingsImpl();
       });
     }
@@ -2298,13 +2544,22 @@ export async function showAppSettings() {
           state.aiModel = readValue("claude-model-custom", CLOUD_PROVIDER_DEFAULT_MODELS.claude) || CLOUD_PROVIDER_DEFAULT_MODELS.claude;
         }
 
-        state.geminiApiKey = readValue("gemini-api-key", '');
-        state.openaiApiKey = readValue("openai-api-key", '');
+        state.geminiApiKey = readValue("gemini-api-key", state.geminiApiKey);
+        state.openaiApiKey = readValue("openai-api-key", state.openaiApiKey);
         state.openaiBaseUrl = readValue("openai-base-url", '');
-        state.claudeApiKey = readValue("claude-api-key", '');
+        state.claudeApiKey = readValue("claude-api-key", state.claudeApiKey);
 
         syncAllModelPickers();
         await saveSettingsImpl();
+        [
+          ['gemini-api-key', 'geminiApiKey'],
+          ['openai-api-key', 'openaiApiKey'],
+          ['claude-api-key', 'claudeApiKey'],
+        ].forEach(([inputId, stateKey]) => {
+          const input = document.getElementById(inputId);
+          if (input) input.value = '';
+          updateCredentialUi(stateKey);
+        });
         showToast(t("toast.ai_settings_applied"), "success");
       });
     }
@@ -2418,7 +2673,7 @@ export async function showAppSettings() {
           customSection.style.display = themeKey === "custom" ? "block" : "none";
         }
 
-        showToast(`Syntax theme: ${SYNTAX_THEMES[themeKey].name}`, "success");
+        showToast(t('toast.syntax_theme_changed', { theme: SYNTAX_THEMES[themeKey].name }), "success");
       });
     });
 
@@ -2470,7 +2725,7 @@ export async function showAppSettings() {
     if (btnClearCache) {
       btnClearCache.addEventListener("click", async () => {
         btnClearCache.disabled = true;
-        btnClearCache.textContent = "Clearing...";
+        btnClearCache.textContent = t('settings.cache.clearing');
         try {
           if ('serviceWorker' in navigator) {
             const regs = await navigator.serviceWorker.getRegistrations();
@@ -2483,9 +2738,9 @@ export async function showAppSettings() {
           window.location.reload(true);
         } catch (e) {
           console.error("Cache clear failed:", e);
-          showToast("Cache clear failed: " + e.message, "error");
+          showToast(t('toast.cache_clear_failed', { error: e.message }), "error");
           btnClearCache.disabled = false;
-          btnClearCache.textContent = "Clear & Reload";
+          btnClearCache.textContent = t('settings.cache.clear_reload');
         }
       });
     }
@@ -2499,17 +2754,17 @@ export async function showAppSettings() {
 
         // Show confirmation dialog
         const confirmed = await showConfirmDialogWithItems(
-            "Reset Application",
-            "Are you sure you want to reset the application? This will:",
+            t('settings.reset.title'),
+            t('settings.reset.confirm'),
             [
-                "Clear all settings and preferences",
-                "Reset theme to default",
-                "Clear recent files and favorites",
-                "Remove onboarding completion flag",
-                "Clear Git/Gitea credentials (optional)",
-                "Delete local repository (optional)"
+                t('settings.reset.clear_settings'),
+                t('settings.reset.theme'),
+                t('settings.reset.recent'),
+                t('settings.reset.onboarding'),
+                t('settings.reset.credentials'),
+                t('settings.reset.repository')
             ],
-            "This action cannot be undone, but your files will remain safe.",
+            t('settings.reset.warning'),
             true
         );
 
@@ -2520,23 +2775,23 @@ export async function showAppSettings() {
         const advancedModalBody = document.getElementById("modal-body");
         const advancedModalTitle = document.getElementById("modal-title");
 
-        advancedModalTitle.textContent = "Reset Options";
+        advancedModalTitle.textContent = t('settings.reset.options');
         advancedModalBody.innerHTML = `
           <div style="padding: 16px 0;">
             <div style="margin-bottom: 16px;">
               <label style="display: flex; align-items: center; cursor: pointer;">
                 <input type="checkbox" id="clear-credentials-check" style="margin-right: 8px;">
-                <span>Clear Git/Gitea credentials</span>
+                <span>${t('settings.reset.credentials')}</span>
               </label>
             </div>
             <div style="margin-bottom: 16px;">
               <label style="display: flex; align-items: center; cursor: pointer;">
                 <input type="checkbox" id="delete-repo-check" style="margin-right: 8px;">
-                <span>Delete local repository (.git folder)</span>
+                <span>${t('settings.reset.repository_folder')}</span>
               </label>
             </div>
             <div style="padding: 12px; background: var(--bg-tertiary); border-radius: 6px; font-size: 12px; color: var(--text-secondary);">
-              <strong>Note:</strong> Your configuration files will not be deleted. Only application settings will be reset.
+              <strong>${t('common.note')}:</strong> ${t('settings.reset.note')}
             </div>
           </div>
         `;
@@ -2567,13 +2822,13 @@ export async function showAppSettings() {
     if (pollingIntervalSlider && pollingIntervalValue) {
       pollingIntervalSlider.addEventListener("input", (e) => {
         const seconds = (parseInt(e.target.value) / 1000).toFixed(0);
-        pollingIntervalValue.textContent = `${seconds}s`;
+        pollingIntervalValue.textContent = t('settings.units.seconds_short', { count: seconds });
       });
 
       pollingIntervalSlider.addEventListener("change", async (e) => {
         state.pollingInterval = parseInt(e.target.value);
         await saveSettingsImpl();
-        showToast(`Polling interval set to ${(state.pollingInterval / 1000).toFixed(0)} seconds`, "success");
+        showToast(t('toast.polling_interval_set', { seconds: (state.pollingInterval / 1000).toFixed(0) }), "success");
       });
     }
 
@@ -2583,13 +2838,13 @@ export async function showAppSettings() {
     if (remoteFetchIntervalSlider && remoteFetchIntervalValue) {
       remoteFetchIntervalSlider.addEventListener("input", (e) => {
         const seconds = (parseInt(e.target.value) / 1000).toFixed(0);
-        remoteFetchIntervalValue.textContent = `${seconds}s`;
+        remoteFetchIntervalValue.textContent = t('settings.units.seconds_short', { count: seconds });
       });
 
       remoteFetchIntervalSlider.addEventListener("change", async (e) => {
         state.remoteFetchInterval = parseInt(e.target.value);
         await saveSettingsImpl();
-        showToast(`Remote fetch interval set to ${(state.remoteFetchInterval / 1000).toFixed(0)} seconds`, "success");
+        showToast(t('toast.remote_fetch_interval_set', { seconds: (state.remoteFetchInterval / 1000).toFixed(0) }), "success");
       });
     }
 
@@ -2598,7 +2853,7 @@ export async function showAppSettings() {
     const fileCacheSizeValue = document.getElementById("file-cache-size-value");
     if (fileCacheSizeSlider && fileCacheSizeValue) {
       fileCacheSizeSlider.addEventListener("input", (e) => {
-        fileCacheSizeValue.textContent = `${e.target.value} files`;
+        fileCacheSizeValue.textContent = t('settings.units.files', { count: e.target.value });
       });
 
       fileCacheSizeSlider.addEventListener("change", async (e) => {
@@ -2634,6 +2889,97 @@ export async function showAppSettings() {
         window.dispatchEvent(event);
       });
     }
+
+    const dependencySatisfied = ({ dependsOn = [], dependencyMode = 'all' }) => {
+      if (!dependsOn.length) return true;
+      const values = dependsOn.map((id) => Boolean(modalBody.querySelector(`#${id}`)?.checked));
+      return dependencyMode === 'any' ? values.some(Boolean) : values.every(Boolean);
+    };
+
+    const controlHasDefault = (control, metadata) => {
+      if (control.type === 'checkbox') return control.checked === metadata.defaultValue;
+      return String(control.value) === String(metadata.defaultValue);
+    };
+
+    const defaultLabel = (control, metadata) => {
+      if (control.type === 'checkbox') {
+        return metadata.defaultValue ? t('settings.meta.on') : t('settings.meta.off');
+      }
+      if (control.tagName === 'SELECT') {
+        return [...control.options].find((option) => option.value === String(metadata.defaultValue))?.textContent?.trim()
+          || String(metadata.defaultValue);
+      }
+      return `${metadata.defaultValue}${metadata.suffix || ''}`;
+    };
+
+    Object.entries(SETTINGS_CONTROL_METADATA).forEach(([controlId, metadata]) => {
+      const control = modalBody.querySelector(`#${controlId}`);
+      const row = control?.closest('.git-settings-section > div');
+      if (!control || !row || row.querySelector(`.setting-meta[data-control-id="${controlId}"]`)) return;
+      row.classList.add('setting-row-decorated');
+      const meta = document.createElement('div');
+      meta.className = 'setting-meta';
+      meta.dataset.controlId = controlId;
+      meta.innerHTML = `
+        <span class="setting-meta-default">${t('settings.meta.default', { value: escapeHtml(defaultLabel(control, metadata)) })}</span>
+        <span class="setting-meta-apply">${t(metadata.apply === 'reload' ? 'settings.meta.next_reload' : 'settings.meta.immediate')}</span>
+        <span class="setting-disabled-reason" id="${controlId}-disabled-reason" hidden></span>
+        <button type="button" class="setting-reset ui-button ui-icon-button" title="${t('settings.meta.reset')}" aria-label="${t('settings.meta.reset')}">
+          <span class="ui-icon material-icons" aria-hidden="true">restart_alt</span>
+        </button>
+      `;
+      row.appendChild(meta);
+      meta.querySelector('.setting-reset').addEventListener('click', () => {
+        if (control.type === 'checkbox') control.checked = metadata.defaultValue;
+        else control.value = String(metadata.defaultValue);
+        control.dispatchEvent(new Event('input', { bubbles: true }));
+        control.dispatchEvent(new Event('change', { bubbles: true }));
+        control.focus({ preventScroll: true });
+      });
+    });
+
+    SETTINGS_DEPENDENCY_GROUPS.forEach((group) => {
+      const container = modalBody.querySelector(group.selector);
+      if (!container || container.querySelector(':scope > .setting-dependency-notice')) return;
+      const notice = document.createElement('div');
+      notice.className = 'setting-dependency-notice';
+      notice.innerHTML = `<span class="ui-icon material-icons" aria-hidden="true">lock</span><span>${t(group.reasonKey)}</span>`;
+      container.prepend(notice);
+    });
+
+    const updateSettingsMetadata = () => {
+      Object.entries(SETTINGS_CONTROL_METADATA).forEach(([controlId, metadata]) => {
+        const control = modalBody.querySelector(`#${controlId}`);
+        const meta = modalBody.querySelector(`.setting-meta[data-control-id="${controlId}"]`);
+        if (!control || !meta) return;
+        const enabled = dependencySatisfied(metadata);
+        const reason = meta.querySelector('.setting-disabled-reason');
+        control.disabled = !enabled;
+        control.toggleAttribute('aria-describedby', !enabled);
+        if (!enabled) control.setAttribute('aria-describedby', `${controlId}-disabled-reason`);
+        reason.hidden = enabled;
+        reason.textContent = enabled ? '' : t('settings.meta.unavailable', { reason: t(metadata.reasonKey) });
+        meta.closest('.setting-row-decorated')?.classList.toggle('setting-dependency-disabled', !enabled);
+        const reset = meta.querySelector('.setting-reset');
+        reset.disabled = !enabled || controlHasDefault(control, metadata);
+      });
+
+      SETTINGS_DEPENDENCY_GROUPS.forEach((group) => {
+        const container = modalBody.querySelector(group.selector);
+        if (!container) return;
+        const enabled = dependencySatisfied(group);
+        container.classList.toggle('setting-dependency-disabled', !enabled);
+        const notice = container.querySelector(':scope > .setting-dependency-notice');
+        if (notice) notice.hidden = enabled;
+        container.querySelectorAll('input, select, button').forEach((control) => {
+          if (!control.closest('.setting-meta')) control.disabled = !enabled;
+        });
+      });
+    };
+
+    modalBody.addEventListener('input', updateSettingsMetadata);
+    modalBody.addEventListener('change', updateSettingsMetadata);
+    updateSettingsMetadata();
   }
 
 // Helper function for confirmation dialogs with list items (local variant)

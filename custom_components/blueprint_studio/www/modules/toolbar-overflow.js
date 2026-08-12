@@ -1,3 +1,5 @@
+import { t } from './translations.js?v=2.5.270';
+
 const OVERFLOW_CLASS = 'toolbar-overflow-hidden';
 const MENU_ITEM_SELECTOR = '.toolbar-overflow-menu-item';
 
@@ -31,6 +33,11 @@ export function initToolbarOverflow(root = document) {
   const menu = root.getElementById('toolbar-overflow-menu');
   if (!toolbar || !overflowGroup || !trigger || !menu) return;
   initialized = true;
+  const moreCommandsLabel = t('toolbar.more_commands');
+  overflowGroup.setAttribute('aria-label', moreCommandsLabel);
+  trigger.title = moreCommandsLabel;
+  trigger.setAttribute('aria-label', moreCommandsLabel);
+  menu.setAttribute('aria-label', t('toolbar.menu_label'));
 
   const commandGroups = [...toolbar.querySelectorAll(':scope > .toolbar-group[data-toolbar-priority]')];
   let hiddenGroups = [];
@@ -67,11 +74,11 @@ export function initToolbarOverflow(root = document) {
     header.setAttribute('role', 'presentation');
     const heading = document.createElement('span');
     heading.className = 'toolbar-overflow-menu-heading';
-    heading.textContent = commandParts(trigger).label || 'More commands';
+    heading.textContent = commandParts(trigger).label || t('toolbar.more_commands');
     const closeButton = document.createElement('button');
     closeButton.type = 'button';
     closeButton.className = 'toolbar-overflow-menu-close';
-    closeButton.setAttribute('aria-label', `Close ${heading.textContent.toLowerCase()}`);
+    closeButton.setAttribute('aria-label', t('toolbar.close_menu', { label: heading.textContent.toLowerCase() }));
     closeButton.innerHTML = '<span class="ui-icon material-icons" aria-hidden="true">close</span>';
     closeButton.addEventListener('click', () => closeMenu(true));
     header.append(heading, closeButton);
