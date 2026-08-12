@@ -1,4 +1,5 @@
 """Lifecycle coverage for entry-owned backend resources."""
+
 from __future__ import annotations
 
 import asyncio
@@ -30,7 +31,7 @@ class _WebSocket:
         self.closed = True
 
 
-def test_terminal_manager_closes_active_sessions(monkeypatch):
+async def test_terminal_manager_closes_active_sessions(monkeypatch):
     """Unload closes each WebSocket, reader, file descriptor, and child PTY."""
     module = _load_terminal_manager_module()
     removed_readers = []
@@ -46,7 +47,7 @@ def test_terminal_manager_closes_active_sessions(monkeypatch):
     monkeypatch.setattr(module.os, "waitpid", lambda pid, flags: None)
     monkeypatch.setattr(module.os, "close", closed_fds.append)
 
-    asyncio.run(manager.async_close())
+    await manager.async_close()
 
     assert removed_readers == [42]
     assert killed == [(1234, module.signal.SIGTERM)]

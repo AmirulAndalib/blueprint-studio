@@ -91,15 +91,23 @@ class FrontendContractTests(unittest.TestCase):
         cls.ui_module = UI_MODULE.read_text(encoding="utf-8")
         cls.dialog_manager = DIALOG_MANAGER.read_text(encoding="utf-8")
         cls.feedback_service = FEEDBACK_SERVICE.read_text(encoding="utf-8")
-        cls.component_showcase = COMPONENT_SHOWCASE.read_text(encoding="utf-8")
-        cls.component_showcase_module = COMPONENT_SHOWCASE_MODULE.read_text(
-            encoding="utf-8"
+        cls.component_showcase = cls._read_local_artifact(COMPONENT_SHOWCASE)
+        cls.component_showcase_module = cls._read_local_artifact(
+            COMPONENT_SHOWCASE_MODULE
         )
-        cls.component_showcase_styles = COMPONENT_SHOWCASE_STYLES.read_text(
-            encoding="utf-8"
+        cls.component_showcase_styles = cls._read_local_artifact(
+            COMPONENT_SHOWCASE_STYLES
         )
-        cls.parity_matrix = PARITY_MATRIX.read_text(encoding="utf-8")
-        cls.modal_inventory = MODAL_INVENTORY.read_text(encoding="utf-8")
+        cls.parity_matrix = cls._read_local_artifact(PARITY_MATRIX)
+        cls.modal_inventory = cls._read_local_artifact(MODAL_INVENTORY)
+
+    @staticmethod
+    def _read_local_artifact(path):
+        return path.read_text(encoding="utf-8") if path.exists() else None
+
+    def _require_local_artifacts(self, *artifacts):
+        if any(artifact is None for artifact in artifacts):
+            self.skipTest("internal modernization evidence is not shipped in releases")
 
     def test_shared_modal_has_accessible_dialog_contract(self):
         modal = re.search(
@@ -2846,6 +2854,7 @@ class FrontendContractTests(unittest.TestCase):
             self.assertIn(selector, styles)
 
     def test_component_showcase_reuses_shared_production_boundaries(self):
+        self._require_local_artifacts(self.component_showcase)
         for stylesheet in (
             "./styles/modules/base.css",
             "./styles/modules/primitives.css",
@@ -2882,6 +2891,9 @@ class FrontendContractTests(unittest.TestCase):
         self.assertNotRegex(self.component_showcase, r'\sstyle="')
 
     def test_component_showcase_has_accessible_interactive_states(self):
+        self._require_local_artifacts(
+            self.component_showcase, self.component_showcase_module
+        )
         for contract in (
             'role="group" aria-label="Showcase theme"',
             'role="tablist" aria-label="Workspace views"',
@@ -2909,6 +2921,7 @@ class FrontendContractTests(unittest.TestCase):
         self.assertIn("returnFocus: dialogTrigger", self.component_showcase_module)
 
     def test_component_showcase_has_stable_responsive_layout(self):
+        self._require_local_artifacts(self.component_showcase_styles)
         for contract in (
             "grid-template-columns: repeat(2, minmax(0, 1fr));",
             "grid-template-columns: repeat(3, minmax(0, 1fr));",
@@ -3358,6 +3371,7 @@ class FrontendContractTests(unittest.TestCase):
         )
 
     def test_modal_inventory_covers_dialog_implementation_families(self):
+        self._require_local_artifacts(self.modal_inventory)
         required_sources = {
             "ui.js",
             "file-operations-ui.js",
@@ -3376,6 +3390,7 @@ class FrontendContractTests(unittest.TestCase):
             self.assertIn(source, self.modal_inventory)
 
     def test_parity_matrix_covers_every_feature_family(self):
+        self._require_local_artifacts(self.parity_matrix)
         required_sections = {
             "Workspace And Editor",
             "Local Files And Search",
@@ -3396,6 +3411,7 @@ class FrontendContractTests(unittest.TestCase):
         self.assertGreaterEqual(len(rows), 60)
 
     def test_parity_matrix_assigns_owner_and_proof_to_every_feature_family(self):
+        self._require_local_artifacts(self.parity_matrix)
         self.assertIn("## Ownership And Proof Contract", self.parity_matrix)
         required_domains = {
             "Workspace and editor",
