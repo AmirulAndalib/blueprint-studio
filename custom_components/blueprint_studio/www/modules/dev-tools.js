@@ -1,9 +1,9 @@
 /** DEV-TOOLS.JS | Purpose: HA Developer Tools floating panel — Actions / Template / States / Config */
-import { API_BASE } from './constants.js?v=2.5.270';
+import { API_BASE } from './constants.js';
 import { fetchWithAuth } from './api.js';
-import { HA_ENTITIES, HA_SERVICES } from './ha-autocomplete.js?v=2.5.270';
-import { startOperationFeedback } from './feedback-service.js?v=2.5.270';
-import { t, tp } from './translations.js?v=2.5.270';
+import { HA_ENTITIES, HA_SERVICES } from './ha-autocomplete.js';
+import { startOperationFeedback } from './feedback-service.js';
+import { t, tp } from './translations.js';
 
 const PANEL_ID = 'bps-dev-tools-panel';
 

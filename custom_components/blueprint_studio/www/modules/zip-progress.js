@@ -1,9 +1,9 @@
-import { t } from './translations.js?v=2.5.270';
+import { t } from './translations.js';
 /** ZIP-PROGRESS.JS | Purpose: Non-blocking transfer progress UI. */
 import { getAuthToken } from './api.js';
-import { API_BASE } from './constants.js?v=2.5.270';
+import { API_BASE } from './constants.js';
 import { formatBytes } from './utils.js';
-import { removeOperationFeedback, updateOperationFeedback } from './feedback-service.js?v=2.5.270';
+import { removeOperationFeedback, updateOperationFeedback } from './feedback-service.js';
 
 function createTransferProgressId(prefix) {
   if (window.crypto?.randomUUID) return window.crypto.randomUUID();

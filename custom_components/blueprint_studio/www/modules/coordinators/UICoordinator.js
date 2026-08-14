@@ -7,10 +7,10 @@
 import { state, elements } from '../state.js';
 import { eventBus } from '../event-bus.js';
 import { fetchWithAuth } from '../api.js';
-import { API_BASE } from '../constants.js?v=2.5.270';
+import { API_BASE } from '../constants.js';
 import { triggerUpload, triggerFolderUpload, downloadFolder, downloadFileByPath, handleFileUpload, handleFolderUpload } from '../downloads-uploads.js';
 import { setThemePreset } from '../ui.js';
-import { saveSettings, updateShowHiddenButton } from '../settings.js?v=2.5.270';
+import { saveSettings, updateShowHiddenButton } from '../settings.js';
 import { renderFileTree, debouncedRenderFileTree, cancelPendingSearch, updateExplorerSearchUI, updateExplorerFilterIcon } from '../file-tree.js';
 import { updateSearchHighlights, updateMatchStatus, doReplace, doReplaceAll, doFind, openSearchWidget } from '../search.js';
 import { downloadCurrentFile } from '../downloads-uploads.js';
@@ -18,18 +18,18 @@ import { setToolbarControlLabel, updateToolbarState } from '../toolbar.js';
 import { copyToClipboard as copyToClipboardUtil, getTruePath as getTruePath, enableLongPressContextMenu } from '../utils.js';
 
 import { validateByFileType } from '../file-operations.js';
-import { t } from '../translations.js?v=2.5.270';
-import { initProblems, publishValidationResult, setValidationRunning } from '../problems.js?v=2.5.270';
-import { startOperationFeedback, updateOperationFeedback } from '../feedback-service.js?v=2.5.270';
+import { t } from '../translations.js';
+import { initProblems, publishValidationResult, setValidationRunning } from '../problems.js';
+import { startOperationFeedback, updateOperationFeedback } from '../feedback-service.js';
 
 import { performGlobalSearch, performGlobalReplace, triggerGlobalSearch, initGlobalSearchWindowFunctions } from '../global-search.js';
 import { toggleMarkdownPreview, renderAssetPreview, cleanupMarkdownPreview, handleMarkdownChange } from '../asset-preview.js';
-import { toggleTerminal } from '../terminal.js?v=2.5.270';
-import { toggleAISidebar, sendAIChatMessage, updateAIVisibility } from '../ai-ui.js?v=2.5.270';
+import { toggleTerminal } from '../terminal.js';
+import { toggleAISidebar, sendAIChatMessage, updateAIVisibility } from '../ai-ui.js';
 
 import { updateBreadcrumb, expandFolderInTree } from '../breadcrumb.js';
-import { showUserGuide } from '../user-guide.js?v=2.5.270';
-import { closeDialog, openDialog } from '../dialog-manager.js?v=2.5.270';
+import { showUserGuide } from '../user-guide.js';
+import { closeDialog, openDialog } from '../dialog-manager.js';
 // Removed redundant import: import { renderAssetPreview } from '../asset-preview.js';
 
 async function runGithubSupportAction({ action, label, target, successToast, fallbackUrl }) {

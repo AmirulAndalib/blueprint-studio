@@ -1,4 +1,4 @@
-import { t, tp } from './translations.js?v=2.5.270';
+import { t, tp } from './translations.js';
 /** DIFF-REVIEW.JS | Shared presentation primitives for read-only change review. */
 
 export const DEFAULT_DIFF_RENDER_LIMIT = 1500;

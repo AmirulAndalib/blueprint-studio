@@ -5,8 +5,8 @@ import {
   navigateSftp, 
   parseSftpPath,
   isSftpPath
-} from './sftp.js?v=2.5.270';
-import { setOverflowTooltip } from './tooltip.js?v=2.5.270';
+} from './sftp.js';
+import { setOverflowTooltip } from './tooltip.js';
 
 function bindBreadcrumbLink(element, label, action) {
   element.type = "button";

@@ -6,8 +6,8 @@
 
 import { state, elements } from '../state.js';
 import { eventBus } from '../event-bus.js';
-import { t } from '../translations.js?v=2.5.270';
-import { API_BASE, IMAGE_EXTENSIONS, VIDEO_EXTENSIONS, AUDIO_EXTENSIONS } from '../constants.js?v=2.5.270';
+import { t } from '../translations.js';
+import { API_BASE, IMAGE_EXTENSIONS, VIDEO_EXTENSIONS, AUDIO_EXTENSIONS } from '../constants.js';
 import { fetchWithAuth } from '../api.js';
 import { 
     renderFileTree as renderFileTreeImpl,
@@ -17,8 +17,8 @@ import {
     startInlineExplorerRename
 } from '../file-tree.js';
 import { showToast, setButtonLoading, showConfirmDialog } from '../ui.js';
-import { classifyTreeError, renderTreeViewState } from '../tree-view-state.js?v=2.5.270';
-import { startOperationFeedback } from '../feedback-service.js?v=2.5.270';
+import { classifyTreeError, renderTreeViewState } from '../tree-view-state.js';
+import { startOperationFeedback } from '../feedback-service.js';
 
 import { 
     isTextFile, 
@@ -32,7 +32,7 @@ import {
     isSftpPath as isSftpPathImpl,
     parseSftpPath as parseSftpPathImpl,
     openSftpFile as openSftpFileImpl
-} from '../sftp.js?v=2.5.270';
+} from '../sftp.js';
 import {
     saveFile as saveFileImpl,
     createFile as createFileImpl,

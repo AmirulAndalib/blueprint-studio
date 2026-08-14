@@ -4,19 +4,19 @@ import { state } from './state.js';
 import { copyToClipboard, ensureDiffLibrariesLoaded } from './utils.js';
 import { eventBus } from './event-bus.js';
 import { fetchWithAuth } from './api.js';
-import { API_BASE } from './constants.js?v=2.5.270';
-import { t, tp } from './translations.js?v=2.5.270';
-import { saveSettings } from './settings.js?v=2.5.270';
+import { API_BASE } from './constants.js';
+import { t, tp } from './translations.js';
+import { saveSettings } from './settings.js';
 import {
   AI_SIDEBAR_MIN_WIDTH,
   constrainAiSidebarWidth,
   getAiSidebarMaxWidth,
   isWorkspaceDrawerMode,
-} from './workspace-layout.js?v=2.5.270';
-import { captureEditorViewports, scheduleEditorViewportRestore } from './editor-viewport.js?v=2.5.270';
-import { createDiffReviewToolbar, createDiffToggle, markWhitespaceOnlyChanges, renderTextDiff } from './diff-review.js?v=2.5.270';
-import { startOperationFeedback } from './feedback-service.js?v=2.5.270';
-import { MAX_AI_CHAT_HISTORY, appendBoundedHistory } from './history-limits.js?v=2.5.270';
+} from './workspace-layout.js';
+import { captureEditorViewports, scheduleEditorViewportRestore } from './editor-viewport.js';
+import { createDiffReviewToolbar, createDiffToggle, markWhitespaceOnlyChanges, renderTextDiff } from './diff-review.js';
+import { startOperationFeedback } from './feedback-service.js';
+import { MAX_AI_CHAT_HISTORY, appendBoundedHistory } from './history-limits.js';
 
 let aiSidebarInitialized = false;
 let activeAiRequest = null;

@@ -2,11 +2,11 @@
 import { state, elements } from './state.js';
 import { eventBus } from './event-bus.js';
 import { validateYaml, validateByFileType } from './file-operations.js';
-import { homeAssistantHint, HA_ENTITIES } from './ha-autocomplete.js?v=2.5.270';
-import { initCompletionDetails, updateCompletionDetails } from './completion-details.js?v=2.5.270';
-import { enableSplitView, disableSplitView } from './split-view.js?v=2.5.270';
+import { homeAssistantHint, HA_ENTITIES } from './ha-autocomplete.js';
+import { initCompletionDetails, updateCompletionDetails } from './completion-details.js';
+import { enableSplitView, disableSplitView } from './split-view.js';
 import { showToast } from './ui.js';
-import { t } from './translations.js?v=2.5.270';
+import { t } from './translations.js';
 import { copyToClipboard } from './utils.js';
 
 // CodeMirror is loaded globally via script tags

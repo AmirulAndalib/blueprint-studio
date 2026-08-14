@@ -1,12 +1,12 @@
 /** GIT-UI.JS | Purpose: * Handles all UI rendering and user interactions for the Git integration panel. */
 import { state, elements, gitState, giteaState } from './state.js';
 import { isTextFile } from './utils.js';
-import { t } from './translations.js?v=2.5.270';
+import { t } from './translations.js';
 import { eventBus } from './event-bus.js';
-import { saveSettings } from './settings.js?v=2.5.270';
+import { saveSettings } from './settings.js';
 import { refreshActivityRail } from './activity-rail.js';
-import { renderRepositoryContext } from './context-indicators.js?v=2.5.270';
-import { bindSourceControlRecovery, renderSourceControlRecovery } from './source-control-recovery.js?v=2.5.270';
+import { renderRepositoryContext } from './context-indicators.js';
+import { bindSourceControlRecovery, renderSourceControlRecovery } from './source-control-recovery.js';
 import {
   clearCommitMessage,
   captureSourceControlView,
@@ -15,7 +15,7 @@ import {
   renderSourceControlFiles,
   scheduleSourceControlViewRestore,
   updateCommitComposer,
-} from './source-control-view.js?v=2.5.270';
+} from './source-control-view.js';
 import {
   showToast,
   showConfirmDialog,
@@ -34,7 +34,7 @@ import {
   forcePush,
   hardReset,
   gitRepairIndex
-} from './git-operations.js?v=2.5.270';
+} from './git-operations.js';
 
 /**
  * Updates the Git panel UI with current status
@@ -64,7 +64,7 @@ export function updateGitPanel() {
   refreshActivityRail();
 
   renderRepositoryContext(panel, 'GitHub', gitState, () => {
-    import('./git-operations.js?v=2.5.270').then(module => module.showBranchManager());
+    import('./git-operations.js').then(module => module.showBranchManager());
   });
 
   // Remove any existing sync indicators to prevent duplicates

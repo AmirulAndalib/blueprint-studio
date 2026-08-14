@@ -3,13 +3,13 @@
  * "Use Blueprint" — renders a beginner-friendly form to instantiate a blueprint
  * as a ready-to-use automation YAML, then saves it to automations.yaml or a new file.
  */
-import { API_BASE } from './constants.js?v=2.5.270';
+import { API_BASE } from './constants.js';
 import { fetchWithAuth } from './api.js';
 import { showToast } from './ui.js';
-import { t } from './translations.js?v=2.5.270';
+import { t } from './translations.js';
 import { eventBus } from './event-bus.js';
 import { state } from './state.js';
-import { startOperationFeedback } from './feedback-service.js?v=2.5.270';
+import { startOperationFeedback } from './feedback-service.js';
 
 let _weEnabledSplitView = false;
 let _mobileOverlayEl = null;

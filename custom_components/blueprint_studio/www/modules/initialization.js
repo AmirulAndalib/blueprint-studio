@@ -1,6 +1,6 @@
 /** INITIALIZATION.JS | Purpose: * Handles complete application initialization including DOM element caching, */
 
-import { API_BASE } from './constants.js?v=2.5.270';
+import { API_BASE } from './constants.js';
 import { eventBus } from './event-bus.js';
 
 import {
@@ -15,7 +15,7 @@ import {
   defineHAYamlMode,
   defineCSVMode,
   defineShowWhitespaceMode
-} from './ha-autocomplete.js?v=2.5.270';
+} from './ha-autocomplete.js';
 
 import {
   state,
@@ -43,7 +43,7 @@ import {
   isMobile
 } from './utils.js';
 
-import { t, initTranslations, refreshAllUIStrings } from './translations.js?v=2.5.270';
+import { t, initTranslations, refreshAllUIStrings } from './translations.js';
 
 
 import {
@@ -58,7 +58,7 @@ import {
 
 import {
   initResizeHandle
-} from './resize.js?v=2.5.270';
+} from './resize.js';
 
 import {
   initStatusBarEvents
@@ -85,17 +85,17 @@ import {
   parseSftpPath,
   uploadSftpFile,
   refreshSftp
-} from './sftp.js?v=2.5.270';
+} from './sftp.js';
 
 import {
   loadSettings,
   saveSettings,
   updateShowHiddenButton
-} from './settings.js?v=2.5.270';
+} from './settings.js';
 
 import {
   showAppSettings
-} from './settings-ui.js?v=2.5.270';
+} from './settings-ui.js';
 
 import {
   toggleSelectionMode,
@@ -117,7 +117,7 @@ import {
   gitInit,
   gitGetRemotes,
   gitSetCredentials
-} from "./git-operations.js?v=2.5.270";
+} from "./git-operations.js";
 
 import {
   gitAddRemote,
@@ -130,41 +130,41 @@ import {
 import {
   giteaStatus,
   giteaCreateRepo
-} from "./gitea-integration.js?v=2.5.270";
+} from "./gitea-integration.js";
 
 import {
   initResponsiveSplitView,
   updateResponsiveSplitView,
   updateSplitViewButtons
-} from './split-view.js?v=2.5.270';
+} from './split-view.js';
 import {
   hideSidebar,
   showSidebar,
   syncActivityState
 } from './sidebar.js';
 import { initAiDiffListener, enqueueAiDiff } from './git-diff.js';
-import { initializeEventHandlers } from './coordinators/index.js?v=2.5.270';
+import { initializeEventHandlers } from './coordinators/index.js';
 import { 
   isTextFile, 
   copyToClipboard 
 } from './utils.js';
 import { initializeToolbarControls, observeIconButtonAccessibility, updateToolbarState } from './toolbar.js';
 import { updateStatusBar } from './status-bar.js';
-import { initTooltips } from './tooltip.js?v=2.5.270';
-import { initToolbarOverflow } from './toolbar-overflow.js?v=2.5.270';
-import { initEditorWorkflow } from './editor-workflow.js?v=2.5.270';
+import { initTooltips } from './tooltip.js';
+import { initToolbarOverflow } from './toolbar-overflow.js';
+import { initEditorWorkflow } from './editor-workflow.js';
 import { initActivityRail } from './activity-rail.js';
-import { initPhoneNavigation } from './phone-navigation.js?v=2.5.270';
+import { initPhoneNavigation } from './phone-navigation.js';
 import {
   captureEditorViewports,
   scheduleEditorViewportRestore,
-} from './editor-viewport.js?v=2.5.270';
+} from './editor-viewport.js';
 import {
   initViewportEnvironment,
   initWorkspaceMode,
   isWorkspaceDrawerMode,
   refreshViewportEnvironment,
-} from './workspace-layout.js?v=2.5.270';
+} from './workspace-layout.js';
 
 let isInitializing = false;
 let hasInitialized = false;

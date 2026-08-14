@@ -1,4 +1,4 @@
-import { t, tp } from './translations.js?v=2.5.270';
+import { t, tp } from './translations.js';
 /** SEARCH.JS | Purpose: * Handles in-editor find and replace functionality within a single file. */
 import { state, elements } from './state.js';
 import { showToast } from './ui.js';

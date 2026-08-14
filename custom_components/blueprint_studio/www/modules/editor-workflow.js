@@ -2,7 +2,7 @@
 import { state } from './state.js';
 import { eventBus } from './event-bus.js';
 import { getFileIcon } from './utils.js';
-import { isWorkspaceDrawerMode } from './workspace-layout.js?v=2.5.270';
+import { isWorkspaceDrawerMode } from './workspace-layout.js';
 
 const COMMAND_IDS = [
   'btn-save', 'btn-save-all', 'btn-format', 'btn-validate',

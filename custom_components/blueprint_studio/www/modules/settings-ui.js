@@ -1,9 +1,9 @@
 /** SETTINGS-UI.JS | Purpose: * Provides the settings panel UI for configuring all Blueprint Studio options. */
 import { state, elements } from './state.js';
-import { saveSettings } from './settings.js?v=2.5.270';
+import { saveSettings } from './settings.js';
 import { fetchWithAuth } from './api.js';
 import { eventBus } from './event-bus.js';
-import { API_BASE, THEME_PRESETS, ACCENT_COLORS, SYNTAX_THEMES } from './constants.js?v=2.5.270';
+import { API_BASE, THEME_PRESETS, ACCENT_COLORS, SYNTAX_THEMES } from './constants.js';
 import {
   activateSharedModal,
   deactivateSharedModal,
@@ -12,9 +12,9 @@ import {
   setButtonLoading
 } from './ui.js';
 import { updateStatusBar } from './status-bar.js';
-import { t, tp, initTranslations } from './translations.js?v=2.5.270';
-import { showAddConnectionDialog, showEditConnectionDialog, deleteConnection } from './sftp.js?v=2.5.270';
-import { startOperationFeedback, syncOperationCenterVisibility } from './feedback-service.js?v=2.5.270';
+import { t, tp, initTranslations } from './translations.js';
+import { showAddConnectionDialog, showEditConnectionDialog, deleteConnection } from './sftp.js';
+import { startOperationFeedback, syncOperationCenterVisibility } from './feedback-service.js';
 
 const CUSTOM_MODEL_OPTION_VALUE = "__custom__";
 
@@ -1555,12 +1555,12 @@ export async function showAppSettings({ section = 'workspace', returnFocus = nul
                 </button>
             </div>
 
-            <div class="git-settings-label" style="margin-top: 20px;">Frontend Cache</div>
+            <div class="git-settings-label" style="margin-top: 20px;">PWA Data</div>
 
             <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid var(--divider-color);">
                 <div style="flex: 1;">
-                    <div style="font-weight: 500; margin-bottom: 4px;">Clear Frontend Cache</div>
-                    <div style="font-size: 12px; color: var(--text-secondary);">Unregister Service Worker, purge CacheStorage, and hard-reload. Fixes stale UI after updates.</div>
+                    <div style="font-weight: 500; margin-bottom: 4px;">Reset PWA Data</div>
+                    <div style="font-size: 12px; color: var(--text-secondary);">Removes legacy Blueprint Studio caches and reloads the network-only PWA.</div>
                 </div>
                 <button class="btn-secondary" id="btn-clear-frontend-cache" style="padding: 6px 12px; font-size: 12px; white-space: nowrap; margin-left: 12px;">
                     Clear &amp; Reload
@@ -2729,11 +2729,19 @@ export async function showAppSettings({ section = 'workspace', returnFocus = nul
         try {
           if ('serviceWorker' in navigator) {
             const regs = await navigator.serviceWorker.getRegistrations();
-            await Promise.all(regs.map(r => r.unregister()));
+            await Promise.all(
+              regs
+                .filter(r => new URL(r.scope).pathname.startsWith('/blueprint_studio/'))
+                .map(r => r.unregister()),
+            );
           }
           if ('caches' in window) {
             const keys = await caches.keys();
-            await Promise.all(keys.map(k => caches.delete(k)));
+            await Promise.all(
+              keys
+                .filter(k => k.startsWith('blueprint-studio-'))
+                .map(k => caches.delete(k)),
+            );
           }
           window.location.reload(true);
         } catch (e) {

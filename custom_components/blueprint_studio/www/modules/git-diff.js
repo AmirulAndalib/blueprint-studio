@@ -1,9 +1,9 @@
-import { t, tp } from './translations.js?v=2.5.270';
+import { t, tp } from './translations.js';
 /** GIT-DIFF.JS | Purpose: * Visualizes git diffs and commit history. Shows file changes, commit details, */
 import { state, elements, gitState, giteaState } from './state.js';
 import { fetchWithAuth } from './api.js';
 import { eventBus } from './event-bus.js';
-import { API_BASE } from './constants.js?v=2.5.270';
+import { API_BASE } from './constants.js';
 import {
   showToast,
   showModal,
@@ -12,10 +12,10 @@ import {
   deactivateSharedModal
 } from './ui.js';
 import { getEditorMode, ensureDiffLibrariesLoaded } from './utils.js';
-import { isGitEnabled } from './git-operations.js?v=2.5.270';
+import { isGitEnabled } from './git-operations.js';
 import { revealAndOpenFile as _revealAndOpenFile, showNavIndicator } from './file-nav-helper.js';
-import { createTextDiffReview, getRawDiffRows } from './diff-review.js?v=2.5.270';
-import { startOperationFeedback } from './feedback-service.js?v=2.5.270';
+import { createTextDiffReview, getRawDiffRows } from './diff-review.js';
+import { startOperationFeedback } from './feedback-service.js';
 
 let _aiDiffQueue = [];
 let _aiDiffActive = false;

@@ -1,11 +1,11 @@
 /** USER-GUIDE.JS | Purpose: Interactive User Guide for Blueprint Studio */
 
 import { state, elements } from './state.js';
-import { t } from './translations.js?v=2.5.270';
-import { closeDialog, openDialog } from './dialog-manager.js?v=2.5.270';
+import { t } from './translations.js';
+import { closeDialog, openDialog } from './dialog-manager.js';
 import { eventBus } from './event-bus.js';
-import { fetchWithAuth } from './api.js?v=2.5.270';
-import { API_BASE } from './constants.js?v=2.5.270';
+import { fetchWithAuth } from './api.js';
+import { API_BASE } from './constants.js';
 
 const guideContent = [
     {
@@ -811,7 +811,7 @@ const guideContent = [
             <h1>Troubleshooting</h1>
             <p>Start with the recovery action that matches the visible state. Your files are not changed unless an action explicitly says so.</p>
             <div class="help-diagnostic-list">
-                <section><h2>Stale or incomplete interface</h2><p>Open <strong>Settings → Advanced → Clear Frontend Cache</strong>, then reload Blueprint Studio. This removes old service-worker assets without changing configuration files.</p></section>
+                <section><h2>Stale or incomplete interface</h2><p>Refresh Blueprint Studio to request every interface file from Home Assistant again. If an older release left cached data behind, use <strong>Settings → Advanced → Reset PWA Data</strong>.</p></section>
                 <section><h2>GitHub or Gitea authentication</h2><p>Open <strong>Settings → Source Control</strong>, verify the displayed account, and sign in again. Saved credentials remain hidden and can be explicitly cleared.</p></section>
                 <section><h2>Source-control conflicts</h2><p>Open the Source Control panel and use its recovery message. Review conflicted files before Abort, Reset, Force Push, or any destructive action.</p></section>
                 <section><h2>SFTP or terminal connection</h2><p>Confirm the selected host, port, username, and authentication method in <strong>Settings → Connections</strong>. Connection failures remain available in Operations for Retry.</p></section>

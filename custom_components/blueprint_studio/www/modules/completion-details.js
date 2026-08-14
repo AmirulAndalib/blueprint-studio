@@ -1,7 +1,7 @@
 /** COMPLETION-DETAILS.JS | Stable documentation and target selection for active YAML context. */
 
-import { HA_AREAS, HA_DEVICES, HA_ENTITIES, HA_FLOORS, HA_LABELS, HA_SERVICES, getYamlContext } from './ha-autocomplete.js?v=2.5.270';
-import { t, tp } from './translations.js?v=2.5.270';
+import { HA_AREAS, HA_DEVICES, HA_ENTITIES, HA_FLOORS, HA_LABELS, HA_SERVICES, getYamlContext } from './ha-autocomplete.js';
+import { t, tp } from './translations.js';
 
 const TARGETS = {
   entity_id: { labelKey: 'entity', sourceKey: 'entity_registry', values: () => HA_ENTITIES.map(item => ({ id: item.entity_id, name: item.friendly_name })) },

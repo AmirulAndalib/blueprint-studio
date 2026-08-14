@@ -1,11 +1,11 @@
 /** ASSET-PREVIEW.JS | Purpose: * Handles preview rendering for non-code files including images, PDFs, videos, */
 import { state, elements } from './state.js';
-import { isSftpPath, parseSftpPath, sftpStreamUrl } from './sftp.js?v=2.5.270';
-import { t } from './translations.js?v=2.5.270';
+import { isSftpPath, parseSftpPath, sftpStreamUrl } from './sftp.js';
+import { t } from './translations.js';
 import { eventBus } from './event-bus.js';
 import { copyToClipboard, loadScript } from './utils.js';
-import { saveSettings } from './settings.js?v=2.5.270';
-import { IMAGE_EXTENSIONS, AUDIO_EXTENSIONS } from './constants.js?v=2.5.270';
+import { saveSettings } from './settings.js';
+import { IMAGE_EXTENSIONS, AUDIO_EXTENSIONS } from './constants.js';
 import { urlWithTicket, serveFileUrl } from './api.js';
 
 const escapeHtml = (value) => String(value ?? '').replace(/[&<>\"']/g, (char) => ({
@@ -18,7 +18,7 @@ export function ensureMarkdownDependencies() {
   if (window.marked && window.hljs) return Promise.resolve();
   if (!markdownDependenciesPromise) {
     const version = encodeURIComponent(window.__BS_VERSION__ || '');
-    const vendor = path => `/local/blueprint_studio/vendor/${path}${version ? `?v=${version}` : ''}`;
+    const vendor = path => `/blueprint_studio/assets/vendor/${path}${version ? `?v=${version}` : ''}`;
     markdownDependenciesPromise = loadScript(vendor('marked/marked.min.js'))
       .then(() => Promise.all([
         loadScript(vendor('marked/marked-gfm-heading-id.umd.js')),
@@ -262,8 +262,8 @@ async function renderPdfPreview(tab, filename, previewContainer) {
   }
 
   // Setup PDF.js (loaded as ES module)
-  const pdfjsLib = await import('/local/blueprint_studio/vendor/pdfjs/pdf.min.js');
-  pdfjsLib.GlobalWorkerOptions.workerSrc = '/local/blueprint_studio/vendor/pdfjs/pdf.worker.min.js';
+  const pdfjsLib = await import('/blueprint_studio/assets/vendor/pdfjs/pdf.min.js');
+  pdfjsLib.GlobalWorkerOptions.workerSrc = '/blueprint_studio/assets/vendor/pdfjs/pdf.worker.min.js';
 
   previewContainer.innerHTML = `
     <div class="pdf-container" style="width: 100%; height: 100%; display: flex; flex-direction: column; background: var(--bg-tertiary);">

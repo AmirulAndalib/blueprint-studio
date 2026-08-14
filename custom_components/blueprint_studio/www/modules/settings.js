@@ -2,10 +2,10 @@
 import { state, elements, gitState, giteaState } from './state.js';
 import { fetchWithAuth } from './api.js';
 import { eventBus } from './event-bus.js';
-import { API_BASE, STORAGE_KEY } from './constants.js?v=2.5.270';
+import { API_BASE, STORAGE_KEY } from './constants.js';
 import { trackSettingsSave } from './settings-sync.js';
 import { setToolbarControlLabel } from './toolbar.js';
-import { syncOperationCenterVisibility } from './feedback-service.js?v=2.5.270';
+import { syncOperationCenterVisibility } from './feedback-service.js';
 import {
   clamp,
   SIDEBAR_MIN_WIDTH,
@@ -16,8 +16,8 @@ import {
   TERMINAL_DEFAULT_HEIGHT,
   SPLIT_MIN_PERCENT,
   SPLIT_MAX_PERCENT,
-} from './workspace-layout.js?v=2.5.270';
-import { MAX_AI_CHAT_HISTORY, MAX_NAVIGATION_HISTORY, keepLatestHistory } from './history-limits.js?v=2.5.270';
+} from './workspace-layout.js';
+import { MAX_AI_CHAT_HISTORY, MAX_NAVIGATION_HISTORY, keepLatestHistory } from './history-limits.js';
 
 const SETTINGS_CLIENT_ID_KEY = `${STORAGE_KEY}_client_id`;
 const LOCAL_SETTINGS_RECOVERY_WINDOW_MS = 2 * 60 * 1000;

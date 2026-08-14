@@ -1,9 +1,9 @@
 /** STATUS-BAR.JS | Purpose: Displays editor status information in bottom bar (cursor position, */
 import { state, elements, gitState, giteaState } from './state.js';
 import { getLanguageName } from './utils.js';
-import { t } from './translations.js?v=2.5.270';
+import { t } from './translations.js';
 import { eventBus } from './event-bus.js';
-import { renderRepositoryStatusBar } from './context-indicators.js?v=2.5.270';
+import { renderRepositoryStatusBar } from './context-indicators.js';
 
 let connectivityEventsInitialized = false;
 

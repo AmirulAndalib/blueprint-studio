@@ -2,7 +2,7 @@
 
 import { state } from './state.js';
 import { eventBus } from './event-bus.js';
-import { t, tp } from './translations.js?v=2.5.270';
+import { t, tp } from './translations.js';
 
 let markerHandles = [];
 let markedLines = [];

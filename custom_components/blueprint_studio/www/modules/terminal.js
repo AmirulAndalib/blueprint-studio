@@ -3,18 +3,18 @@
 import { state, elements } from './state.js';
 import { eventBus } from './event-bus.js';
 import { loadScript } from './utils.js';
-import { API_BASE } from './constants.js?v=2.5.270';
+import { API_BASE } from './constants.js';
 import { showToast, showModal, showConfirmDialog } from './ui.js';
-import { saveSettings } from './settings.js?v=2.5.270';
-import { setOverflowTooltip } from './tooltip.js?v=2.5.270';
-import { t } from './translations.js?v=2.5.270';
+import { saveSettings } from './settings.js';
+import { setOverflowTooltip } from './tooltip.js';
+import { t } from './translations.js';
 import { issueConnectionTicket } from './api.js';
 import {
     constrainTerminalHeight,
     getTerminalMaxHeight,
     TERMINAL_MIN_HEIGHT,
-} from './workspace-layout.js?v=2.5.270';
-import { captureEditorViewports, scheduleEditorViewportRestore } from './editor-viewport.js?v=2.5.270';
+} from './workspace-layout.js';
+import { captureEditorViewports, scheduleEditorViewportRestore } from './editor-viewport.js';
 
 let term = null;
 let fitAddon = null;
@@ -143,13 +143,13 @@ export async function initTerminal() {
             const link = document.createElement('link');
             link.id = 'xterm-css';
             link.rel = 'stylesheet';
-            link.href = '/local/blueprint_studio/vendor/xterm/xterm.css';
+            link.href = '/blueprint_studio/assets/vendor/xterm/xterm.css';
             document.head.appendChild(link);
         }
 
         try {
-            await loadScript('/local/blueprint_studio/vendor/xterm/xterm.js');
-            await loadScript('/local/blueprint_studio/vendor/xterm/xterm-addon-fit.js');
+            await loadScript('/blueprint_studio/assets/vendor/xterm/xterm.js');
+            await loadScript('/blueprint_studio/assets/vendor/xterm/xterm-addon-fit.js');
 
             // Wait a bit and verify Terminal class is available (with retry)
             let retries = 0;

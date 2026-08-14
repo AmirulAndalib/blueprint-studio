@@ -3,7 +3,7 @@
 import { state, elements, giteaState } from './state.js';
 import { fetchWithAuth } from './api.js';
 import { eventBus } from './event-bus.js';
-import { API_BASE } from './constants.js?v=2.5.270';
+import { API_BASE } from './constants.js';
 import {
   activateSharedModal,
   deactivateSharedModal,
@@ -13,7 +13,7 @@ import {
   showModal
 } from './ui.js';
 import { formatBytes } from './utils.js';
-import { t, tp } from './translations.js?v=2.5.270';
+import { t, tp } from './translations.js';
 import {
   gitStatus,
   gitInit,
@@ -22,7 +22,7 @@ import {
   gitGetRemotes,
   gitCleanLocks,
   gitGetConflictFiles
-} from './git-operations.js?v=2.5.270';
+} from './git-operations.js';
 import {
   updateGiteaPanel as updateGiteaPanelUI,
   renderGiteaFiles as renderGiteaFilesImpl,
@@ -30,15 +30,15 @@ import {
   stageSelectedGiteaFiles as stageSelectedGiteaFilesImpl,
   stageAllGiteaFiles as stageAllGiteaFilesImpl,
   unstageAllGiteaFiles as unstageAllGiteaFilesImpl
-} from './gitea-ui.js?v=2.5.270';
+} from './gitea-ui.js';
 import {
   clearCommitMessage,
   getCommitMessage,
   updateCommitComposer,
-} from './source-control-view.js?v=2.5.270';
+} from './source-control-view.js';
 import { setButtonLoading } from './ui.js';
-import { getGitActionConfirmation } from './git-action-confirmation.js?v=2.5.270';
-import { startOperationFeedback } from './feedback-service.js?v=2.5.270';
+import { getGitActionConfirmation } from './git-action-confirmation.js';
+import { startOperationFeedback } from './feedback-service.js';
 
 function startGiteaOperation(label, icon, message, retry, target = giteaState.currentBranch || t('provider_ops.current_branch')) {
   return startOperationFeedback({

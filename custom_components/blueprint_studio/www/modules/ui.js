@@ -1,18 +1,18 @@
 /** UI.JS | Purpose: * Provides core UI utilities including modals, toasts, themes, loading states, */
 import { state, elements } from './state.js';
-import { THEME_PRESETS, ACCENT_COLORS, SYNTAX_THEMES } from './constants.js?v=2.5.270';
+import { THEME_PRESETS, ACCENT_COLORS, SYNTAX_THEMES } from './constants.js';
 import { lightenColor } from './utils.js';
-import { t } from './translations.js?v=2.5.270';
+import { t } from './translations.js';
 import { eventBus } from './event-bus.js';
 import { applyMinimapState } from './minimap.js';
-import { closeDialog, openDialog } from './dialog-manager.js?v=2.5.270';
-import { constrainSidebarWidth } from './workspace-layout.js?v=2.5.270';
+import { closeDialog, openDialog } from './dialog-manager.js';
+import { constrainSidebarWidth } from './workspace-layout.js';
 import {
   hideGlobalPending,
   notify,
   setControlPending,
   showGlobalPending,
-} from './feedback-service.js?v=2.5.270';
+} from './feedback-service.js';
 
 const HA_VAR_MAPPING = {
     '--bg-primary': '--primary-background-color',

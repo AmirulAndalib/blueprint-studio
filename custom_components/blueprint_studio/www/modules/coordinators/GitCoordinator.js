@@ -6,8 +6,8 @@
 
 import { state, elements, gitState, giteaState } from '../state.js';
 import { eventBus } from '../event-bus.js';
-import { showUserGuide } from '../user-guide.js?v=2.5.270';
-import { saveSettings } from '../settings.js?v=2.5.270';
+import { showUserGuide } from '../user-guide.js';
+import { saveSettings } from '../settings.js';
 import { renderFileTree } from '../file-tree.js';
 import {
     gitPull as gitPullImpl,
@@ -23,7 +23,7 @@ import {
     gitResolveConflict as gitResolveConflictImpl,
     gitStage as gitStageImpl,
     gitUnstage as gitUnstageImpl
-} from '../git-operations.js?v=2.5.270';
+} from '../git-operations.js';
 import {
     giteaStatus as giteaStatusImpl,
     giteaPull as giteaPullImpl,
@@ -38,8 +38,8 @@ import {
     toggleGiteaFileSelection as toggleGiteaFileSelectionImpl,
     giteaStage as giteaStageImpl,
     giteaUnstage as giteaUnstageImpl
-} from '../gitea-integration.js?v=2.5.270';
-import { updateCommitComposer } from '../source-control-view.js?v=2.5.270';
+} from '../gitea-integration.js';
+import { updateCommitComposer } from '../source-control-view.js';
 
 async function changeSourceControlStage(provider, action, files) {
     if (!files.length) return;

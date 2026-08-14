@@ -1,6 +1,6 @@
 /** RECENT-FILES.JS | Purpose: Tracks and displays recently opened files for quick access. */
 import { state } from './state.js';
-import { MAX_RECENT_FILES } from './constants.js?v=2.5.270';
+import { MAX_RECENT_FILES } from './constants.js';
 import { getFileIcon, isMobile } from './utils.js';
 import { enableLongPressContextMenu } from './utils.js';
 import { eventBus } from './event-bus.js';

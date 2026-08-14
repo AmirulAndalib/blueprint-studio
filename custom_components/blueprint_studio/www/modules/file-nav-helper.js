@@ -1,5 +1,5 @@
 import { state } from './state.js';
-import { MAX_NAVIGATION_HISTORY, appendBoundedHistory } from './history-limits.js?v=2.5.270';
+import { MAX_NAVIGATION_HISTORY, appendBoundedHistory } from './history-limits.js';
 import {
   renderFileTree,
   loadDirectory,

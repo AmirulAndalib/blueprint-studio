@@ -3,7 +3,7 @@ import { state, elements } from './state.js';
 import { showToast } from './ui.js';
 import { getFileIcon, isMobile } from './utils.js';
 import { eventBus } from './event-bus.js';
-import { t } from './translations.js?v=2.5.270';
+import { t } from './translations.js';
 
 /**
  * Check if a file path is favorited

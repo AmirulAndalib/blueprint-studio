@@ -1,13 +1,13 @@
 /** FILE-OPERATIONS.JS | Purpose: * Handles all file system operations including creating, deleting, copying, */
 import { state, elements } from './state.js';
 import { fetchWithAuth } from './api.js';
-import { API_BASE } from './constants.js?v=2.5.270';
+import { API_BASE } from './constants.js';
 import { showToast, showConfirmDialog } from './ui.js';
 import { loadScript } from './utils.js';
-import { t } from './translations.js?v=2.5.270';
+import { t } from './translations.js';
 import { eventBus } from './event-bus.js';
-import { isSftpPath, saveSftpFile } from './sftp.js?v=2.5.270';
-import { startOperationFeedback } from './feedback-service.js?v=2.5.270';
+import { isSftpPath, saveSftpFile } from './sftp.js';
+import { startOperationFeedback } from './feedback-service.js';
 import { invalidateEditorConfigCache } from './editorconfig.js';
 
 function revealSavedFile(path) {
@@ -31,7 +31,7 @@ async function browseLocalPath(path, openFile = false) {
     eventBus.emit('file:open', { path });
     return;
   }
-  const { navigateToFolder } = await import('./file-tree.js?v=2.5.270');
+  const { navigateToFolder } = await import('./file-tree.js');
   await navigateToFolder(path);
 }
 
@@ -215,7 +215,7 @@ export async function createFolder(path) {
 async function browseLocalDelete(path) {
   eventBus.emit('ui:switch-sidebar-view', 'explorer');
   const parentPath = path.includes('/') ? path.split('/').slice(0, -1).join('/') : '';
-  const { navigateToFolder } = await import('./file-tree.js?v=2.5.270');
+  const { navigateToFolder } = await import('./file-tree.js');
   await navigateToFolder(parentPath);
 }
 
@@ -285,7 +285,7 @@ export async function deleteItem(path, isFolder = false) {
 async function browseLocalCopy(destination) {
   eventBus.emit('ui:switch-sidebar-view', 'explorer');
   const parentPath = destination.includes('/') ? destination.split('/').slice(0, -1).join('/') : '';
-  const { navigateToFolder } = await import('./file-tree.js?v=2.5.270');
+  const { navigateToFolder } = await import('./file-tree.js');
   await navigateToFolder(parentPath);
 }
 
@@ -669,7 +669,7 @@ async function loadAcorn() {
   if (window.acorn) return; // Already loaded
 
   try {
-    await loadScript("/local/blueprint_studio/vendor/acorn/acorn.js");
+    await loadScript("/blueprint_studio/assets/vendor/acorn/acorn.js");
     /*console.log*/ void("✅ Acorn parser loaded successfully");
   } catch (error) {
     console.error("Failed to load Acorn:", error);
@@ -790,16 +790,16 @@ async function loadPrettier() {
 
   try {
     // Load Prettier standalone
-    await loadScript("/local/blueprint_studio/vendor/prettier/standalone.js");
+    await loadScript("/blueprint_studio/assets/vendor/prettier/standalone.js");
 
     // Load plugins
-    await loadScript("/local/blueprint_studio/vendor/prettier/babel.js");
-    await loadScript("/local/blueprint_studio/vendor/prettier/estree.js");
-    await loadScript("/local/blueprint_studio/vendor/prettier/yaml.js");
-    await loadScript("/local/blueprint_studio/vendor/prettier/html.js");
-    await loadScript("/local/blueprint_studio/vendor/prettier/markdown.js");
-    await loadScript("/local/blueprint_studio/vendor/prettier/postcss.js");
-    await loadScript("/local/blueprint_studio/vendor/prettier/typescript.js");
+    await loadScript("/blueprint_studio/assets/vendor/prettier/babel.js");
+    await loadScript("/blueprint_studio/assets/vendor/prettier/estree.js");
+    await loadScript("/blueprint_studio/assets/vendor/prettier/yaml.js");
+    await loadScript("/blueprint_studio/assets/vendor/prettier/html.js");
+    await loadScript("/blueprint_studio/assets/vendor/prettier/markdown.js");
+    await loadScript("/blueprint_studio/assets/vendor/prettier/postcss.js");
+    await loadScript("/blueprint_studio/assets/vendor/prettier/typescript.js");
 
     // Store plugins for Prettier to use
     window.prettierPlugins = {

@@ -1,24 +1,24 @@
-import { t } from './translations.js?v=2.5.270';
+import { t } from './translations.js';
 import { eventBus } from './event-bus.js';
 import { enableLongPressContextMenu } from './utils.js';
 /** FILE-TREE.JS | Purpose: * Handles file tree rendering, folder expansion/collapse, drag & drop, */
 import { state, elements, gitState } from './state.js';
 import { fetchWithAuth, urlWithTicket } from './api.js';
-import { API_BASE, STREAM_BASE, IMAGE_EXTENSIONS } from './constants.js?v=2.5.270';
+import { API_BASE, STREAM_BASE, IMAGE_EXTENSIONS } from './constants.js';
 import {
   showToast,
   showConfirmDialog
 } from './ui.js';
 import { getFileIcon, formatBytes, isMobile, isTouchDevice } from './utils.js';
-import { saveSettings } from './settings.js?v=2.5.270';
-import { setOverflowTooltip } from './tooltip.js?v=2.5.270';
+import { saveSettings } from './settings.js';
+import { setOverflowTooltip } from './tooltip.js';
 import { isItemSelected, updateSelectionCount } from './selection.js';
 import { refreshActivityRail } from './activity-rail.js';
-import { classifyTreeError, renderTreeViewState } from './tree-view-state.js?v=2.5.270';
-import { captureTreeViewContext, scheduleTreeViewContextRestore } from './tree-view-context.js?v=2.5.270';
-import { configureTreeKeyboard, markTreeItem } from './tree-keyboard.js?v=2.5.270';
-import { startOperationFeedback } from './feedback-service.js?v=2.5.270';
-import { MAX_NAVIGATION_HISTORY, appendBoundedHistory } from './history-limits.js?v=2.5.270';
+import { classifyTreeError, renderTreeViewState } from './tree-view-state.js';
+import { captureTreeViewContext, scheduleTreeViewContextRestore } from './tree-view-context.js';
+import { configureTreeKeyboard, markTreeItem } from './tree-keyboard.js';
+import { startOperationFeedback } from './feedback-service.js';
+import { MAX_NAVIGATION_HISTORY, appendBoundedHistory } from './history-limits.js';
 
 // Directory requests are scoped by path so a refresh/navigation cannot let an
 // older response replace the contents requested most recently.

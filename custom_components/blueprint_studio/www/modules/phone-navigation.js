@@ -2,8 +2,8 @@
 
 import { eventBus } from './event-bus.js';
 import { state } from './state.js';
-import { t } from './translations.js?v=2.5.270';
-import { WORKSPACE_MODE_PHONE } from './workspace-layout.js?v=2.5.270';
+import { t } from './translations.js';
+import { WORKSPACE_MODE_PHONE } from './workspace-layout.js';
 
 const SURFACES = [
   ['files', 'folder_open', 'phone_nav.files', 'Files'],

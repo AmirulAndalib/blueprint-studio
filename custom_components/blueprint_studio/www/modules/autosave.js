@@ -3,8 +3,8 @@ import { state, elements } from './state.js';
 import { showToast, setButtonLoading } from './ui.js';
 import { eventBus } from './event-bus.js';
 import { saveFile } from './file-operations.js';
-import { t, tp } from './translations.js?v=2.5.270';
-import { startOperationFeedback } from './feedback-service.js?v=2.5.270';
+import { t, tp } from './translations.js';
+import { startOperationFeedback } from './feedback-service.js';
 
 // Auto-save timer reference
 export let autoSaveTimer = null;

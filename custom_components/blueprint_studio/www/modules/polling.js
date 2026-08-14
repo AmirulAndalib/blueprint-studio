@@ -1,10 +1,10 @@
 /** POLLING.JS | Purpose: Background polling for git status and file changes. */
 import { state } from './state.js';
 import { fetchWithAuth } from './api.js';
-import { API_BASE } from './constants.js?v=2.5.270';
+import { API_BASE } from './constants.js';
 import { showToast } from './ui.js';
 import { eventBus } from './event-bus.js';
-import { t } from './translations.js?v=2.5.270';
+import { t } from './translations.js';
 
 // Polling interval reference
 export let gitStatusPollingInterval = null;

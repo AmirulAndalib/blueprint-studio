@@ -1,12 +1,12 @@
-import { t } from './translations.js?v=2.5.270';
+import { t } from './translations.js';
 /** SELECTION.JS | Purpose: Multi-file/folder selection mode for bulk operations. */
 import { state, elements } from './state.js';
 import { fetchWithAuth } from './api.js';
 import { eventBus } from './event-bus.js';
-import { API_BASE } from './constants.js?v=2.5.270';
+import { API_BASE } from './constants.js';
 import { showToast, showConfirmDialog } from './ui.js';
-import { parseSftpPath } from './sftp.js?v=2.5.270';
-import { startOperationFeedback } from './feedback-service.js?v=2.5.270';
+import { parseSftpPath } from './sftp.js';
+import { startOperationFeedback } from './feedback-service.js';
 
 /**
  * Toggle selection mode on/off

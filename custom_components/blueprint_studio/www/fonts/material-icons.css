@@ -2,7 +2,7 @@
   font-family: 'Material Icons';
   font-style: normal;
   font-weight: 400;
-  src: url('/local/blueprint_studio/fonts/material-icons.woff2') format('woff2');
+  src: url('/blueprint_studio/assets/fonts/material-icons.woff2') format('woff2');
 }
 
 .material-icons {

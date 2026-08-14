@@ -1,14 +1,14 @@
-import { t, tp } from './translations.js?v=2.5.270';
+import { t, tp } from './translations.js';
 /** COMMAND-PALETTE.JS | Purpose: * Provides a unified quick-access command and file switcher (VS Code style) */
 import { state, elements, gitState, giteaState } from './state.js';
 import { getTruePath, getFileIcon, copyToClipboard } from './utils.js';
 import { eventBus } from './event-bus.js';
-import { API_BASE } from './constants.js?v=2.5.270';
+import { API_BASE } from './constants.js';
 import { fetchWithAuth } from './api.js';
 import { showToast, showConfirmDialog } from './ui.js';
-import { closeDialog, openDialog } from './dialog-manager.js?v=2.5.270';
-import { startOperationFeedback } from './feedback-service.js?v=2.5.270';
-import { getGitActionConfirmation } from './git-action-confirmation.js?v=2.5.270';
+import { closeDialog, openDialog } from './dialog-manager.js';
+import { startOperationFeedback } from './feedback-service.js';
+import { getGitActionConfirmation } from './git-action-confirmation.js';
 
 const TOOLBAR_REQUIREMENTS = {
   'btn-format': () => state.activeTab ? null : 'Open a file to format it',

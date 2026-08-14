@@ -2,7 +2,7 @@
 import { state, elements } from './state.js';
 import { getFileIcon, getEditorMode, isTextFile, enableLongPressContextMenu } from './utils.js';
 import { eventBus } from './event-bus.js';
-import { API_BASE, IMAGE_EXTENSIONS, VIDEO_EXTENSIONS, AUDIO_EXTENSIONS } from './constants.js?v=2.5.270';
+import { API_BASE, IMAGE_EXTENSIONS, VIDEO_EXTENSIONS, AUDIO_EXTENSIONS } from './constants.js';
 import { fetchWithAuth } from './api.js';
 import { 
     getPaneForTab, 
@@ -12,7 +12,7 @@ import {
     disableSplitView,
     updatePaneSizes,
     initSplitResize
-} from './split-view.js?v=2.5.270';
+} from './split-view.js';
 import { cleanupMarkdownPreview } from './asset-preview.js';
 import { showConfirmDialog } from './ui.js';
 import { 
@@ -21,7 +21,7 @@ import {
     fitTerminal,
     toggleTerminal as toggleTerminalImpl,
     setTerminalMode
-} from './terminal.js?v=2.5.270';
+} from './terminal.js';
 import {
     createEditor,
     createSecondaryEditor,
@@ -45,15 +45,15 @@ import {
 } from './status-bar.js';
 import {
     saveSettings as saveSettingsImpl
-} from './settings.js?v=2.5.270';
+} from './settings.js';
 import {
     isSftpPath as isSftpPathImpl,
     parseSftpPath as parseSftpPathImpl,
     openSftpFile as openSftpFileImpl
-} from './sftp.js?v=2.5.270';
-import { setOverflowTooltip } from './tooltip.js?v=2.5.270';
+} from './sftp.js';
+import { setOverflowTooltip } from './tooltip.js';
 import { getEditorConfigIndent } from './editorconfig.js';
-import { restoreWelcomeWorkspace } from './editor-workflow.js?v=2.5.270';
+import { restoreWelcomeWorkspace } from './editor-workflow.js';
 
 /**
  * Pause all playing <video> and <audio> elements in the asset preview containers.

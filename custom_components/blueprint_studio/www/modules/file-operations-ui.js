@@ -1,6 +1,6 @@
 /** FILE-OPERATIONS-UI.JS | Purpose: * Handles all dialog prompts for file and folder operations (create, rename, */
 import { state, elements } from './state.js';
-import { t } from './translations.js?v=2.5.270';
+import { t } from './translations.js';
 import { eventBus } from './event-bus.js';
 import {
   resetModalToDefault, 

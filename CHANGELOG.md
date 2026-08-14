@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 
+## [3.0.1] - 2026-08-14
+
+### Fixed
+
+- **Always-current frontend** - Blueprint Studio now loads its panel, modules, styles, icons, and service worker directly from the running Home Assistant instance. Stale application caches are no longer used, so an upgrade is available as soon as Home Assistant reloads the integration.
+- **Safer PWA reset** - The Settings reset action now removes only Blueprint Studio's legacy PWA data. It does not affect Home Assistant or any other installed frontend application.
+
+
 ## [3.0.0] - 2026-08-12
 
 ### Highlights
@@ -1105,7 +1113,8 @@ Bring AI intelligence directly into your Home Assistant workflow with flexible p
 - **1.2.0** - GitHub Integration, Pin Favorites & Auto-Refresh
 - **1.0.0** - First stable release
 
-[Unreleased]: https://github.com/ha-china/blueprint-studio/compare/v3.0.0...HEAD
+[Unreleased]: https://github.com/ha-china/blueprint-studio/compare/v3.0.1...HEAD
+[3.0.1]: https://github.com/ha-china/blueprint-studio/compare/v3.0.0...v3.0.1
 [3.0.0]: https://github.com/ha-china/blueprint-studio/releases/tag/v3.0.0
 [2.5.5]: https://github.com/ha-china/blueprint-studio/compare/v2.5.4...v2.5.5
 [2.5.4]: https://github.com/ha-china/blueprint-studio/compare/v2.5.3...v2.5.4

@@ -1229,7 +1229,7 @@ class FrontendContractTests(unittest.TestCase):
         self.assertTrue(sftp_consumers)
         for consumer in sftp_consumers:
             self.assertIn(
-                f"sftp.js?v={manifest['version']}", consumer.read_text(encoding="utf-8")
+                f"sftp.js", consumer.read_text(encoding="utf-8")
             )
 
     def test_theme_toggle_has_named_native_button(self):
@@ -2235,7 +2235,7 @@ class FrontendContractTests(unittest.TestCase):
 
     def test_shared_control_primitives_are_loaded_and_used(self):
         self.assertIn(
-            "/local/blueprint_studio/styles/modules/primitives.css?v={{VERSION}}",
+            "/blueprint_studio/assets/styles/modules/primitives.css?v={{VERSION}}",
             self.panel,
         )
         primitives = PRIMITIVES.read_text(encoding="utf-8")
@@ -2457,7 +2457,7 @@ class FrontendContractTests(unittest.TestCase):
         self.assertIn("hideGlobalPending();", self.ui_module)
         self.assertIn("setControlPending(button, isLoading);", self.ui_module)
         self.assertIn(
-            "import { removeOperationFeedback, updateOperationFeedback } from './feedback-service.js?v=2.5.270';",
+            "import { removeOperationFeedback, updateOperationFeedback } from './feedback-service.js';",
             zip_progress,
         )
         self.assertNotIn('document.createElement("div")', zip_progress)
@@ -2907,7 +2907,7 @@ class FrontendContractTests(unittest.TestCase):
             self.assertIn(contract, self.component_showcase)
 
         self.assertIn(
-            'import { closeDialog, openDialog } from "./dialog-manager.js?v=2.5.270";',
+            'import { closeDialog, openDialog } from "./dialog-manager.js";',
             self.component_showcase_module,
         )
         self.assertIn(
@@ -3648,7 +3648,7 @@ class FrontendContractTests(unittest.TestCase):
         )
 
         for contract in (
-            "import { startOperationFeedback } from './feedback-service.js?v=2.5.270'",
+            "import { startOperationFeedback } from './feedback-service.js'",
             "label: t('ai_ops.generate_label')",
             "scope: t('ai_ops.generation_scope')",
             "target: aiRequestTarget(requestPayload)",
@@ -3758,7 +3758,7 @@ class FrontendContractTests(unittest.TestCase):
             modules / "coordinators" / "UICoordinator.js",
         ):
             self.assertIn(
-                f"ai-ui.js?v={manifest['version']}",
+                f"ai-ui.js",
                 consumer.read_text(encoding="utf-8"),
             )
 
@@ -3804,28 +3804,13 @@ class FrontendContractTests(unittest.TestCase):
         self.assertNotIn("import('./state.js?v='", main)
         self.assertRegex(app, r"export\s*\{\s*state,\s*elements,")
 
-        manifest = json.loads(
-            (
-                ROOT / "custom_components" / "blueprint_studio" / "manifest.json"
-            ).read_text(encoding="utf-8")
-        )
-        layout_import = re.compile(
-            r"(?:settings|resize|split-view|terminal|git-operations)\.js\?v=([0-9.]+)"
-        )
-        imports = []
         for source_path in modules.rglob("*.js"):
             source = source_path.read_text(encoding="utf-8")
             self.assertNotRegex(
                 source,
-                r"(?:settings|resize|split-view|terminal|git-operations)\.js['\"]",
+                r"(?:settings|resize|split-view|terminal|git-operations)\.js\?v=",
                 str(source_path),
             )
-            imports.extend(
-                (source_path, version) for version in layout_import.findall(source)
-            )
-        self.assertTrue(imports)
-        for source_path, version in imports:
-            self.assertEqual(manifest["version"], version, str(source_path))
 
     def test_structural_yaml_parser_is_packaged_for_haos_and_offline_use(self):
         integration = ROOT / "custom_components" / "blueprint_studio"
@@ -3843,7 +3828,7 @@ class FrontendContractTests(unittest.TestCase):
         self.assertIn(
             "eemeli aro", (vendor / "LICENSE").read_text(encoding="utf-8").lower()
         )
-        self.assertIn(f"../vendor/yaml/yaml.js?v={manifest['version']}", context_source)
+        self.assertIn(f"../vendor/yaml/yaml.js", context_source)
         self.assertNotRegex(context_source + parser_source, r"https?://|cdn\.")
         self.assertIn(
             'hass.config.path("custom_components", DOMAIN, "www")', init_source
@@ -3861,7 +3846,7 @@ class FrontendContractTests(unittest.TestCase):
         ):
             consumer = (modules / consumer_name).read_text(encoding="utf-8")
             self.assertIn(
-                f"ha-autocomplete.js?v={manifest['version']}", consumer, consumer_name
+                f"ha-autocomplete.js", consumer, consumer_name
             )
 
     def test_blueprint_form_supports_current_and_legacy_haos_addon_selectors(self):
@@ -3997,7 +3982,7 @@ class FrontendContractTests(unittest.TestCase):
             modules / "sftp.js",
         ):
             self.assertIn(
-                f"context-indicators.js?v={manifest['version']}",
+                f"context-indicators.js",
                 consumer.read_text(encoding="utf-8"),
             )
         for consumer in (
@@ -4007,15 +3992,15 @@ class FrontendContractTests(unittest.TestCase):
             modules / "gitea-ui.js",
         ):
             self.assertIn(
-                f"gitea-integration.js?v={manifest['version']}",
+                f"gitea-integration.js",
                 consumer.read_text(encoding="utf-8"),
             )
         self.assertIn(
-            f"gitea-ui.js?v={manifest['version']}",
+            f"gitea-ui.js",
             (modules / "gitea-integration.js").read_text(encoding="utf-8"),
         )
         self.assertIn(
-            f"git-ui.js?v={manifest['version']}",
+            f"git-ui.js",
             (modules / "coordinators" / "index.js").read_text(encoding="utf-8"),
         )
 
@@ -4095,7 +4080,7 @@ class FrontendContractTests(unittest.TestCase):
             "terminal.js",
         ):
             source = (modules / consumer).read_text(encoding="utf-8")
-            self.assertIn(f"tooltip.js?v={manifest['version']}", source)
+            self.assertIn(f"tooltip.js", source)
 
     def test_developer_tools_use_keyboard_tab_semantics(self):
         dev_tools = (
@@ -4800,7 +4785,7 @@ class FrontendContractTests(unittest.TestCase):
                 continue
             source = module_path.read_text(encoding="utf-8")
             if "dialog-manager.js" in source:
-                self.assertIn("dialog-manager.js?v=2.5.270", source, module_path.name)
+                self.assertIn("dialog-manager.js", source, module_path.name)
 
     def test_keyboard_workflows_are_a_release_gate(self):
         audit = (ROOT / "scripts" / "audit_frontend_keyboard_workflows.mjs").read_text(encoding="utf-8")
@@ -4912,7 +4897,7 @@ class FrontendContractTests(unittest.TestCase):
         for contract in ("MAX_AI_CHAT_HISTORY", "MAX_NAVIGATION_HISTORY", "keepLatestHistory", "appendBoundedHistory"):
             self.assertIn(contract, limits)
         for source in (settings, ai_ui, file_tree, sftp):
-            self.assertIn("history-limits.js?v=2.5.270", source)
+            self.assertIn("history-limits.js", source)
         self.assertIn("keepLatestHistory(settings.aiChatHistory", settings)
         self.assertIn("keepLatestHistory(settings.navigationHistory", settings)
         self.assertIn("appendBoundedHistory(state.aiChatHistory", ai_ui)
@@ -5124,25 +5109,13 @@ class FrontendContractTests(unittest.TestCase):
         for contract in ("edit.selectionStart = input.selectionStart", "edit.selectionEnd = input.selectionEnd", "edit.selectionDirection = input.selectionDirection", "input.setSelectionRange(edit.selectionStart"):
             self.assertIn(contract, file_tree)
 
-    def test_shared_constants_imports_are_release_versioned(self):
-        manifest = json.loads(
-            (ROOT / "custom_components" / "blueprint_studio" / "manifest.json").read_text(
-                encoding="utf-8"
-            )
-        )
+    def test_shared_constants_imports_do_not_use_cache_busting_tokens(self):
         modules = ROOT / "custom_components" / "blueprint_studio" / "www" / "modules"
-        expected = f"constants.js?v={manifest['version']}"
         for module_path in modules.rglob("*.js"):
             if "vendor" in module_path.parts or module_path.name == "constants.js":
                 continue
             source = module_path.read_text(encoding="utf-8")
-            self.assertNotRegex(
-                source,
-                r"from ['\"]\.\.?/constants\.js['\"]",
-                module_path.relative_to(modules),
-            )
-            if "constants.js?v=" in source:
-                self.assertIn(expected, source, module_path.relative_to(modules))
+            self.assertNotIn("constants.js?v=", source, module_path.relative_to(modules))
 
     def test_provider_credentials_and_connection_checks_use_secret_safe_operations(self):
         modules = ROOT / "custom_components" / "blueprint_studio" / "www" / "modules"
@@ -5416,9 +5389,9 @@ class FrontendContractTests(unittest.TestCase):
         coordinator_index = (
             ROOT / "custom_components" / "blueprint_studio" / "www" / "modules" / "coordinators" / "index.js"
         ).read_text(encoding="utf-8")
-        self.assertIn("from './settings-ui.js?v=2.5.270'", initialization)
-        self.assertIn("from '../settings-ui.js?v=2.5.270'", coordinator_index)
-        self.assertIn("from './SettingsCoordinator.js?v=2.5.270'", coordinator_index)
+        self.assertIn("from './settings-ui.js'", initialization)
+        self.assertIn("from '../settings-ui.js'", coordinator_index)
+        self.assertIn("from './SettingsCoordinator.js'", coordinator_index)
         localized_keys = (
             "settings.navigation_label",
             "settings.search_placeholder",
@@ -5664,9 +5637,7 @@ class FrontendContractTests(unittest.TestCase):
             if "vendor" in module_path.parts:
                 continue
             source = module_path.read_text(encoding="utf-8")
-            self.assertNotRegex(source, r"from ['\"]\.\.?/translations\.js['\"]", module_path.name)
-            if "translations.js?v=" in source:
-                self.assertIn("translations.js?v=2.5.270", source, module_path.name)
+            self.assertNotIn("translations.js?v=", source, module_path.name)
 
         required_keys = (
             "help.version_hint",
@@ -5737,7 +5708,7 @@ class FrontendContractTests(unittest.TestCase):
         coordinator = (modules / "coordinators" / "UICoordinator.js").read_text(encoding="utf-8")
         guide = (modules / "user-guide.js").read_text(encoding="utf-8")
 
-        self.assertIn("../user-guide.js?v=2.5.270", coordinator)
+        self.assertIn("../user-guide.js", coordinator)
         for contract in (
             'data-help-action="report-issue"',
             'data-help-action="request-feature"',
@@ -6421,7 +6392,7 @@ class FrontendContractTests(unittest.TestCase):
         self.assertIn("action: 'github_follow'", ui)
         self.assertIn("target: 'soulripper13'", ui)
         self.assertIn("import { fetchWithAuth } from '../api.js';", ui)
-        self.assertIn("import { API_BASE } from '../constants.js?v=2.5.270';", ui)
+        self.assertIn("import { API_BASE } from '../constants.js';", ui)
 
     def test_blueprint_conversion_is_one_truthful_recoverable_operation(self):
         modules = ROOT / "custom_components" / "blueprint_studio" / "www" / "modules"

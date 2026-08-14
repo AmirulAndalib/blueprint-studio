@@ -12,6 +12,10 @@ SFTP_API_PATH = ROOT / "custom_components" / "blueprint_studio" / "backend" / "a
 TERMINAL_API_PATH = ROOT / "custom_components" / "blueprint_studio" / "backend" / "api_terminal.py"
 WEBSOCKET_API_PATH = ROOT / "custom_components" / "blueprint_studio" / "backend" / "websocket.py"
 TRANSPORT_FIXTURE_PATH = ROOT / "tests" / "fixtures" / "backend_transport_contract.json"
+INTEGRATION_PATH = ROOT / "custom_components" / "blueprint_studio" / "__init__.py"
+SERVICE_WORKER_PATH = (
+    ROOT / "custom_components" / "blueprint_studio" / "www" / "service-worker.js"
+)
 
 
 def _dispatcher_actions(method_name: str, mapping_name: str) -> set[str]:
@@ -135,6 +139,20 @@ class BackendTransportContractTests(unittest.TestCase):
         for subscription in self.fixture["home_assistant_websocket"]:
             self.assertIn(subscription["type"], source)
             self.assertIn(subscription["event"], source)
+
+
+class PwaCacheContractTests(unittest.TestCase):
+    def test_pwa_is_network_only_and_removes_legacy_caches(self):
+        worker = SERVICE_WORKER_PATH.read_text(encoding="utf-8")
+        integration = INTEGRATION_PATH.read_text(encoding="utf-8")
+
+        self.assertIn("fetch(event.request, { cache: 'no-store' })", worker)
+        self.assertIn("cacheName.startsWith(CACHE_PREFIX)", worker)
+        self.assertIn("caches.delete(cacheName)", worker)
+        self.assertNotIn("caches.open", worker)
+        self.assertNotIn("caches.match", worker)
+        self.assertIn('"Cache-Control": "no-store, max-age=0"', integration)
+        self.assertIn("async def get(self, request: web.Request, path: str)", integration)
 
 
 if __name__ == "__main__":

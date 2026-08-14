@@ -1,5 +1,5 @@
 /** CONTEXT-INDICATORS.JS | Compact workspace connection and repository context. */
-import { setOverflowTooltip } from './tooltip.js?v=2.5.270';
+import { setOverflowTooltip } from './tooltip.js';
 
 function createStatusDot(state) {
   const dot = document.createElement('span');

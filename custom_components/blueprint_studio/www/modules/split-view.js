@@ -6,8 +6,8 @@ import {
   constrainSplitPercent,
   SPLIT_MAX_PERCENT,
   SPLIT_MIN_PERCENT,
-} from './workspace-layout.js?v=2.5.270';
-import { captureEditorViewports, scheduleEditorViewportRestore } from './editor-viewport.js?v=2.5.270';
+} from './workspace-layout.js';
+import { captureEditorViewports, scheduleEditorViewportRestore } from './editor-viewport.js';
 
 // Drag-and-drop state
 let draggedTabIndex = null;

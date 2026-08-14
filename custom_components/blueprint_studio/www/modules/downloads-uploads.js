@@ -1,9 +1,9 @@
-import { t } from './translations.js?v=2.5.270';
+import { t } from './translations.js';
 /** DOWNLOADS-UPLOADS.JS | Purpose: File transfers - download files/folders, upload files via drag-drop */
 import { state, elements } from './state.js';
 import { fetchWithAuth, downloadFileUrl, downloadFolderUrl, getAuthToken, urlWithTicket } from './api.js';
 import { eventBus } from './event-bus.js';
-import { API_BASE, STREAM_BASE, UPLOAD_BASE } from './constants.js?v=2.5.270';
+import { API_BASE, STREAM_BASE, UPLOAD_BASE } from './constants.js';
 import { 
   showToast, 
   showConfirmDialog,
@@ -11,7 +11,7 @@ import {
 } from './ui.js';
 import { isTextFile } from './utils.js';
 import { createZipProgressId, startUploadProgress, startZipProgress } from './zip-progress.js';
-import { startOperationFeedback } from './feedback-service.js?v=2.5.270';
+import { startOperationFeedback } from './feedback-service.js';
 import {
   isSftpPath,
   parseSftpPath,
@@ -22,7 +22,7 @@ import {
   sftpStreamUrl,
   sftpSelectedZipUrl,
   getSftpConnectionDetails
-} from './sftp.js?v=2.5.270';
+} from './sftp.js';
 
 function parentPath(path) {
   const clean = String(path || "").replace(/\/+$/g, "");

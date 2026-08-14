@@ -2,8 +2,8 @@
 import { state, elements } from './state.js';
 import { eventBus } from './event-bus.js';
 import { refreshActivityRail } from './activity-rail.js';
-import { isWorkspaceDrawerMode } from './workspace-layout.js?v=2.5.270';
-import { preserveEditorViewports } from './editor-viewport.js?v=2.5.270';
+import { isWorkspaceDrawerMode } from './workspace-layout.js';
+import { preserveEditorViewports } from './editor-viewport.js';
 
 /**
  * Shows the sidebar

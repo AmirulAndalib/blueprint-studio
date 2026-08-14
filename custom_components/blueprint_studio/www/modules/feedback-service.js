@@ -1,6 +1,6 @@
 /** FEEDBACK-SERVICE.JS | Shared notifications and asynchronous operation feedback. */
 import { state, elements } from "./state.js";
-import { t, tp } from './translations.js?v=2.5.270';
+import { t, tp } from './translations.js';
 
 const activeNotifications = new Map();
 const globalPendingMessages = [];

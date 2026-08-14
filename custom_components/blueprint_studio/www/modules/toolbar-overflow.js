@@ -1,4 +1,4 @@
-import { t } from './translations.js?v=2.5.270';
+import { t } from './translations.js';
 
 const OVERFLOW_CLASS = 'toolbar-overflow-hidden';
 const MENU_ITEM_SELECTOR = '.toolbar-overflow-menu-item';

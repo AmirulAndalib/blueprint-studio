@@ -1,13 +1,13 @@
 /** GLOBAL-SEARCH.JS | Purpose: * Provides sidebar-based global search and replace functionality across all files. */
 import { state, elements } from './state.js';
-import { HA_ENTITIES } from './ha-autocomplete.js?v=2.5.270';
-import { t, tp } from './translations.js?v=2.5.270';
+import { HA_ENTITIES } from './ha-autocomplete.js';
+import { t, tp } from './translations.js';
 import { fetchWithAuth, urlWithTicket } from './api.js';
 import { eventBus } from './event-bus.js';
-import { API_BASE, STREAM_BASE } from './constants.js?v=2.5.270';
+import { API_BASE, STREAM_BASE } from './constants.js';
 import { copyToClipboard } from './utils.js';
 import { refreshActivityRail } from './activity-rail.js';
-import { startOperationFeedback } from './feedback-service.js?v=2.5.270';
+import { startOperationFeedback } from './feedback-service.js';
 import {
   showToast,
   showConfirmDialog

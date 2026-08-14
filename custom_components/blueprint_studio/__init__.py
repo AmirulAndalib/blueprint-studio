@@ -43,7 +43,12 @@ async def _serve_file_with_headers(file_path: str, content_type: str, extra_head
     try:
         loop = asyncio.get_running_loop()
         content = await loop.run_in_executor(None, _read_and_replace, file_path)
-        headers = extra_headers or {}
+        headers = {
+            "Cache-Control": "no-store, max-age=0",
+            "Pragma": "no-cache",
+            "Expires": "0",
+            **(extra_headers or {}),
+        }
         return web.Response(text=content, content_type=content_type, headers=headers)
     except FileNotFoundError:
         _LOGGER.error("File not found: %s", file_path)
@@ -68,9 +73,6 @@ class ServiceWorkerView(HomeAssistantView):
         """Serve service worker file with PWA-compatible headers."""
         return await _serve_file_with_headers(self.file_path, "application/javascript", {
             "Service-Worker-Allowed": "/blueprint_studio/",
-            "Cache-Control": "no-cache, no-store, must-revalidate",
-            "Pragma": "no-cache",
-            "Expires": "0",
         })
 
 
@@ -87,7 +89,7 @@ class BlueprintStudioPWAView(HomeAssistantView):
 
     async def get(self, request: web.Request) -> web.Response:
         """Serve the Blueprint Studio HTML directly for PWA installation."""
-        return await _serve_file_with_headers(self.html_path, "text/html", {"Cache-Control": "no-cache"})
+        return await _serve_file_with_headers(self.html_path, "text/html")
 
 
 class BlueprintStudioPanelView(HomeAssistantView):
@@ -103,7 +105,35 @@ class BlueprintStudioPanelView(HomeAssistantView):
 
     async def get(self, request: web.Request) -> web.Response:
         """Serve panel HTML with {{VERSION}} replaced."""
-        return await _serve_file_with_headers(self.html_path, "text/html", {"Cache-Control": "no-cache"})
+        return await _serve_file_with_headers(self.html_path, "text/html")
+
+
+class BlueprintStudioAssetView(HomeAssistantView):
+    """Serve PWA assets without browser or service-worker caching."""
+
+    url = "/blueprint_studio/assets/{path:.*}"
+    name = "blueprint_studio:assets"
+    requires_auth = False
+
+    def __init__(self, asset_root: str) -> None:
+        """Initialize the asset view."""
+        self.asset_root = Path(asset_root).resolve()
+
+    async def get(self, request: web.Request, path: str) -> web.StreamResponse:
+        """Serve an asset only when it remains inside the integration directory."""
+        asset_path = (self.asset_root / path).resolve()
+        if not asset_path.is_relative_to(self.asset_root) or not asset_path.is_file():
+            raise web.HTTPNotFound()
+
+        response = web.FileResponse(asset_path)
+        response.headers.update(
+            {
+                "Cache-Control": "no-store, max-age=0",
+                "Pragma": "no-cache",
+                "Expires": "0",
+            }
+        )
+        return response
 
 
 class BlueprintStudioGlobalRegistration:
@@ -188,9 +218,11 @@ async def _async_get_or_register_global_routes(
 
     sw_path = str(hass.config.path("custom_components", DOMAIN, "www", "service-worker.js"))
     html_path = str(hass.config.path("custom_components", DOMAIN, "www", "panels", "panel_custom.html"))
+    asset_root = str(hass.config.path("custom_components", DOMAIN, "www"))
     hass.http.register_view(ServiceWorkerView(sw_path))
     hass.http.register_view(BlueprintStudioPWAView(html_path))
     hass.http.register_view(BlueprintStudioPanelView(html_path))
+    hass.http.register_view(BlueprintStudioAssetView(asset_root))
 
     async_register_websockets(hass)
 

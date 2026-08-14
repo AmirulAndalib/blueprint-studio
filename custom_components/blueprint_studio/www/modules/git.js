@@ -1,7 +1,7 @@
-import { t } from './translations.js?v=2.5.270';
+import { t } from './translations.js';
 /** GIT.JS | Purpose: Comprehensive Git and Gitea operations. Handles repository */
 import { state, elements, gitState, giteaState } from './state.js';
-import { API_BASE } from './constants.js?v=2.5.270';
+import { API_BASE } from './constants.js';
 import { fetchWithAuth } from './api.js';
 import { showToast, showGlobalLoading, hideGlobalLoading, showModal, showConfirmDialog } from './ui.js';
 import { formatBytes, ensureDiffLibrariesLoaded, isMobile } from './utils.js';

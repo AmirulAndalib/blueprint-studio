@@ -1,14 +1,14 @@
 /** API.JS | Purpose: * Provides the core API communication layer for Blueprint Studio. Handles */
 import { state, elements, gitState, giteaState } from './state.js';
-import { API_BASE, STREAM_BASE } from './constants.js?v=2.5.270';
+import { API_BASE, STREAM_BASE } from './constants.js';
 import { eventBus } from './event-bus.js';
-import { t } from './translations.js?v=2.5.270';
+import { t } from './translations.js';
 import { 
   showToast, 
   showConfirmDialog 
 } from './ui.js';
-import { saveSettings } from './settings.js?v=2.5.270';
-import { getActiveOperationSummary, startOperationFeedback } from './feedback-service.js?v=2.5.270';
+import { saveSettings } from './settings.js';
+import { getActiveOperationSummary, startOperationFeedback } from './feedback-service.js';
 
 // Import PWA auth - will be available after main.js loads it
 let pwaAuth = null;

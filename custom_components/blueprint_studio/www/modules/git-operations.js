@@ -1,16 +1,16 @@
 import { state, elements, gitState, giteaState } from './state.js';
 import { fetchWithAuth } from './api.js';
 import { eventBus } from './event-bus.js';
-import { API_BASE } from './constants.js?v=2.5.270';
+import { API_BASE } from './constants.js';
 import {
   showToast,
   showConfirmDialog,
   showModal,
   setButtonLoading
 } from './ui.js';
-import { getGitActionConfirmation } from './git-action-confirmation.js?v=2.5.270';
-import { t, tp } from './translations.js?v=2.5.270';
-import { startOperationFeedback } from './feedback-service.js?v=2.5.270';
+import { getGitActionConfirmation } from './git-action-confirmation.js';
+import { t, tp } from './translations.js';
+import { startOperationFeedback } from './feedback-service.js';
 
 function startGitOperation(label, icon, message, retry, target = gitState.currentBranch || t('git_diff_ops.current_branch')) {
   return startOperationFeedback({

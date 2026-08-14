@@ -1,9 +1,9 @@
 /** DIALOGS.JS | Purpose: * Specialized dialog utilities for issue reporting, feature requests, and */
-import { API_BASE } from './constants.js?v=2.5.270';
+import { API_BASE } from './constants.js';
 import { fetchWithAuth } from './api.js';
 import { elements } from './state.js';
-import { closeDialog, openDialog } from './dialog-manager.js?v=2.5.270';
-import { showUserGuide } from './user-guide.js?v=2.5.270';
+import { closeDialog, openDialog } from './dialog-manager.js';
+import { showUserGuide } from './user-guide.js';
 
 /**
  * Opens GitHub issue form with bug report template

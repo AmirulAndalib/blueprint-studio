@@ -2,27 +2,27 @@
 
 import { state } from './state.js';
 import { getFileIcon, formatBytes, isTextFile } from './utils.js';
-import { t } from './translations.js?v=2.5.270';
+import { t } from './translations.js';
 import { enableLongPressContextMenu } from './utils.js';
 import { eventBus } from './event-bus.js';
-import { API_BASE, STREAM_BASE, IMAGE_EXTENSIONS, VIDEO_EXTENSIONS, AUDIO_EXTENSIONS } from './constants.js?v=2.5.270';
+import { API_BASE, STREAM_BASE, IMAGE_EXTENSIONS, VIDEO_EXTENSIONS, AUDIO_EXTENSIONS } from './constants.js';
 import { fetchWithAuth, getAuthToken, urlWithTicket } from './api.js';
 import {
   showToast,
   showConfirmDialog,
   showModal as showInputModal
 } from './ui.js';
-import { updateSshDropdown } from './terminal.js?v=2.5.270';
+import { updateSshDropdown } from './terminal.js';
 import { createZipProgressId, startZipProgress } from './zip-progress.js';
-import { closeDialog, openDialog } from './dialog-manager.js?v=2.5.270';
+import { closeDialog, openDialog } from './dialog-manager.js';
 import { refreshActivityRail } from './activity-rail.js';
-import { renderSftpConnectionContext } from './context-indicators.js?v=2.5.270';
-import { setOverflowTooltip } from './tooltip.js?v=2.5.270';
-import { MAX_NAVIGATION_HISTORY, appendBoundedHistory } from './history-limits.js?v=2.5.270';
-import { classifyTreeError, renderTreeViewState } from './tree-view-state.js?v=2.5.270';
-import { captureTreeViewContext, scheduleTreeViewContextRestore } from './tree-view-context.js?v=2.5.270';
-import { configureTreeKeyboard, markTreeItem } from './tree-keyboard.js?v=2.5.270';
-import { startOperationFeedback } from './feedback-service.js?v=2.5.270';
+import { renderSftpConnectionContext } from './context-indicators.js';
+import { setOverflowTooltip } from './tooltip.js';
+import { MAX_NAVIGATION_HISTORY, appendBoundedHistory } from './history-limits.js';
+import { classifyTreeError, renderTreeViewState } from './tree-view-state.js';
+import { captureTreeViewContext, scheduleTreeViewContextRestore } from './tree-view-context.js';
+import { configureTreeKeyboard, markTreeItem } from './tree-keyboard.js';
+import { startOperationFeedback } from './feedback-service.js';
 
 // ─── Visibility ───────────────────────────────────────────────────────────────
 
@@ -1695,7 +1695,7 @@ async function _testAndSaveSftpConnection(conn, editingConnId = null) {
 }
 
 async function _downloadFile(connId, remotePath) {
-  const { downloadFileByPath } = await import('./downloads-uploads.js?v=2.5.270');
+  const { downloadFileByPath } = await import('./downloads-uploads.js');
   await downloadFileByPath(buildSftpPath(connId, remotePath));
 }
 

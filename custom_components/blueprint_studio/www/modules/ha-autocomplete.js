@@ -1,7 +1,7 @@
 /** HA-AUTOCOMPLETE.JS | Purpose: Home Assistant entity autocomplete and YAML schema hints. */
-import { API_BASE, HA_SCHEMA } from './constants.js?v=2.5.270';
+import { API_BASE, HA_SCHEMA } from './constants.js';
 import { fetchWithAuth } from './api.js';
-import { BLUEPRINT_DOMAINS, getEditorYamlContext } from './yaml-context.js?v=2.5.270';
+import { BLUEPRINT_DOMAINS, getEditorYamlContext } from './yaml-context.js';
 
 export let HA_ENTITIES = [];
 export let HA_SERVICES = [];

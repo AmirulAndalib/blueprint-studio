@@ -1,18 +1,18 @@
 /** GITEA-UI.JS | Purpose: * Handles all UI rendering and user interactions for the Gitea integration */
 import { state, elements, giteaState } from './state.js';
-import { t } from './translations.js?v=2.5.270';
+import { t } from './translations.js';
 import { showToast, setButtonLoading } from './ui.js';
 import { isTextFile } from './utils.js';
 import { refreshActivityRail } from './activity-rail.js';
-import { renderRepositoryContext } from './context-indicators.js?v=2.5.270';
-import { bindSourceControlRecovery, renderSourceControlRecovery } from './source-control-recovery.js?v=2.5.270';
+import { renderRepositoryContext } from './context-indicators.js';
+import { bindSourceControlRecovery, renderSourceControlRecovery } from './source-control-recovery.js';
 import {
   captureSourceControlView,
   getUnstagedPaths,
   renderSourceControlFiles,
   scheduleSourceControlViewRestore,
   updateCommitComposer,
-} from './source-control-view.js?v=2.5.270';
+} from './source-control-view.js';
 import {
   giteaStage,
   giteaUnstage,
@@ -21,7 +21,7 @@ import {
   giteaHardReset,
   giteaPull,
   giteaStatus
-} from './gitea-integration.js?v=2.5.270';
+} from './gitea-integration.js';
 
 /**
  * Updates the Gitea panel UI with current status
@@ -49,7 +49,7 @@ export function updateGiteaPanel() {
   refreshActivityRail();
 
   renderRepositoryContext(panel, 'Gitea', giteaState, () => {
-    import('./git-operations.js?v=2.5.270').then(module => module.showBranchManager());
+    import('./git-operations.js').then(module => module.showBranchManager());
   });
 
   // Sync indicators

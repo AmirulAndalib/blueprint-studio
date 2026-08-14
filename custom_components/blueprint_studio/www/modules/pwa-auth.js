@@ -3,7 +3,7 @@
  * Handles authentication for standalone PWA mode using HA OAuth2 flow
  */
 
-import { t, initTranslations } from './translations.js?v=2.5.270';
+import { t, initTranslations } from './translations.js';
 
 export class PWAAuth {
   constructor() {

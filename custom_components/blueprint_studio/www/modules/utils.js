@@ -1,5 +1,5 @@
 /** UTILS.JS | Purpose: * Collection of utility/helper functions used throughout Blueprint Studio. */
-import { MOBILE_BREAKPOINT, TEXT_FILE_EXTENSIONS } from './constants.js?v=2.5.270';
+import { MOBILE_BREAKPOINT, TEXT_FILE_EXTENSIONS } from './constants.js';
 
 /**
  * ============================================================================
@@ -217,10 +217,10 @@ export async function ensureDiffLibrariesLoaded(showGlobalLoading, hideGlobalLoa
   if (showGlobalLoading) showGlobalLoading("Initializing Diff viewer...");
   try {
       if (!window.diff_match_patch) {
-          await loadScript("/local/blueprint_studio/vendor/diff/diff_match_patch.js");
+          await loadScript("/blueprint_studio/assets/vendor/diff/diff_match_patch.js");
       }
       if (!CodeMirror.MergeView) {
-          await loadScript("/local/blueprint_studio/vendor/codemirror/js/merge.min.js");
+          await loadScript("/blueprint_studio/assets/vendor/codemirror/js/merge.min.js");
       }
   } catch (e) {
       console.error("Failed to load Diff libraries", e);
