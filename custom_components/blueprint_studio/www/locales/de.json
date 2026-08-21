@@ -367,6 +367,7 @@
   "sidebar.stage_all": "Alle stagen",
   "sidebar.staged": "Gestaged",
   "sidebar.unstage": "Unstagen",
+  "sidebar.unstage_all": "Alle unstagen",
   "sidebar.untracked": "Nicht verfolgt",
   "ssh.add_new": "Neuen Host hinzufügen",
   "ssh.add_title": "SSH-Host hinzufügen",

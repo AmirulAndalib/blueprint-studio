@@ -367,6 +367,7 @@
   "sidebar.stage_all": "Indexer tout",
   "sidebar.staged": "Indexé",
   "sidebar.unstage": "Désindexer",
+  "sidebar.unstage_all": "Tout désindexer",
   "sidebar.untracked": "Non suivi",
   "ssh.add_new": "Ajouter un nouvel hôte",
   "ssh.add_title": "Ajouter un hôte SSH",

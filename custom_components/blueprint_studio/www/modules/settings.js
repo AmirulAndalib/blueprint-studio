@@ -185,8 +185,10 @@ export async function loadSettings() {
     state.showWhitespace = settings.showWhitespace || false;
     state.autoSave = settings.autoSave || false;
     state.autoSaveDelay = parseInt(settings.autoSaveDelay) || 1000;
-    state.fileTreeCompact = settings.fileTreeCompact || false;
-    state.fileTreeShowIcons = settings.fileTreeShowIcons !== false; // default true
+    // HA storage may return legacy boolean preferences as strings. Treat only
+    // an explicit true value as enabled so "false" cannot enable compact mode.
+    state.fileTreeCompact = settings.fileTreeCompact === true || settings.fileTreeCompact === "true";
+    state.fileTreeShowIcons = settings.fileTreeShowIcons !== false && settings.fileTreeShowIcons !== "false"; // default true
     state.fileTreeFilter = settings.fileTreeFilter || "all";
     state.treeCollapsableMode = settings.treeCollapsableMode || false;
     // Apply tree mode to lazyLoadingEnabled

@@ -120,6 +120,10 @@ export function updateMatchStatus(query) {
  * @param {boolean} replaceMode - Whether to open in replace mode
  */
 export function openSearchWidget(replaceMode = false) {
+  if (!state.activeTab || !state.editor) {
+    showToast(t('toast.open_file_first'), 'info', 2000);
+    return;
+  }
   state.searchWidgetVisible = true;
   
   // Determine which widget to use based on active pane
@@ -130,6 +134,7 @@ export function openSearchWidget(replaceMode = false) {
   const replaceToggle = isSecondary ? elements.secondarySearchToggle : elements.searchToggle;
 
   if (!widget) return;
+  widget.setAttribute('aria-hidden', 'false');
   widget.classList.add("visible");
 
   if (replaceMode) {
@@ -171,6 +176,8 @@ export function closeSearchWidget() {
   
   if (elements.searchWidget) elements.searchWidget.classList.remove("visible");
   if (elements.secondarySearchWidget) elements.secondarySearchWidget.classList.remove("visible");
+  if (elements.searchWidget) elements.searchWidget.setAttribute('aria-hidden', 'true');
+  if (elements.secondarySearchWidget) elements.secondarySearchWidget.setAttribute('aria-hidden', 'true');
   if (elements.searchToggle) elements.searchToggle.setAttribute("aria-expanded", "false");
   if (elements.secondarySearchToggle) elements.secondarySearchToggle.setAttribute("aria-expanded", "false");
 

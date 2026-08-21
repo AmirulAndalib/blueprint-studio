@@ -326,7 +326,13 @@ class GitManager:
                         await self.hass.async_add_executor_job(self._run_git_command, ["branch", "-m", "main"])
             if result["success"]:
                 await self._create_gitignore_if_missing()
-                return json_response({"success": True, "message": "Git repository initialized", "output": result["output"]})
+                ignored_unstaged = await self._unstage_ignored_files_before_first_commit()
+                return json_response({
+                    "success": True,
+                    "message": "Git repository initialized",
+                    "output": result["output"],
+                    "ignored_unstaged": ignored_unstaged,
+                })
             return json_message(result["error"], status_code=500)
         except Exception as err:
             _LOGGER.error("Error initializing git: %s", err)
@@ -337,10 +343,51 @@ class GitManager:
         try:
             gitignore_path = self.config_dir / ".gitignore"
             if not gitignore_path.exists():
-                gitignore_content = "# Home Assistant - Git Ignore File\n*.db\n*.log\n.storage/\n.cloud/\n__pycache__/\n.vscode/\n.git_credential_helper*.sh\n"
+                gitignore_content = (
+                    "# Home Assistant - Git Ignore File\n"
+                    "*.db\n"
+                    "*.db-*\n"
+                    "*.db-journal\n"
+                    "*.sqlite*\n"
+                    "*.log\n"
+                    ".storage/\n"
+                    ".cloud/\n"
+                    "__pycache__/\n"
+                    ".vscode/\n"
+                    ".git_credential_helper*.sh\n"
+                )
                 await self.hass.async_add_executor_job(gitignore_path.write_text, gitignore_content)
         except Exception as err:
             _LOGGER.warning("Failed to create .gitignore: %s", err)
+
+    async def _unstage_ignored_files_before_first_commit(self) -> int:
+        """Remove ignored paths accidentally staged in an unborn repository."""
+        head = await self.hass.async_add_executor_job(
+            self._run_git_command, ["rev-parse", "--verify", "HEAD"]
+        )
+        if head["success"]:
+            return 0
+
+        tracked = await self.hass.async_add_executor_job(
+            self._run_git_command,
+            ["ls-files", "--cached", "--ignored", "--exclude-standard", "-z"],
+        )
+        if not tracked["success"]:
+            _LOGGER.warning("Failed to inspect staged ignored files: %s", tracked["error"])
+            return 0
+
+        ignored_paths = [path for path in tracked["output"].split("\0") if path]
+        if not ignored_paths:
+            return 0
+
+        result = await self.hass.async_add_executor_job(
+            self._run_git_command,
+            ["rm", "-r", "--cached", "--ignore-unmatch", "--", *ignored_paths],
+        )
+        if not result["success"]:
+            _LOGGER.warning("Failed to unstage ignored files: %s", result["error"])
+            return 0
+        return len(ignored_paths)
 
     async def add_remote(self, name: str, url: str) -> web.Response:
         """Add or update a git remote."""
@@ -743,8 +790,18 @@ class GitManager:
         try:
             for file in files:
                 if not is_path_safe(self.config_dir, file): return json_message(f"Invalid path: {file}", status_code=403)
-                await self.hass.async_add_executor_job(self._run_git_command, ["rm", "-r", "--cached", file])
-            return json_response({"success": True})
+            if not files:
+                return json_response({"success": True, "message": "No files needed index changes"})
+            result = await self.hass.async_add_executor_job(
+                self._run_git_command,
+                ["rm", "-r", "--cached", "--ignore-unmatch", "--", *files],
+            )
+            if result["success"]:
+                return json_response({
+                    "success": True,
+                    "message": f"Stopped tracking {len(files)} excluded path(s)",
+                })
+            return json_message(result["error"], status_code=500)
         except Exception as err:
             _LOGGER.error("Error stopping tracking for files: %s", err)
             return json_message(str(err), status_code=500)

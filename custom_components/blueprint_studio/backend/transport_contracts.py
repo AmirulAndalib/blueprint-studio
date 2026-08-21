@@ -387,7 +387,14 @@ def validate_action(
             raise ValidationError(f"Field '{field}' is not a valid branch name")
         elif field == "hash" and not _valid_commit_reference(value):
             raise ValidationError("Field 'hash' is not a valid commit reference")
-        elif field in {"name", "remote"} and (
+        elif field == "name" and action == "instantiate_blueprint" and (
+            not isinstance(value, str)
+            or not value.strip()
+            or len(value) > 255
+            or any(char in value for char in "\r\n\x00")
+        ):
+            raise ValidationError("Field 'name' is not a valid display name")
+        elif field in {"name", "remote"} and action != "instantiate_blueprint" and (
             not isinstance(value, str)
             or not value
             or len(value) > 255

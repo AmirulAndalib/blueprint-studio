@@ -4371,6 +4371,10 @@ class FrontendContractTests(unittest.TestCase):
             self.assertIn(f"key: '{group}'", shared)
         self.assertIn("MAX_IGNORED_STATUS_PATHS = 200", (ROOT / "custom_components" / "blueprint_studio" / "backend" / "git_manager.py").read_text(encoding="utf-8"))
         self.assertIn("btn-source-control-stage", shared)
+        self.assertIn("btn-source-control-exclusions", shared)
+        self.assertIn("btn-source-control-exclusions", coordinator)
+        self.assertIn("source-control-row-spacer", shared)
+        self.assertNotIn("selection.disabled", shared)
         self.assertIn("git-file-actions", shared)
         self.assertNotIn("source-control-group-action", shared)
         self.assertNotIn("source-control-group-action", coordinator)
@@ -4398,6 +4402,28 @@ class FrontendContractTests(unittest.TestCase):
         self.assertIn(".source-control-panels > .git-panel.visible", layout_styles)
         self.assertIn("max-height: none", layout_styles)
         self.assertNotIn("old_content", shared)
+
+    def test_manage_exclusions_uses_git_resolved_state_and_index_updates(self):
+        modules = ROOT / "custom_components" / "blueprint_studio" / "www" / "modules"
+        exclusions = (modules / "github-integration.js").read_text(encoding="utf-8")
+        file_manager = (
+            ROOT / "custom_components" / "blueprint_studio" / "backend" / "file_manager.py"
+        ).read_text(encoding="utf-8")
+        git_manager = (
+            ROOT / "custom_components" / "blueprint_studio" / "backend" / "git_manager.py"
+        ).read_text(encoding="utf-8")
+
+        for contract in (
+            'item.ignored === true',
+            'if (hasGitIgnoreMetadata) return gitIgnoredPaths.has(path)',
+            'const reincludedPaths = Array.from(itemsToInclude)',
+            'const pathsToUntrack = new Set(optimizedIgnoreList)',
+            'saveGitExclusions(newContent, Array.from(pathsToUntrack))',
+        ):
+            self.assertIn(contract, exclusions)
+        self.assertIn('"check-ignore"', file_manager)
+        self.assertIn('item["ignored"] = item["path"] in ignored_paths', file_manager)
+        self.assertIn('["rm", "-r", "--cached", "--ignore-unmatch", "--", *files]', git_manager)
 
     def test_repository_sync_state_is_shared_by_headers_and_status_bar(self):
         modules = ROOT / "custom_components" / "blueprint_studio" / "www" / "modules"
@@ -4661,7 +4687,7 @@ class FrontendContractTests(unittest.TestCase):
             "label: t('github_ops.exclusions_load_label')",
             "retry: showGitExclusions",
             "loadOperation.fail(t('github_ops.exclusions_load_failed'), error.message)",
-            "const saved = await saveGitExclusions(newContent, optimizedIgnoreList)",
+            "const saved = await saveGitExclusions(newContent, Array.from(pathsToUntrack))",
             "setButtonLoading(btnConfirm, true)",
         ):
             self.assertIn(contract, exclusions)
@@ -5108,6 +5134,69 @@ class FrontendContractTests(unittest.TestCase):
         file_tree = (ROOT / "custom_components" / "blueprint_studio" / "www" / "modules" / "file-tree.js").read_text(encoding="utf-8")
         for contract in ("edit.selectionStart = input.selectionStart", "edit.selectionEnd = input.selectionEnd", "edit.selectionDirection = input.selectionDirection", "input.setSelectionRange(edit.selectionStart"):
             self.assertIn(contract, file_tree)
+
+    def test_touch_compact_mode_has_distinct_tree_density(self):
+        responsive = (
+            ROOT / "custom_components" / "blueprint_studio" / "www" / "styles" / "modules" / "responsive.css"
+        ).read_text(encoding="utf-8")
+        self.assertRegex(
+            responsive,
+            r"@media \(hover: none\), \(pointer: coarse\), \(any-pointer: coarse\)[\s\S]*?\.tree-item \{[\s\S]*?min-height:\s*48px",
+        )
+        self.assertRegex(
+            responsive,
+            r"body\.file-tree-compact \.tree-item \{[\s\S]*?min-height:\s*34px",
+        )
+        self.assertRegex(
+            responsive,
+            r"body\.file-tree-compact \.tree-action-btn,[\s\S]*?min-height:\s*34px",
+        )
+
+    def test_desktop_compact_mode_reduces_action_controls(self):
+        base = (
+            ROOT / "custom_components" / "blueprint_studio" / "www" / "styles" / "modules" / "base.css"
+        ).read_text(encoding="utf-8")
+        self.assertRegex(
+            base,
+            r"body\.file-tree-compact \.tree-item \{[\s\S]*?line-height:\s*20px",
+        )
+        self.assertRegex(
+            base,
+            r"body\.file-tree-compact \.tree-action-btn \{[\s\S]*?width:\s*20px[\s\S]*?height:\s*20px",
+        )
+        for selector in (
+            ".git-file-group-header",
+            ".git-file-item",
+            ".sftp-connection-item",
+        ):
+            self.assertIn(f"body.file-tree-compact {selector}", base)
+
+    def test_native_theme_preserves_normal_and_compact_tree_density(self):
+        themes = (
+            ROOT / "custom_components" / "blueprint_studio" / "www" / "styles" / "modules" / "themes.css"
+        ).read_text(encoding="utf-8")
+        self.assertRegex(
+            themes,
+            r'body\[data-theme-preset="native"\] \.tree-item \{[\s\S]*?min-height:\s*40px',
+        )
+        self.assertRegex(
+            themes,
+            r'body\[data-theme-preset="native"\]\.file-tree-compact \.tree-item \{[\s\S]*?min-height:\s*28px',
+        )
+
+    def test_phone_find_is_a_top_popover_above_navigation(self):
+        responsive = (
+            ROOT / "custom_components" / "blueprint_studio" / "www" / "styles" / "modules" / "responsive.css"
+        ).read_text(encoding="utf-8")
+        search = (
+            ROOT / "custom_components" / "blueprint_studio" / "www" / "modules" / "search.js"
+        ).read_text(encoding="utf-8")
+        self.assertRegex(
+            responsive,
+            r'body\[data-workspace-mode="phone"\] \.search-widget \{[\s\S]*?top:[\s\S]*?bottom:\s*auto;[\s\S]*?z-index:\s*2200',
+        )
+        self.assertIn('grid-template-columns: 32px minmax(0, 1fr) 44px 44px 44px auto', responsive)
+        self.assertIn("if (!state.activeTab || !state.editor)", search)
 
     def test_shared_constants_imports_do_not_use_cache_busting_tokens(self):
         modules = ROOT / "custom_components" / "blueprint_studio" / "www" / "modules"
@@ -6471,6 +6560,17 @@ class FrontendContractTests(unittest.TestCase):
             "editor.scrollTo(scroll.left, scroll.top)",
         ):
             self.assertIn(contract, git_diff)
+
+    def test_source_control_bulk_unstage_action_is_explicit_for_both_providers(self):
+        modules = ROOT / "custom_components" / "blueprint_studio" / "www" / "modules"
+        locale = json.loads(
+            (ROOT / "custom_components" / "blueprint_studio" / "www" / "locales" / "en.json").read_text(encoding="utf-8")
+        )
+
+        self.assertEqual("Unstage All", locale["sidebar.unstage_all"])
+        for filename in ("git-ui.js", "gitea-integration.js"):
+            source = (modules / filename).read_text(encoding="utf-8")
+            self.assertIn('t("sidebar.unstage_all")', source)
 
     def test_source_control_recovery_states_are_shared_and_actionable(self):
         modules = ROOT / "custom_components" / "blueprint_studio" / "www" / "modules"

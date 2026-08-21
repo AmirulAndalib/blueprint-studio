@@ -83,6 +83,11 @@ export function initGitCoordinator(callbacks) {
     const gitFilesContainer = document.getElementById("git-files-container");
     if (gitFilesContainer) {
         gitFilesContainer.addEventListener("click", (e) => {
+            const exclusionsButton = e.target.closest('.btn-source-control-exclusions');
+            if (exclusionsButton) {
+                if (functions.showGitExclusions) functions.showGitExclusions();
+                return;
+            }
             const stageButton = e.target.closest('.btn-source-control-stage');
             if (stageButton) {
                 changeSourceControlStage('git', stageButton.dataset.action, [stageButton.dataset.path]);
@@ -171,6 +176,11 @@ export function initGitCoordinator(callbacks) {
     const giteaFilesContainer = document.getElementById("gitea-files-container");
     if (giteaFilesContainer) {
         giteaFilesContainer.addEventListener("click", (e) => {
+            const exclusionsButton = e.target.closest('.btn-source-control-exclusions');
+            if (exclusionsButton) {
+                if (functions.showGitExclusions) functions.showGitExclusions();
+                return;
+            }
             const stageButton = e.target.closest('.btn-source-control-stage');
             if (stageButton) {
                 changeSourceControlStage('gitea', stageButton.dataset.action, [stageButton.dataset.path]);
@@ -499,10 +509,10 @@ export function initGitCoordinator(callbacks) {
     });
 
     // UI Updates
-    eventBus.on("git:refresh", () => {
+    eventBus.on("git:refresh", (data = {}) => {
         if (functions.updateGitPanel) functions.updateGitPanel();
         if (functions.updateGiteaPanel) functions.updateGiteaPanel();
-        renderFileTree();
+        if (data.refreshTree !== false) renderFileTree();
     });
 
     eventBus.on('source-control:connectivity-change', () => {

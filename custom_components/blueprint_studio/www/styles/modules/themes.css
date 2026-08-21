@@ -905,14 +905,22 @@
     }
 
     body[data-theme-preset="native"] .tree-item {
-        padding: 3px 8px;
+        padding: 8px;
         padding-left: calc(8px + var(--depth, 0) * 20px);
-        font-size: 13px;
-        min-height: 26px;
+        font-size: 14px;
+        min-height: 40px;
         border-radius: 4px;
         margin: 0 4px;
         color: #1d1d1f;
         transition: background 0.08s ease;
+    }
+
+    body[data-theme-preset="native"].file-tree-compact .tree-item {
+        padding-top: 3px;
+        padding-bottom: 3px;
+        font-size: 13px;
+        min-height: 28px;
+        line-height: 20px;
     }
 
     body[data-theme-preset="native"] .tree-item:hover {

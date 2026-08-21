@@ -367,6 +367,7 @@
   "sidebar.stage_all": "Alles toevoegen",
   "sidebar.staged": "Toegevoegd",
   "sidebar.unstage": "Verwijderen (Unstage)",
+  "sidebar.unstage_all": "Alles unstagen",
   "sidebar.untracked": "Niet gevolgd",
   "ssh.add_new": "Nieuwe Host Toevoegen",
   "ssh.add_title": "SSH-host Toevoegen",

@@ -588,7 +588,7 @@ export function refreshGitPanelStrings() {
   if (btnStageAll) btnStageAll.textContent = t("sidebar.stage_all");
 
   const btnUnstageAll = document.getElementById("btn-unstage-all");
-  if (btnUnstageAll) btnUnstageAll.textContent = t("sidebar.unstage");
+  if (btnUnstageAll) btnUnstageAll.textContent = t("sidebar.unstage_all");
 
   const btnCommit = document.getElementById("btn-commit-staged");
   if (btnCommit) btnCommit.textContent = t("sidebar.commit");

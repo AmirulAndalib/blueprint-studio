@@ -129,6 +129,26 @@ class TransportContractTests(unittest.TestCase):
                         action, {"name": "fixture"}, transport="post"
                     )
 
+    def test_blueprint_instance_display_names_allow_spaces_but_reject_control_input(self):
+        request = {
+            "content": "blueprint:\n  name: Fixture\n  domain: automation\n  input: {}\n",
+            "input_values": {},
+            "name": "Kitchen Motion Light",
+        }
+        result = contracts.validate_action(
+            "instantiate_blueprint", request, transport="post"
+        )
+        self.assertEqual(result["name"], "Kitchen Motion Light")
+
+        for invalid_name in ("   ", "Kitchen\nLight", "Kitchen\x00Light"):
+            with self.subTest(invalid_name=repr(invalid_name)):
+                with self.assertRaisesRegex(contracts.ValidationError, "display name"):
+                    contracts.validate_action(
+                        "instantiate_blueprint",
+                        {**request, "name": invalid_name},
+                        transport="post",
+                    )
+
     def test_ai_proposal_selection_and_empty_revision_are_typed(self):
         selected = contracts.validate_action(
             "ai_apply_proposal",

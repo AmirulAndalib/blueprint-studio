@@ -754,6 +754,11 @@ export async function showGitExclusions() {
       items.forEach(item => {
         sizeMap.set(item.path, { size: item.size || 0, type: item.type });
       });
+      const hasGitIgnoreMetadata = items.every(item => typeof item.ignored === 'boolean');
+      const gitIgnoredPaths = new Set(
+        items.filter(item => item.ignored === true).map(item => item.path),
+      );
+      const itemByPath = new Map(items.map(item => [item.path, item]));
 
       // 2. Fetch current .gitignore content
       let gitignoreContent = "";
@@ -776,7 +781,7 @@ export async function showGitExclusions() {
 
       // Default ignores if .gitignore is empty/new
       if (ignoredLines.size === 0) {
-        ["__pycache__", ".cloud", ".storage", "deps", ".ha_run.lock"].forEach(item => ignoredLines.add(item));
+        ["*.db", "*.db-*", "*.db-journal", "*.sqlite*", "*.log", "__pycache__/", ".cloud/", ".storage/", ".vscode/", ".git_credential_helper*.sh"].forEach(item => ignoredLines.add(item));
       }
 
       // 4. Create Modal Content
@@ -810,7 +815,9 @@ export async function showGitExclusions() {
 
       // Helper to check if a path or any of its parents are ignored
       function isPathIgnored(path) {
+        if (hasGitIgnoreMetadata) return gitIgnoredPaths.has(path);
         for (const line of ignoredLines) {
+          if (line.startsWith("!")) continue;
           // Exact match (with or without trailing slash)
           const stripped = line.replace(/\/$/, "");
           if (stripped === path || stripped + "/" === path) return true;
@@ -1162,10 +1169,42 @@ export async function showGitExclusions() {
           });
         }
 
+        // Gitignore rules are order-sensitive. A checked path that remains
+        // covered by an existing wildcard needs a later negation rule.
+        const reincludedPaths = Array.from(itemsToInclude)
+          .filter(path => gitIgnoredPaths.has(path))
+          .sort((left, right) => left.localeCompare(right));
+        if (reincludedPaths.length > 0) {
+          const includeHeader = "# Included via Blueprint Studio";
+          if (!newContentLines.includes(includeHeader)) {
+            newContentLines.push("");
+            newContentLines.push(includeHeader);
+          }
+          reincludedPaths.forEach(path => {
+            const item = itemByPath.get(path);
+            const rules = item?.type === "folder"
+              ? [`!${path.replace(/\/$/, "")}/`, `!${path.replace(/\/$/, "")}/**`]
+              : [`!${path}`];
+            rules.forEach(rule => {
+              if (!newContentLines.includes(rule)) newContentLines.push(rule);
+            });
+          });
+        }
+
+        const pathsToUntrack = new Set(optimizedIgnoreList);
+        rawIgnoreList.forEach(path => {
+          const coveredBySavedParent = optimizedIgnoreList.some(
+            parent => path === parent || path.startsWith(`${parent}/`),
+          );
+          if (!coveredBySavedParent && !gitIgnoredPaths.has(path)) {
+            pathsToUntrack.add(path);
+          }
+        });
+
         const newContent = newContentLines.join("\n").trim() + "\n";
 
         setButtonLoading(btnConfirm, true);
-        const saved = await saveGitExclusions(newContent, optimizedIgnoreList);
+        const saved = await saveGitExclusions(newContent, Array.from(pathsToUntrack));
         setButtonLoading(btnConfirm, false);
         if (saved) {
           deactivateSharedModal();

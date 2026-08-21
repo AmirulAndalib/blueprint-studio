@@ -442,6 +442,24 @@
     /* Touch input can be present at any viewport width. Keep desktop pointer
        density unchanged while exposing actions that otherwise require hover. */
     @media (hover: none), (pointer: coarse), (any-pointer: coarse) {
+      .tree-item {
+        min-height: 48px;
+        padding-top: 10px;
+        padding-bottom: 10px;
+      }
+
+      .git-file-group-header,
+      .git-file-item,
+      .sftp-connection-item {
+        min-height: 48px;
+      }
+
+      body[data-theme-preset="native"] .tree-item {
+        min-height: 48px;
+        padding-top: 10px;
+        padding-bottom: 10px;
+      }
+
       .tree-item-actions {
         display: flex;
         flex-shrink: 0;
@@ -481,6 +499,43 @@
       .search-action-btn:active {
         background: var(--bg-hover);
         color: var(--text-primary);
+      }
+
+      /* Compact is an explicit density preference. Its controls remain easy
+         to tap without forcing every explorer row back to normal density. */
+      body.file-tree-compact .tree-item {
+        min-height: 34px;
+        padding-top: 3px;
+        padding-bottom: 3px;
+      }
+
+      body.file-tree-compact .tree-action-btn,
+      body.file-tree-compact .inline-edit-btn {
+        width: 34px;
+        height: 34px;
+        min-width: 34px;
+        min-height: 34px;
+      }
+
+      body.file-tree-compact .git-file-group-header,
+      body.file-tree-compact .git-file-item,
+      body.file-tree-compact .sftp-connection-item {
+        min-height: 34px;
+        padding-top: 3px;
+        padding-bottom: 3px;
+      }
+
+      body.file-tree-compact .git-file-item .ui-icon-button {
+        width: 34px;
+        height: 34px;
+        min-width: 34px;
+        min-height: 34px;
+      }
+
+      body[data-theme-preset="native"].file-tree-compact .tree-item {
+        min-height: 34px;
+        padding-top: 3px;
+        padding-bottom: 3px;
       }
     }
 
@@ -920,36 +975,55 @@
       }
 
       /* Search widget mobile optimization */
-      .search-widget {
+      body[data-workspace-mode="phone"] .search-widget {
         position: fixed;
-        top: auto;
-        bottom: 0;
-        left: 0;
-        right: 0;
-        width: 100%;
-        max-width: 100%;
-        border-radius: 12px 12px 0 0;
-        border: none;
-        border-top: 1px solid var(--border-color);
-        padding: 8px 12px;
-        padding-bottom: calc(8px + env(safe-area-inset-bottom));
-        box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.3);
-        z-index: 100;
-        max-height: 50vh;
+        top: calc(var(--visual-viewport-offset-top, 0px) + 8px);
+        bottom: auto;
+        left: max(8px, var(--safe-area-left));
+        right: max(8px, var(--safe-area-right));
+        width: auto;
+        max-width: none;
+        border: 1px solid var(--border-color);
+        border-radius: 6px;
+        padding: 8px;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+        z-index: 2200;
+        max-height: min(50vh, var(--visual-viewport-height, 50vh));
       }
 
-      .search-widget input {
+      body[data-workspace-mode="phone"] .search-widget input {
         font-size: 16px; /* Prevent zoom on iOS */
         padding: 8px 12px;
       }
 
-      .search-row {
-        gap: 8px;
+      body[data-workspace-mode="phone"] .search-widget .search-row {
+        display: grid;
+        grid-template-columns: 32px minmax(0, 1fr) 44px 44px 44px auto;
+        gap: 6px;
       }
 
-      .search-actions button {
-        width: 36px;
-        height: 36px;
+      body[data-workspace-mode="phone"] .search-widget .search-input-wrapper {
+        grid-column: 2 / 6;
+      }
+
+      body[data-workspace-mode="phone"] .search-widget .search-actions {
+        grid-column: 6;
+        grid-row: 1;
+      }
+
+      body[data-workspace-mode="phone"] .search-widget .search-case-btn {
+        grid-row: 2;
+        min-width: 44px;
+        min-height: 36px;
+      }
+
+      body[data-workspace-mode="phone"] .search-widget .search-case-btn:nth-of-type(2) { grid-column: 2; }
+      body[data-workspace-mode="phone"] .search-widget .search-case-btn:nth-of-type(3) { grid-column: 3; }
+      body[data-workspace-mode="phone"] .search-widget .search-case-btn:nth-of-type(4) { grid-column: 4; }
+
+      body[data-workspace-mode="phone"] .search-widget .search-actions button {
+        width: 40px;
+        height: 40px;
       }
 
       /* AI Sidebar mobile overlay */

@@ -2196,12 +2196,16 @@ export async function showAppSettings({ section = 'workspace', returnFocus = nul
     if (fileTreeCompactToggle) {
       fileTreeCompactToggle.addEventListener("change", async (e) => {
         state.fileTreeCompact = e.target.checked;
-        await saveSettingsImpl();
-
-        // Apply layout changes immediately
+        // Apply the visual preference before waiting for Home Assistant storage.
+        // This keeps the toggle responsive on mobile and avoids a stale class
+        // when a settings request is delayed or interrupted.
         eventBus.emit('ui:refresh-layout');
-
         eventBus.emit('ui:refresh-tree');
+        try {
+          await saveSettingsImpl();
+        } catch (error) {
+          console.warn('[Settings] Compact mode could not be persisted:', error);
+        }
         showToast(t(state.fileTreeCompact ? "toast.compact_enabled" : "toast.compact_disabled"), "success");
       });
     }
@@ -2211,12 +2215,13 @@ export async function showAppSettings({ section = 'workspace', returnFocus = nul
     if (fileTreeIconsToggle) {
       fileTreeIconsToggle.addEventListener("change", async (e) => {
         state.fileTreeShowIcons = e.target.checked;
-        await saveSettingsImpl();
-
-        // Apply layout changes immediately
         eventBus.emit('ui:refresh-layout');
-
         eventBus.emit('ui:refresh-tree');
+        try {
+          await saveSettingsImpl();
+        } catch (error) {
+          console.warn('[Settings] File icon preference could not be persisted:', error);
+        }
         showToast(t(state.fileTreeShowIcons ? "toast.file_icons_shown" : "toast.file_icons_hidden"), "success");
       });
     }

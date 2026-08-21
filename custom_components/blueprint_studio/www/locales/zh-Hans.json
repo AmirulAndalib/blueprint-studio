@@ -367,6 +367,7 @@
   "sidebar.stage_all": "全部暂存",
   "sidebar.staged": "已暂存",
   "sidebar.unstage": "取消暂存",
+  "sidebar.unstage_all": "取消全部暂存",
   "sidebar.untracked": "未跟踪",
   "ssh.add_new": "添加新主机",
   "ssh.add_title": "添加 SSH 主机",

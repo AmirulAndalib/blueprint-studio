@@ -367,6 +367,7 @@
   "sidebar.stage_all": "Preparar tudo",
   "sidebar.staged": "Preparados",
   "sidebar.unstage": "Retirar",
+  "sidebar.unstage_all": "Retirar tudo",
   "sidebar.untracked": "Não monitorizado",
   "ssh.add_new": "Adicionar Novo Host",
   "ssh.add_title": "Adicionar Host SSH",

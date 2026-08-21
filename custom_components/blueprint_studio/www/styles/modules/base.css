@@ -279,6 +279,7 @@
       padding-bottom: 4px;
       padding-right: 8px;
       min-height: 28px;
+      line-height: 20px;
     }
 
     body.file-tree-compact .tree-icon {
@@ -288,6 +289,59 @@
 
     body.file-tree-compact .tree-icon .material-icons {
       font-size: 16px;
+    }
+
+    body.file-tree-compact .tree-action-btn {
+      width: 20px;
+      height: 20px;
+    }
+
+    body.file-tree-compact .tree-action-btn .material-icons {
+      font-size: 14px;
+    }
+
+    body.file-tree-compact .git-file-group-header {
+      min-height: 28px;
+      padding: 3px 8px;
+    }
+
+    body.file-tree-compact .git-file-group-toggle {
+      min-height: 22px;
+    }
+
+    body.file-tree-compact .git-file-list {
+      padding-block: 2px;
+    }
+
+    body.file-tree-compact .git-file-item {
+      min-height: 28px;
+      padding: 2px 8px 2px 24px;
+      font-size: 12px;
+    }
+
+    body.file-tree-compact .git-file-checkbox,
+    body.file-tree-compact .gitea-file-checkbox {
+      width: 14px;
+      height: 14px;
+      margin-right: 6px;
+    }
+
+    body.file-tree-compact .git-file-icon {
+      margin-right: 6px;
+      font-size: 14px;
+    }
+
+    body.file-tree-compact .git-file-item .ui-icon-button {
+      width: 20px;
+      height: 20px;
+      min-width: 20px;
+      min-height: 20px;
+    }
+
+    body.file-tree-compact .sftp-connection-item {
+      min-height: 28px;
+      padding: 3px 8px;
+      font-size: 12px;
     }
 
     body.file-tree-compact .tree-name {

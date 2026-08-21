@@ -367,6 +367,7 @@
   "sidebar.stage_all": "Индексировать все",
   "sidebar.staged": "В индексе",
   "sidebar.unstage": "Исключить из индекса",
+  "sidebar.unstage_all": "Исключить все из индекса",
   "sidebar.untracked": "Неотслеживаемое",
   "ssh.add_new": "Добавить новый хост",
   "ssh.add_title": "Добавить SSH-хост",

@@ -12,6 +12,7 @@ import queue
 import re
 import secrets
 import shutil
+import subprocess
 import threading
 import tempfile
 import zipfile
@@ -643,6 +644,33 @@ class FileManager:
                     try: size = file_path.stat().st_size
                     except OSError: size = 0
                     res.append({"path": str(rel_root / name if str(rel_root) != "." else name), "name": name, "type": "file", "size": size})
+            ignored_paths: set[str] = set()
+            if (self.config_dir.joinpath(".git").is_dir() and res):
+                try:
+                    result = subprocess.run(
+                        [
+                            "git",
+                            "-c",
+                            f"safe.directory={self.config_dir}",
+                            "check-ignore",
+                            "--stdin",
+                            "-z",
+                        ],
+                        cwd=self.config_dir,
+                        input="\0".join(item["path"] for item in res) + "\0",
+                        capture_output=True,
+                        text=True,
+                        timeout=30,
+                    )
+                    if result.returncode in (0, 1):
+                        ignored_paths = {
+                            path for path in result.stdout.split("\0") if path
+                        }
+                except (OSError, subprocess.SubprocessError) as err:
+                    _LOGGER.debug("Failed to inspect Git exclusions: %s", err)
+
+            for item in res:
+                item["ignored"] = item["path"] in ignored_paths
             return sorted(res, key=lambda x: x["path"])
         except Exception as e:
             _LOGGER.error("list_git_files() failed with filesystem error: %s", e)

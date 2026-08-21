@@ -1101,7 +1101,7 @@ export function refreshGiteaPanelStrings() {
   if (btnStageAll) btnStageAll.textContent = t("sidebar.stage_all");
 
   const btnUnstageAll = document.getElementById("btn-gitea-unstage-all");
-  if (btnUnstageAll) btnUnstageAll.textContent = t("sidebar.unstage");
+  if (btnUnstageAll) btnUnstageAll.textContent = t("sidebar.unstage_all");
 
   const btnCommit = document.getElementById("btn-gitea-commit-staged");
   if (btnCommit) btnCommit.textContent = t("sidebar.commit");

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import subprocess
 
 
 ROOT = Path(__file__).parents[1] / "custom_components/blueprint_studio/backend"
@@ -49,3 +50,50 @@ def test_github_credentials_are_verified_before_reporting_authentication():
     assert "aiohttp.ClientTimeout(total=8, connect=4)" in manager
     assert 'verify=data.get("verify", False)' in handlers
     assert "self.git, d" in api
+
+
+def test_repository_init_unstages_ignored_files_before_the_first_commit():
+    source = (ROOT / "git_manager.py").read_text(encoding="utf-8")
+
+    assert "await self._create_gitignore_if_missing()" in source
+    assert "await self._unstage_ignored_files_before_first_commit()" in source
+    assert '["rev-parse", "--verify", "HEAD"]' in source
+    assert '["ls-files", "--cached", "--ignored", "--exclude-standard", "-z"]' in source
+    assert '["rm", "-r", "--cached", "--ignore-unmatch", "--", *ignored_paths]' in source
+    assert '"*.db-*\\n"' in source
+    assert '"*.sqlite*\\n"' in source
+
+
+def test_existing_gitignore_rules_and_negations_are_resolved_by_git(tmp_path):
+    subprocess.run(["git", "init", "-q", "-b", "main"], cwd=tmp_path, check=True)
+    (tmp_path / ".gitignore").write_text(
+        "*.db\n*.db-*\n.storage/\n!keep.db\n", encoding="utf-8"
+    )
+    (tmp_path / ".storage").mkdir()
+    for path in ("home-assistant_v2.db", "home-assistant_v2.db-wal", "keep.db"):
+        (tmp_path / path).touch()
+    (tmp_path / ".storage" / "core").touch()
+
+    paths = [
+        "home-assistant_v2.db",
+        "home-assistant_v2.db-wal",
+        "keep.db",
+        ".storage",
+        ".storage/core",
+    ]
+    result = subprocess.run(
+        ["git", "check-ignore", "--stdin", "-z"],
+        cwd=tmp_path,
+        input="\0".join(paths) + "\0",
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert set(result.stdout.split("\0")) - {""} == {
+        "home-assistant_v2.db",
+        "home-assistant_v2.db-wal",
+        ".storage",
+        ".storage/core",
+    }

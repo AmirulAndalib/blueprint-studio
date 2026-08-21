@@ -747,6 +747,12 @@
       accent-color: #fa8e14;
     }
 
+    .source-control-row-spacer {
+      flex: 0 0 16px;
+      height: 16px;
+      margin-right: 8px;
+    }
+
     .git-file-icon {
       margin-right: 8px;
       font-size: 16px;

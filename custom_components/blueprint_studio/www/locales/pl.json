@@ -367,6 +367,7 @@
   "sidebar.stage_all": "Alles toevoegen",
   "sidebar.staged": "Toegevoegd",
   "sidebar.unstage": "Verwijderen (Unstage)",
+  "sidebar.unstage_all": "Cofnij wszystko",
   "sidebar.untracked": "Nieśledzone",
   "ssh.add_new": "Dodaj nowy host",
   "ssh.add_title": "Dodaj host SSH",

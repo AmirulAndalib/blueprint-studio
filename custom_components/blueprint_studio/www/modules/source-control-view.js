@@ -129,13 +129,19 @@ function renderFileRow(group, path, repositoryState, provider) {
   row.dataset.group = group.key;
 
   const selectable = !['ignored', 'conflicted'].includes(group.key);
-  const selection = document.createElement('input');
-  selection.type = 'checkbox';
-  selection.className = provider === 'gitea' ? 'gitea-file-checkbox' : 'git-file-checkbox';
-  selection.dataset.filePath = path;
-  selection.checked = repositoryState.selectedFiles.has(path);
-  selection.disabled = !selectable;
-  selection.setAttribute('aria-label', `Select ${path}`);
+  let selection;
+  if (selectable) {
+    selection = document.createElement('input');
+    selection.type = 'checkbox';
+    selection.className = provider === 'gitea' ? 'gitea-file-checkbox' : 'git-file-checkbox';
+    selection.dataset.filePath = path;
+    selection.checked = repositoryState.selectedFiles.has(path);
+    selection.setAttribute('aria-label', `Select ${path}`);
+  } else {
+    selection = document.createElement('span');
+    selection.className = 'source-control-row-spacer';
+    selection.setAttribute('aria-hidden', 'true');
+  }
 
   const icon = document.createElement('span');
   icon.className = `ui-icon material-icons git-file-icon ${group.tone}`;
@@ -159,6 +165,8 @@ function renderFileRow(group, path, repositoryState, provider) {
     actions.appendChild(iconButton('remove', 'Unstage', 'btn-source-control-stage', path, 'unstage'));
   } else if (group.key === 'unstaged' || group.key === 'untracked') {
     actions.appendChild(iconButton('add', 'Stage', 'btn-source-control-stage', path, 'stage'));
+  } else if (group.key === 'ignored') {
+    actions.appendChild(iconButton('settings', 'Manage exclusion for', 'btn-source-control-exclusions', path));
   }
   if (actions.childElementCount) row.appendChild(actions);
   return row;

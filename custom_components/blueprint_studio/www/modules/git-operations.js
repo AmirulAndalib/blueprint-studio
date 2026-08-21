@@ -134,7 +134,11 @@ export async function gitStatus(shouldFetch = false, silent = false) {
         gitState.conflictFiles = [];
       }
 
-      eventBus.emit('git:refresh');
+      // Silent polling must not rebuild the explorer on every interval. That
+      // replaces inline inputs and can dismiss the mobile keyboard.
+      eventBus.emit('git:refresh', {
+        refreshTree: Boolean(hasMeaningfulChange && !state.inlineExplorerEdit),
+      });
 
       if (!silent) {
         if (data.has_changes) {
@@ -151,14 +155,14 @@ export async function gitStatus(shouldFetch = false, silent = false) {
       return true;
     } else {
       gitState.lastError = data.message || data.error || "Git status failed";
-      eventBus.emit('git:refresh');
+      eventBus.emit('git:refresh', { refreshTree: false });
       operation?.fail(t('git_ops.status_failed'), gitState.lastError);
       if (!silent) showToast(t("toast.git_error", { error: gitState.lastError }), "error");
       return false;
     }
   } catch (error) {
     gitState.lastError = error.message || "Git status failed";
-    eventBus.emit('git:refresh');
+    eventBus.emit('git:refresh', { refreshTree: false });
     operation?.fail(t('git_ops.status_failed'), gitState.lastError);
     if (!silent) {
       showToast(t("toast.git_error", { error: error.message }), "error");
