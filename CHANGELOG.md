@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 
+## [3.0.2] - 2026-08-27
+
+### Fixed
+
+- **GitHub saved-session compatibility** - Repository creation and other GitHub account actions now recognize credentials saved by earlier Blueprint Studio versions, matching the account status shown in Settings.
+- **Gitea credentials can be saved** - Removed an unused server URL requirement that caused the credentials request to fail with `Missing field: url` before the connection could be tested.
+
+
 ## [3.0.1] - 2026-08-17
 
 ### Fixed

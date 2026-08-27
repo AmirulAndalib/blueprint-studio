@@ -46,6 +46,10 @@ class GitManager:
         self.data = data
         self.store = store
 
+    def _get_github_credentials(self) -> dict[str, Any]:
+        """Return GitHub credentials, including the legacy storage key."""
+        return self.data.get("github_credentials") or self.data.get("credentials") or {}
+
     def _run_git_command(self, args: list[str], auth_provider: str = "github") -> dict[str, Any]:
         """Run a git command in the config directory."""
         try:
@@ -64,9 +68,8 @@ class GitManager:
             creds_key = f"{auth_provider}_credentials" if auth_provider != "github" else "credentials"
             
             creds = self.data.get(creds_key, {})
-            # Fallback for github
             if not creds and auth_provider == "github":
-                 creds = self.data.get("github_credentials", {})
+                creds = self._get_github_credentials()
 
             if needs_auth and creds and "username" in creds and "token" in creds:
                 username = creds["username"]
@@ -444,7 +447,7 @@ class GitManager:
         """Create a new GitHub repository."""
         try:
             if not repo_name: return json_message("Repository name is required", status_code=400)
-            creds = self.data.get("github_credentials", {})
+            creds = self._get_github_credentials()
             if not creds or "token" not in creds: return json_message("Not authenticated.", status_code=401)
             token = base64.b64decode(creds["token"]).decode()
             async with aiohttp.ClientSession() as session:
@@ -470,7 +473,7 @@ class GitManager:
             match = re.search(r"github\.com[:/](.+?)/(.+?)(\.git)?$", url)
             if not match: return json_message(f"Could not parse GitHub owner/repo from URL", status_code=400)
             owner, repo = match.group(1), match.group(2)
-            creds = self.data.get("github_credentials", {})
+            creds = self._get_github_credentials()
             if not creds or "token" not in creds: return json_message("Not authenticated", status_code=401)
             token = base64.b64decode(creds["token"]).decode()
             api_url = f"https://api.github.com/repos/{owner}/{repo}"
@@ -503,7 +506,7 @@ class GitManager:
         creds_key = f"{provider}_credentials" if provider != "github" else "credentials"
         creds = self.data.get(creds_key, {})
         if not creds and provider == "github":
-            creds = self.data.get("github_credentials", {})
+            creds = self._get_github_credentials()
         username = creds.get("username", "")
         encoded_token = creds.get("token", "")
         has_credentials = bool(username and encoded_token)
@@ -658,7 +661,7 @@ class GitManager:
     async def github_star(self) -> web.Response:
         """Star the repository on behalf of the user."""
         try:
-            creds = self.data.get("github_credentials", {})
+            creds = self._get_github_credentials()
             if not creds or "token" not in creds: return json_message("Not authenticated with GitHub", status_code=401)
             token = base64.b64decode(creds["token"]).decode()
             url = "https://api.github.com/user/starred/ha-china/blueprint-studio"
@@ -671,7 +674,7 @@ class GitManager:
     async def github_follow(self) -> web.Response:
         """Follow the author on behalf of the user."""
         try:
-            creds = self.data.get("github_credentials", {})
+            creds = self._get_github_credentials()
             if not creds or "token" not in creds: return json_message("Not authenticated with GitHub", status_code=401)
             token = base64.b64decode(creds["token"]).decode()
             url = "https://api.github.com/user/following/soulripper13"

@@ -255,7 +255,7 @@ _REQUIRED = {
     "git_stop_tracking": ("files",),
     "git_set_credentials": ("username", "token"),
     "gitea_push": ("commit_message",),
-    "gitea_set_credentials": ("url", "username", "token"),
+    "gitea_set_credentials": ("username", "token"),
     "gitea_add_remote": ("url",),
     "gitea_create_repo": ("repo_name",),
     "ai_query": ("query", "ai_type"),

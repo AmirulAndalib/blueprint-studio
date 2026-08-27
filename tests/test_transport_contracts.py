@@ -129,6 +129,29 @@ class TransportContractTests(unittest.TestCase):
                         action, {"name": "fixture"}, transport="post"
                     )
 
+    def test_gitea_credentials_do_not_require_an_unused_url(self):
+        result = contracts.validate_action(
+            "gitea_set_credentials",
+            {"username": "fixture", "token": "secret", "remember_me": True},
+            transport="post",
+        )
+        self.assertEqual(result["username"], "fixture")
+        self.assertEqual(result["token"], "secret")
+
+        for missing_field in ("username", "token"):
+            request = {"username": "fixture", "token": "secret"}
+            del request[missing_field]
+            with (
+                self.subTest(missing_field=missing_field),
+                self.assertRaisesRegex(
+                    contracts.ValidationError,
+                    f"Missing required field: {missing_field}",
+                ),
+            ):
+                contracts.validate_action(
+                    "gitea_set_credentials", request, transport="post"
+                )
+
     def test_blueprint_instance_display_names_allow_spaces_but_reject_control_input(self):
         request = {
             "content": "blueprint:\n  name: Fixture\n  domain: automation\n  input: {}\n",
